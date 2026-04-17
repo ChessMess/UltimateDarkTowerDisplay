@@ -198,8 +198,10 @@
     <span class="view-btns">
       <span style="color:#888; font-size:0.75rem; margin-right:0.25rem;">View:</span>
       <button id="btn-view-readout">Readout</button>
-      <button id="btn-view-svg">Side View</button>
-      <button id="btn-view-both" class="active">Both</button>
+      <button id="btn-view-2d">2D</button>
+      <button id="btn-view-3d">3D</button>
+      <button id="btn-view-2d3d">2D + 3D</button>
+      <button id="btn-view-both" class="active">Readout + 2D</button>
     </span>
   </div>
   <div class="layout">
@@ -273,7 +275,9 @@
 
     const viewButtons = {
       'btn-view-readout': 'readout',
-      'btn-view-svg': 'side-view',
+      'btn-view-2d': 'side-view',
+      'btn-view-3d': '3d-view',
+      'btn-view-2d3d': ['side-view', '3d-view'],
       'btn-view-both': ['readout', 'side-view'],
     };
 

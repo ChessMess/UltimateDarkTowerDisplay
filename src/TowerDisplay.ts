@@ -2,6 +2,7 @@ import type { TowerState, SealIdentifier } from 'ultimatedarktower';
 import type { TowerDisplayOptions, ITowerDisplay, RendererType } from './types';
 import { TowerStateReadout } from './TowerStateReadout';
 import { TowerSideView } from './TowerSideView';
+import { Tower3DView } from './Tower3DView';
 
 function normalizeRenderers(input?: RendererType | RendererType[]): RendererType[] {
   if (!input) return ['readout', 'side-view'];
@@ -18,6 +19,11 @@ function createRenderer(type: RendererType, container: HTMLElement, options: Tow
       view.clickToToggleSeals = options.clickToToggleSeals !== false;
       return view;
     }
+    case '3d-view':
+      return new Tower3DView(container, {
+        modelUrl: options.modelUrl,
+        dracoDecoderPath: options.dracoDecoderPath,
+      });
     default:
       throw new Error(`Unknown renderer type: ${type}`);
   }

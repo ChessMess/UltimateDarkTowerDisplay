@@ -5,9 +5,15 @@ This document covers the public API exported by `ultimatedarktowerdisplay`.
 ## Exports
 
 ```ts
-import { TowerDisplay, TowerStateReadout, TowerSideView } from 'ultimatedarktowerdisplay';
+import {
+  TowerDisplay,
+  TowerStateReadout,
+  TowerSideView,
+  Tower3DView,
+} from 'ultimatedarktowerdisplay';
 import type {
   TowerDisplayOptions,
+  Tower3DViewOptions,
   ITowerDisplay,
   RendererType,
   TowerSide,
@@ -125,6 +131,36 @@ Same as `TowerDisplay`: `applyState(state)`, `applySeals(brokenSeals)`, `showIdl
 
 ---
 
+### `Tower3DView`
+
+Three.js model renderer. Loads the bundled tower GLB (or a custom URL), supports orbit controls, and provides side-snap + reset camera controls.
+
+```ts
+const view3d = new Tower3DView(document.getElementById('tower')!, {
+  debug3D: true,
+});
+```
+
+#### Constructor
+
+```ts
+new Tower3DView(container: HTMLElement, options?: Tower3DViewOptions)
+```
+
+#### Options (`Tower3DViewOptions`)
+
+| Option             | Type      | Default                                                   | Description                                                                   |
+| ------------------ | --------- | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `modelUrl`         | `string`  | bundled GLB                                               | Override the default bundled model URL                                        |
+| `dracoDecoderPath` | `string`  | `https://www.gstatic.com/draco/versioned/decoders/1.5.7/` | Override where Draco decoder wasm/js files are loaded from                    |
+| `debug3D`          | `boolean` | `false`                                                   | Enables diagnostic console logs, render heartbeats, and an origin axes helper |
+
+#### Methods
+
+Same as `TowerDisplay`: `applyState(state)`, `applySeals(brokenSeals)`, `showIdle()`, `dispose()`.
+
+---
+
 ## Interfaces
 
 ### `TowerDisplayOptions`
@@ -142,6 +178,10 @@ interface TowerDisplayOptions {
    * independently of game state. Set to false to disable.
    */
   clickToToggleSeals?: boolean;
+  /** Optional override for the 3D view's GLB model URL. */
+  modelUrl?: string;
+  /** Optional override for where Draco decoder wasm/js files are loaded from. */
+  dracoDecoderPath?: string;
 }
 ```
 
@@ -162,6 +202,16 @@ interface ITowerDisplay {
 
 ```ts
 type RendererType = 'readout' | 'side-view';
+```
+
+### `Tower3DViewOptions`
+
+```ts
+interface Tower3DViewOptions {
+  modelUrl?: string;
+  dracoDecoderPath?: string;
+  debug3D?: boolean;
+}
 ```
 
 ### `TowerSide`

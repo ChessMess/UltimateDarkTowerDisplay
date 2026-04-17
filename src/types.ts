@@ -3,7 +3,7 @@ import type { TowerState, TowerSide, SealIdentifier } from 'ultimatedarktower';
 export type { TowerSide, SealIdentifier };
 
 /** Identifies which renderer implementation to use. */
-export type RendererType = 'readout' | 'side-view';
+export type RendererType = 'readout' | 'side-view' | '3d-view';
 
 /** Configuration options for TowerDisplay. */
 export interface TowerDisplayOptions {
@@ -19,6 +19,10 @@ export interface TowerDisplayOptions {
    * {@link ITowerDisplay.applySeals} for seal visibility.
    */
   clickToToggleSeals?: boolean;
+  /** Optional override for the 3D view's GLB model URL. */
+  modelUrl?: string;
+  /** Optional override for where Draco decoder wasm/js files are loaded from. */
+  dracoDecoderPath?: string;
 }
 
 /** Public interface for all display implementations. */

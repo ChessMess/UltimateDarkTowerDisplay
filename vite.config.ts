@@ -40,6 +40,7 @@ export default defineConfig({
       ultimatedarktower: resolve(__dirname, 'node_modules/ultimatedarktower/dist/src/index.js'),
     },
   },
+  assetsInclude: ['**/*.glb'],
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
@@ -47,8 +48,17 @@ export default defineConfig({
       formats: ['es', 'cjs'],
       fileName: (format) => `index.${format === 'es' ? 'esm' : 'cjs'}.js`,
     },
+    // Force large binary assets (GLB model) to emit as separate files rather
+    // than inlining as base64 in the JS bundle.
+    assetsInlineLimit: 0,
     rollupOptions: {
-      external: ['ultimatedarktower'],
+      // Peer/external deps — not bundled.
+      external: [
+        'ultimatedarktower',
+        'three',
+        /^three\/.*/,
+        'gsap',
+      ],
     },
     sourcemap: true,
   },

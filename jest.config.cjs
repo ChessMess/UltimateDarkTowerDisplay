@@ -20,5 +20,12 @@ module.exports = {
   moduleNameMapper: {
     '^ultimatedarktower$': '<rootDir>/node_modules/ultimatedarktower/dist/src/index.js',
     '\\.svg\\?raw$': '<rootDir>/tests/__mocks__/svgRaw.js',
+    '\\.glb\\?url$': '<rootDir>/tests/__mocks__/glbUrl.js',
+    '^three$': '<rootDir>/tests/__mocks__/three.js',
+    '^three/examples/jsm/controls/OrbitControls\\.js$':
+      '<rootDir>/tests/__mocks__/orbitControls.js',
+    '^three/examples/jsm/loaders/DRACOLoader\\.js$': '<rootDir>/tests/__mocks__/dracoLoader.js',
+    '^three/examples/jsm/loaders/GLTFLoader\\.js$': '<rootDir>/tests/__mocks__/gltfLoader.js',
+    '^gsap$': '<rootDir>/tests/__mocks__/gsap.js',
   },
 };

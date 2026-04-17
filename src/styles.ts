@@ -266,6 +266,77 @@ const CSS = `
   fill: #ff6040 !important;
   animation: tdr-flicker 0.3s step-end infinite;
 }
+
+/* ── 3D View ── */
+
+.t3v-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 520px;
+  max-width: 520px;
+}
+
+.t3v-controls {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.t3v-side-btn {
+  flex: 1;
+  padding: 0.3rem 0;
+  border: 1px solid #444;
+  background: #222;
+  color: #aaa;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.t3v-side-btn[data-active="true"] {
+  background: #3a3a3a;
+  color: #e8e8e8;
+  border-color: #666;
+}
+
+.t3v-side-btn:hover {
+  background: #333;
+}
+
+.t3v-reset-btn {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: #aaa;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: 0.25rem;
+}
+
+.t3v-reset-btn:hover {
+  background: #2a2a2a;
+  color: #e8e8e8;
+}
+
+.t3v-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #111;
+}
+
+.t3v-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
 `;
 
 /**
