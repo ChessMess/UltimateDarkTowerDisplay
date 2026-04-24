@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- Seal click-to-toggle state is now owned by `TowerDisplay` when composing renderers, so a seal click in the 2D side view also hides the corresponding mesh in the 3D view (and vice-versa for any external `applySeals` call). Previously the 2D view owned its own toggle set in isolation and the 3D view didn't react. Standalone `TowerSideView` usage (without `TowerDisplay`) is unchanged — the class keeps its internal toggle for backwards compatibility. `onSealClick` callback still fires exactly once per click, and `clickToToggleSeals: false` still fully disables toggling across both views.
+- Removed the `[TowerSideView] Seal clicked: …` console.log lines from the 2D seal click handler. Consumers that need click events should use the `onSealClick` callback (unchanged).
+- Example app (`example/example.ts`, `example/example-init.ts`) converted from JavaScript to TypeScript. The `typecheck` and `lint` npm scripts now cover `example/` via a new `tsconfig.example.json`.
+- Consolidated every lighting-tunable value consumed by `Tower3DView` under a single nested `LightingConfig` (scene rig, LED emissive/halo, effect timings, entrance cinematic beats, idle breathing pulse, and the noir ground disc). The exported `DEFAULT_LIGHTING` captures today's values exactly and `resolveLighting()` deep-merges user overrides. The flat `{ hemisphere, key, fill, exposure }` fields are kept as deprecated aliases for pre-0.3 callers; when both a flat field and its nested equivalent are supplied, the nested value wins.
+
+### Added
+
+- Seal grid in `TowerStateReadout` — a 3×4 grid of clickable buttons (4 sides × 3 levels) showing which seals are present (filled) or broken (hollow). Opt-in interactivity via the new `clickToToggleSeals` (default `false`) + `onSealClick` public fields; mirrors the existing `TowerSideView` API shape. Accessible as `<button>` with `aria-pressed`.
+- `TowerDisplay.selectSide(side)` method + `onSideChange` option — programmatically select the facing side on every side-aware renderer; callback fires when the user or external code changes sides on any renderer. Public `selectSide` + `onSideChange` on both `TowerSideView` and `Tower3DView`. Cross-renderer fan-out means clicking a side button in 2D now rotates the 3D camera to match (and vice-versa) in combined views.
+- Example app persists broken-seal state and selected side across view switches by treating a module-scoped `UltimateDarkTower` instance as the source of truth. New `example/sealController.ts` demonstrates the pattern for consumers. New "Reset Seals" preset button in the example.
+- `Tower3DView.applySeals(brokenSeals)` is now a real implementation — hides/shows the corresponding seal meshes on the 3D model by name. The unified `TowerDisplay.applySeals` call already fanned out to the 3D renderer, but this was previously a no-op; it now drives both the 2D and 3D views identically. Naming contract for custom models via `modelUrl`: seal meshes must be named `seal_<side>_<level>` (e.g. `seal_north_top`, `seal_west_bottom`). Missing names are logged as a single `console.warn` at model-load time. The default bundled GLB ships with all 12 named seal nodes. Seal registry is lazily populated during GLB load; pre-load `applySeals` calls are stored and applied once the model resolves. See [docs/API.md](docs/API.md) for consumer-facing docs.
+- `Tower3DView` now visualizes per-LED effects on the 3D model. 24 emissive LED proxies (amber, `#f0c040`) are placed at the tower's ring, ledge, and base positions, each with a short-range PointLight halo that spills onto nearby geometry. All six `LIGHT_EFFECTS` are supported: `off`, `on`, `breathe`, `breatheFast`, `breathe50percent`, `flicker`. Animation timings match the 2D side view (2.0s / 0.8s / 0.3s).
+- Added red light layer to the 3D view (`#ff2020`) matching the physical tower's LED color. Red lights are positioned independently from the amber proxies: inset inside the drum for ring layers (0–2) so light shines through doors/seals, and near the outer corner surface for ledge/base layers (3–5) so light shines onto the faces. Red lights animate in lockstep with the amber driver — no additional GSAP tweens per LED.
+- New `showLedProxies` option on `TowerDisplayOptions` and `Tower3DViewOptions` (default `false`) — toggles the amber LED proxy spheres on/off. The amber proxies are now hidden by default; enable them as a layout/debugging aid.
+- `debug3D` option on `TowerDisplayOptions` — forwarded to `Tower3DView` for diagnostic logging, render heartbeats, origin axes helper, and per-LED position axes helpers for layout tuning.
+
 ## [0.2.0] - 2026-04-15
 
 ### Fixed

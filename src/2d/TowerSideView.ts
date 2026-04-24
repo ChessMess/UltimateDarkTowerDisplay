@@ -8,19 +8,12 @@ import {
   type SealIdentifier,
   type TowerLevels,
 } from 'ultimatedarktower';
-import type { ITowerDisplay, TowerSide } from './types';
-import { injectStyles } from './styles';
-import { EFFECT_LABELS } from './effectLabels';
+import type { ITowerDisplay, TowerSide } from '../types';
+import { injectStyles } from '../styles';
+import { SideButtons } from '../shared/SideButtons';
+import { EFFECT_LABELS } from '../effectLabels';
 import svgContent from './TowerSide.svg?raw';
 import sealContent from './Seal.svg?raw';
-
-const SIDES: TowerSide[] = ['north', 'east', 'south', 'west'];
-const SIDE_LABELS: Record<TowerSide, string> = {
-  north: 'N',
-  east: 'E',
-  south: 'S',
-  west: 'W',
-};
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -81,13 +74,16 @@ export class TowerSideView implements ITowerDisplay {
   private wrapper: HTMLDivElement | null = null;
   private currentSide: TowerSide = 'north';
   private latestState: TowerState | null = null;
-  private buttons: HTMLButtonElement[] = [];
+  private sideButtons: SideButtons | null = null;
   private ledNodes: Partial<Record<LedLabel, SVGElement>> = {};
   private sealNodes: Partial<Record<string, SVGElement>> = {};
   private latestBrokenSeals: SealIdentifier[] = [];
 
   /** Optional callback fired when a user clicks a seal overlay. */
   onSealClick?: (seal: SealIdentifier) => void;
+
+  /** Optional callback fired when the selected side changes (user click or internal auto-select). */
+  onSideChange?: (side: TowerSide) => void;
 
   /**
    * When true (the default), clicking a seal toggles its visibility independently
@@ -127,7 +123,7 @@ export class TowerSideView implements ITowerDisplay {
       this.wrapper.remove();
       this.wrapper = null;
     }
-    this.buttons = [];
+    this.sideButtons = null;
     this.latestState = null;
     this.sealNodes = {};
     this.latestBrokenSeals = [];
@@ -169,16 +165,9 @@ export class TowerSideView implements ITowerDisplay {
     const selector = document.createElement('div');
     selector.className = 'tsv-side-selector';
 
-    for (const side of SIDES) {
-      const btn = document.createElement('button');
-      btn.className = 'tsv-side-btn';
-      btn.textContent = SIDE_LABELS[side];
-      btn.dataset.side = side;
-      btn.dataset.active = String(side === this.currentSide);
-      btn.addEventListener('click', () => this.selectSide(side));
-      selector.appendChild(btn);
-      this.buttons.push(btn);
-    }
+    this.sideButtons = new SideButtons((side) => this.selectSide(side));
+    this.sideButtons.setActive(this.currentSide);
+    for (const btn of this.sideButtons.buttons) selector.appendChild(btn);
 
     this.wrapper.appendChild(selector);
 
@@ -234,16 +223,12 @@ export class TowerSideView implements ITowerDisplay {
         const seal: SealIdentifier = { side: this.currentSide, level: door.name as TowerLevels };
         if (this.clickToToggleSeals) {
           const key = `${this.currentSide}-${door.name}`;
-          const nowBroken = !this.userToggledSeals.has(key);
-          if (nowBroken) {
-            this.userToggledSeals.add(key);
-          } else {
+          if (this.userToggledSeals.has(key)) {
             this.userToggledSeals.delete(key);
+          } else {
+            this.userToggledSeals.add(key);
           }
-          console.log(`[TowerSideView] Seal clicked: ${seal.side} ${seal.level} → ${nowBroken ? 'hidden' : 'visible'}`);
           this.updateSealVisibility();
-        } else {
-          console.log(`[TowerSideView] Seal clicked: ${seal.side} ${seal.level} (toggle disabled)`);
         }
         this.onSealClick?.(seal);
       });
@@ -284,12 +269,12 @@ export class TowerSideView implements ITowerDisplay {
     }
   }
 
-  private selectSide(side: TowerSide): void {
+  selectSide(side: TowerSide): void {
+    if (side === this.currentSide) return;
     this.currentSide = side;
-    for (const btn of this.buttons) {
-      btn.dataset.active = String(btn.dataset.side === side);
-    }
+    this.sideButtons?.setActive(side);
     if (this.latestState) this.applyLedState(this.latestState);
     this.updateSealVisibility();
+    this.onSideChange?.(side);
   }
 }

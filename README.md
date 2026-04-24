@@ -6,7 +6,7 @@ DOM-based visual readout for decoded [Ultimate Dark Tower](https://github.com/Ch
 
 This package renders a live tower dashboard into a DOM element. It is intended for tools that already know how to obtain or decode a `TowerState` and want a compact on-screen display of:
 
-- LED layers and per-light effects
+- LED layers and per-light effects (in text, 2D SVG, and emissive on a 3D model)
 - Drum positions and calibration status
 - Visible glyph on each calibrated drum
 - Active audio sample, loop flag, and volume
@@ -17,9 +17,14 @@ This package renders a live tower dashboard into a DOM element. It is intended f
 
 `ultimatedarktowerdisplay` is a renderer. It does not talk to the physical tower, decode packets, or create `TowerState` objects on its own.
 
-Use it alongside [`ultimatedarktower`](https://github.com/ChessMess/ultimatedarktower), which provides the `TowerState` type and helpers such as `createDefaultTowerState()`.
+Use it alongside [`ultimatedarktower`](https://github.com/ChessMess/ultimatedarktower) (UDT), which is the library that:
 
-This package intentionally keeps a narrow API surface. It exports display components and display-specific types only. Import protocol constants such as `LIGHT_EFFECTS`, `TOWER_AUDIO_LIBRARY`, and `TOWER_LIGHT_SEQUENCES` from `ultimatedarktower`.
+- Connects to the physical Dark Tower over Bluetooth (Web Bluetooth in the browser, `@stoprocent/noble` in Node.js, custom adapters for React Native, etc.)
+- Sends tower commands (lights, sounds, drum rotation)
+- Decodes tower responses into the `TowerState` this package renders
+- Provides the `TowerState` type and helpers such as `createDefaultTowerState()`, plus protocol constants like `LIGHT_EFFECTS`, `TOWER_AUDIO_LIBRARY`, and `TOWER_LIGHT_SEQUENCES`
+
+This package is purely the visual layer — pair it with UDT when you want a live on-screen readout of a real tower, or use it with hand-constructed `TowerState` objects for testing and demos.
 
 ## Installation
 
@@ -66,7 +71,7 @@ Minimal HTML:
 
 In most applications the flow looks like this:
 
-1. Use `ultimatedarktower` to create or decode a `TowerState`.
+1. Use `ultimatedarktower` to connect to the tower over Bluetooth and obtain a decoded `TowerState` (or, for testing, call `createDefaultTowerState()` and mutate fields directly).
 2. Create a `TowerDisplay` for a container element.
 3. Call `applyState(state)` whenever a new decoded state arrives.
 4. Call `dispose()` when removing the view.
@@ -158,9 +163,10 @@ new TowerDisplay(options: TowerDisplayOptions)
 | Option               | Type                             | Default                    | Description                                                                                             |
 | -------------------- | -------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `container`          | `HTMLElement`                    | —                          | DOM element that will receive the rendered output                                                       |
-| `renderers`          | `RendererType \| RendererType[]` | `['readout', 'side-view']` | Which renderer(s) to show: `'readout'`, `'side-view'`, or both                                          |
+| `renderers`          | `RendererType \| RendererType[]` | `['readout', 'side-view']` | Which renderer(s) to show: `'readout'`, `'side-view'`, `'3d-view'`, or any combination                  |
 | `onSealClick`        | `(seal: SealIdentifier) => void` | —                          | Called whenever the user clicks a seal overlay in the side view                                         |
 | `clickToToggleSeals` | `boolean`                        | `true`                     | When true, clicking a seal toggles its visibility independent of game state. Set to `false` to disable. |
+| `showLedProxies`     | `boolean`                        | `false`                    | (3D view) Show amber LED proxy spheres at LED positions. Hidden by default; useful for layout tuning.   |
 
 Methods:
 
@@ -184,6 +190,25 @@ view.clickToToggleSeals = true; // default
 | `onSealClick`        | `(seal: SealIdentifier) => void` | —       | Callback fired on every seal click                           |
 | `clickToToggleSeals` | `boolean`                        | `true`  | Enables built-in click-to-toggle visibility on seal overlays |
 
+### `Tower3DView`
+
+Three.js model renderer. Loads the bundled tower GLB, supports orbit/pan/zoom, provides N/E/S/W side-snap and reset buttons, and mirrors LED state on the model as emissive amber proxies with halo spill light.
+
+```ts
+import { Tower3DView } from 'ultimatedarktowerdisplay';
+
+const view3d = new Tower3DView(container, { debug3D: true });
+view3d.applyState(state);
+```
+
+| Option             | Type      | Default     | Description                                                          |
+| ------------------ | --------- | ----------- | -------------------------------------------------------------------- |
+| `modelUrl`         | `string`  | bundled GLB | Override the default bundled model URL                               |
+| `dracoDecoderPath` | `string`  | gstatic CDN | Override where Draco decoder wasm/js files are loaded from           |
+| `debug3D`          | `boolean` | `false`     | Diagnostic console logs, render heartbeats, and per-LED axes helpers |
+
+Exposes the same methods as `TowerDisplay` (`applyState`, `applySeals`, `showIdle`, `dispose`).
+
 ### `TowerStateReadout`
 
 Text-based readout renderer. Lower-level; takes a container directly.
@@ -198,7 +223,7 @@ Exposes the same methods as `TowerDisplay` (`applyState`, `applySeals`, `showIdl
 
 - `ITowerDisplay` — common interface implemented by all renderers
 - `TowerDisplayOptions` — configuration object for `TowerDisplay`
-- `RendererType` — `'readout' | 'side-view'`
+- `RendererType` — `'readout' | 'side-view' | '3d-view'`
 - `TowerSide` — `'north' | 'east' | 'south' | 'west'`
 - `SealIdentifier` — `{ side: TowerSide, level: TowerLevels }`
 

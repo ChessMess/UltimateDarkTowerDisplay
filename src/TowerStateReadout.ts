@@ -1,5 +1,7 @@
 import {
   type TowerState,
+  type TowerSide,
+  type TowerLevels,
   GLYPHS,
   TOWER_AUDIO_LIBRARY,
   TOWER_LIGHT_SEQUENCES,
@@ -15,6 +17,11 @@ const COMPASS = ['N', 'E', 'S', 'W'] as const;
 const COMPASS_FULL = ['north', 'east', 'south', 'west'] as const;
 const DRUM_NAMES = ['Top', 'Middle', 'Bottom'] as const;
 const DRUM_LEVELS = ['top', 'middle', 'bottom'] as const;
+
+const SEAL_SIDES: readonly TowerSide[] = ['north', 'east', 'south', 'west'];
+const SEAL_LEVELS: readonly TowerLevels[] = ['top', 'middle', 'bottom'];
+const SEAL_LEVEL_LABELS: Record<TowerLevels, string> = { top: 'Top', middle: 'Mid', bottom: 'Bot' };
+const sealKey = (side: TowerSide, level: TowerLevels): string => `${side}:${level}`;
 
 /** Escape HTML special characters to prevent XSS when interpolating into innerHTML. */
 function esc(str: string): string {
@@ -37,45 +44,102 @@ const AUDIO_BY_VALUE: Map<number, string> = new Map(
  * Core DOM renderer for tower state.
  *
  * Renders a live readout of LED grid, drum positions, audio state,
- * skull drops, and LED sequence overrides.
+ * skull drops, LED sequence overrides, and a 3×4 seal grid.
  *
  * @example
  * ```ts
  * const readout = new TowerStateReadout(document.getElementById('tower')!);
  * readout.applyState(state);
+ * readout.applySeals([{ side: 'north', level: 'top' }]);
  * ```
  */
 export class TowerStateReadout implements ITowerDisplay {
   private readonly container: HTMLElement;
+  private readonly sealClickHandler: (evt: Event) => void;
   private prevBeamCount: number | null = null;
+  private latestState: TowerState | null = null;
+  private brokenSeals: Set<string> = new Set();
+
+  /** Optional callback fired when a user clicks a seal indicator in the readout grid. */
+  onSealClick?: (seal: SealIdentifier) => void;
+
+  private _clickToToggleSeals = false;
+
+  /** When true, the readout's seal grid is interactive. Defaults to false (read-only). */
+  get clickToToggleSeals(): boolean {
+    return this._clickToToggleSeals;
+  }
+
+  set clickToToggleSeals(value: boolean) {
+    if (this._clickToToggleSeals === value) return;
+    this._clickToToggleSeals = value;
+    // Re-render so the seal buttons pick up the new disabled state.
+    if (this.latestState) this.render(false);
+    else this.renderIdle();
+  }
 
   constructor(container: HTMLElement) {
     this.container = container;
     injectStyles();
-    this.showIdle();
+    this.sealClickHandler = (evt) => this.onContainerClick(evt);
+    this.container.addEventListener('click', this.sealClickHandler);
+    this.renderIdle();
   }
 
   /** Update the display with a new decoded tower state. */
   applyState(state: TowerState): void {
     const skullDrop = this.prevBeamCount !== null && state.beam.count > this.prevBeamCount;
     this.prevBeamCount = state.beam.count;
-    this.render(state, skullDrop);
+    this.latestState = state;
+    this.render(skullDrop);
   }
 
-  applySeals(_brokenSeals: SealIdentifier[]): void {}
+  /** Update which seals are currently broken and re-render the seal grid. */
+  applySeals(brokenSeals: SealIdentifier[]): void {
+    this.brokenSeals = new Set(brokenSeals.map((s) => sealKey(s.side, s.level)));
+    if (this.latestState) this.render(false);
+    else this.renderIdle();
+  }
 
-  /** Reset the display to its idle/waiting state. */
+  /** Reset the state readout to its idle message. The seal grid stays visible and interactive. */
   showIdle(): void {
-    this.container.innerHTML = '<p class="tdr-idle">Waiting for tower state\u2026</p>';
+    this.latestState = null;
+    this.renderIdle();
   }
 
   /** Remove all rendered DOM content and reset internal state. */
   dispose(): void {
+    this.container.removeEventListener('click', this.sealClickHandler);
     this.container.innerHTML = '';
     this.prevBeamCount = null;
+    this.latestState = null;
+    this.brokenSeals.clear();
   }
 
-  private render(state: TowerState, skullDrop: boolean): void {
+  private onContainerClick(evt: Event): void {
+    if (!this.clickToToggleSeals) return;
+    const target = evt.target as HTMLElement | null;
+    const btn = target?.closest<HTMLElement>('[data-tdr-seal]');
+    if (!btn) return;
+    const side = btn.getAttribute('data-side') as TowerSide | null;
+    const level = btn.getAttribute('data-level') as TowerLevels | null;
+    if (!side || !level) return;
+    this.onSealClick?.({ side, level });
+  }
+
+  private renderIdle(): void {
+    this.container.innerHTML = `
+      <div class="tdr-box">
+        <p class="tdr-idle">Waiting for tower state…</p>
+        ${this.renderSealsSection()}
+      </div>
+    `;
+  }
+
+  private render(skullDrop: boolean): void {
+    const state = this.latestState;
+    if (!state) { this.renderIdle(); return; }
+
     // --- LEDs: 6 layers × 4 lights ---
     const ledRows = state.layer.map((layer, li) => {
       const layerName = LAYER_TO_POSITION[li as keyof typeof LAYER_TO_POSITION] ?? `L${li}`;
@@ -90,7 +154,7 @@ export class TowerStateReadout implements ITowerDisplay {
     // --- Drums ---
     const drumRows = state.drum.map((drum, di) => {
       const dir = COMPASS[drum.position] ?? '?';
-      const cal = drum.calibrated ? '\u2713' : '\u2014';
+      const cal = drum.calibrated ? '✓' : '—';
       const activeGlyph = this.findGlyph(di, drum.position, drum.calibrated);
       return `<div class="tdr-drum">
         <span class="tdr-drum-name">${esc(DRUM_NAMES[di])}</span>
@@ -111,8 +175,8 @@ export class TowerStateReadout implements ITowerDisplay {
 
     // --- Skull drop / beam ---
     const skullHtml = skullDrop
-      ? `<div class="tdr-skull-drop">\uD83D\uDC80 Skull Drop! (${state.beam.count})</div>`
-      : `<div class="tdr-beam-count">Skulls: ${state.beam.count}${state.beam.fault ? ' \u26A0 fault' : ''}</div>`;
+      ? `<div class="tdr-skull-drop">💀 Skull Drop! (${state.beam.count})</div>`
+      : `<div class="tdr-beam-count">Skulls: ${state.beam.count}${state.beam.fault ? ' ⚠ fault' : ''}</div>`;
 
     // --- LED sequence override ---
     const seqLabel = SEQUENCE_LABELS[state.led_sequence] ?? `0x${state.led_sequence.toString(16).padStart(2, '0')}`;
@@ -121,14 +185,35 @@ export class TowerStateReadout implements ITowerDisplay {
       : '';
 
     this.container.innerHTML = `
-      <div class="tdr-section tdr-leds"><h3>LEDs</h3>${ledRows}</div>
-      <div class="tdr-section tdr-drums"><h3>Drums</h3>${drumRows}</div>
-      <div class="tdr-section tdr-info">
-        ${audioHtml}
-        ${skullHtml}
-        ${seqHtml}
+      <div class="tdr-box">
+        <div class="tdr-section tdr-leds"><h3>LEDs</h3>${ledRows}</div>
+        <div class="tdr-section tdr-drums"><h3>Drums</h3>${drumRows}</div>
+        ${this.renderSealsSection()}
+        <div class="tdr-section tdr-info">
+          ${audioHtml}
+          ${skullHtml}
+          ${seqHtml}
+        </div>
       </div>
     `;
+  }
+
+  private renderSealsSection(): string {
+    const headers = ['', ...COMPASS]
+      .map((h) => `<div class="tdr-seals-header">${h}</div>`)
+      .join('');
+
+    const rows = SEAL_LEVELS.map((level) => {
+      const cells = SEAL_SIDES.map((side) => {
+        const broken = this.brokenSeals.has(sealKey(side, level));
+        const label = `${side[0].toUpperCase()}${side.slice(1)} ${level} seal — ${broken ? 'broken' : 'present'}`;
+        const disabled = this.clickToToggleSeals ? '' : 'disabled';
+        return `<button type="button" class="tdr-seal" data-tdr-seal data-side="${side}" data-level="${level}" data-broken="${broken}" aria-pressed="${broken}" aria-label="${esc(label)}" ${disabled}></button>`;
+      }).join('');
+      return `<div class="tdr-seals-label">${SEAL_LEVEL_LABELS[level]}</div>${cells}`;
+    }).join('');
+
+    return `<div class="tdr-section tdr-seals"><h3>Seals</h3><div class="tdr-seals-grid">${headers}${rows}</div></div>`;
   }
 
   /**

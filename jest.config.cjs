@@ -26,6 +26,9 @@ module.exports = {
       '<rootDir>/tests/__mocks__/orbitControls.js',
     '^three/examples/jsm/loaders/DRACOLoader\\.js$': '<rootDir>/tests/__mocks__/dracoLoader.js',
     '^three/examples/jsm/loaders/GLTFLoader\\.js$': '<rootDir>/tests/__mocks__/gltfLoader.js',
+    '^three/examples/jsm/loaders/HDRLoader\\.js$': '<rootDir>/tests/__mocks__/hdrLoader.js',
+    '^three/examples/jsm/lights/RectAreaLightUniformsLib\\.js$':
+      '<rootDir>/tests/__mocks__/rectAreaLightUniformsLib.js',
     '^gsap$': '<rootDir>/tests/__mocks__/gsap.js',
   },
 };

@@ -268,4 +268,90 @@ describe('TowerStateReadout', () => {
     const skullDrop = container.querySelector('.tdr-skull-drop');
     expect(skullDrop).toBeNull();
   });
+
+  describe('seal grid', () => {
+    it('renders 12 seal buttons in idle state', () => {
+      const seals = container.querySelectorAll('[data-tdr-seal]');
+      expect(seals).toHaveLength(12);
+    });
+
+    it('applySeals([]) renders all 12 seals with data-broken="false"', () => {
+      readout.applyState(makeState());
+      readout.applySeals([]);
+      const seals = container.querySelectorAll<HTMLButtonElement>('[data-tdr-seal]');
+      expect(seals).toHaveLength(12);
+      for (const s of Array.from(seals)) {
+        expect(s.getAttribute('data-broken')).toBe('false');
+        expect(s.getAttribute('aria-pressed')).toBe('false');
+      }
+    });
+
+    it('applySeals with one broken flips only that seal', () => {
+      readout.applyState(makeState());
+      readout.applySeals([{ side: 'north', level: 'top' }]);
+      const broken = container.querySelectorAll('[data-tdr-seal][data-broken="true"]');
+      expect(broken).toHaveLength(1);
+      expect(broken[0].getAttribute('data-side')).toBe('north');
+      expect(broken[0].getAttribute('data-level')).toBe('top');
+    });
+
+    it('clickToToggleSeals=true fires onSealClick with correct seal identity', () => {
+      readout.clickToToggleSeals = true;
+      const spy = jest.fn();
+      readout.onSealClick = spy;
+      readout.applyState(makeState());
+
+      const btn = container.querySelector<HTMLButtonElement>(
+        '[data-tdr-seal][data-side="east"][data-level="middle"]',
+      );
+      expect(btn).not.toBeNull();
+      expect(btn!.disabled).toBe(false);
+      btn!.click();
+      expect(spy).toHaveBeenCalledWith({ side: 'east', level: 'middle' });
+    });
+
+    it('clickToToggleSeals=false (default) disables buttons and never fires onSealClick', () => {
+      const spy = jest.fn();
+      readout.onSealClick = spy;
+      readout.applyState(makeState());
+
+      const btn = container.querySelector<HTMLButtonElement>(
+        '[data-tdr-seal][data-side="south"][data-level="bottom"]',
+      );
+      expect(btn!.disabled).toBe(true);
+      btn!.click();
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('showIdle() keeps the seal grid and preserves broken state', () => {
+      readout.applyState(makeState());
+      readout.applySeals([{ side: 'west', level: 'middle' }]);
+
+      readout.showIdle();
+
+      expect(container.querySelector('.tdr-idle')).not.toBeNull();
+      const broken = container.querySelectorAll('[data-tdr-seal][data-broken="true"]');
+      expect(broken).toHaveLength(1);
+      expect(broken[0].getAttribute('data-side')).toBe('west');
+    });
+
+    it('dispose() clears the container and detaches the click listener', () => {
+      readout.clickToToggleSeals = true;
+      const spy = jest.fn();
+      readout.onSealClick = spy;
+      readout.applyState(makeState());
+
+      readout.dispose();
+
+      expect(container.innerHTML).toBe('');
+      // No buttons to click; re-attaching DOM should not refire anything on this instance.
+      const ghost = document.createElement('button');
+      ghost.setAttribute('data-tdr-seal', '');
+      ghost.setAttribute('data-side', 'north');
+      ghost.setAttribute('data-level', 'top');
+      container.appendChild(ghost);
+      ghost.click();
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
 });
