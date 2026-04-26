@@ -3,6 +3,7 @@ import type { TowerDisplayOptions, RendererType } from '../src/index';
 import type { TowerState, TowerSide } from 'ultimatedarktower';
 import type { DomElements } from './dom';
 import { toggleSeal, refreshSeals } from './sealController';
+import towerModelUrl from '../src/3d/assets/tower.glb?url';
 
 export type ViewButtonId = 'btn-view-2d' | 'btn-view-3d' | 'btn-view-2d3d';
 
@@ -65,11 +66,11 @@ function buildDisplayOptions(renderers: RendererType | RendererType[], els: DomE
   return {
     container: els.towerContainer,
     renderers,
+    modelUrl: towerModelUrl,
     clickToToggleSeals: false, // external source of truth lives in sealController.
     onSealClick: (seal) => toggleSeal(seal, display, readout),
     onSideChange: (side) => { lastSide = side; },
     debug3D: (els.debug3dCheckbox?.checked ?? false),
-    showLedProxies: (els.showLedProxiesCheckbox?.checked ?? false),
     lighting: {
       scene: {
         hemisphere: { intensity: sceneLights.hemiIntensity },
@@ -121,12 +122,6 @@ export function initRendererController(els: DomElements): void {
 
   if (els.debug3dCheckbox) {
     els.debug3dCheckbox.addEventListener('change', () => {
-      recreateDisplay(currentRenderers, currentActiveId, els);
-    });
-  }
-
-  if (els.showLedProxiesCheckbox) {
-    els.showLedProxiesCheckbox.addEventListener('change', () => {
       recreateDisplay(currentRenderers, currentActiveId, els);
     });
   }

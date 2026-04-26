@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** Deprecated flat `LightingConfig` aliases (`hemisphere`, `key`, `fill`, `exposure`) removed. Use the nested equivalents: `scene.hemisphere.intensity`, `scene.key.intensity`, `scene.fill.intensity`, `scene.exposure`.
+- **Breaking:** Amber LED proxy sphere system removed (`showLedProxies` option on `TowerDisplayOptions` and `Tower3DViewOptions`, `leds.amber` in `LightingConfig`, `computeLedPosition` utility, `drumRadius`/`cornerRadius`/`ledSize` from `LED_LAYOUT`). The `LedRef` interface no longer carries `mesh`, `material`, or `light` fields.
+
 ### Changed
 
 - Seal click-to-toggle state is now owned by `TowerDisplay` when composing renderers, so a seal click in the 2D side view also hides the corresponding mesh in the 3D view (and vice-versa for any external `applySeals` call). Previously the 2D view owned its own toggle set in isolation and the 3D view didn't react. Standalone `TowerSideView` usage (without `TowerDisplay`) is unchanged — the class keeps its internal toggle for backwards compatibility. `onSealClick` callback still fires exactly once per click, and `clickToToggleSeals: false` still fully disables toggling across both views.

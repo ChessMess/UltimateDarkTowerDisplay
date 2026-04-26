@@ -50,20 +50,32 @@ export interface LightingConfigCore {
     exposure?: number;
   };
 
-  /** Per-LED emissive + halo parameters (amber proxy + red game-accurate light). */
+  /** Per-LED emissive + halo parameters. */
   leds?: {
-    amber?: {
-      color?: HexColor;
-      maxEmissive?: number;
-      maxHalo?: number;
-      /** Halo PointLight distance as a factor of modelRadius. */
-      haloDistanceFraction?: number;
-    };
     red?: {
       color?: HexColor;
       maxHalo?: number;
       /** Halo PointLight distance as a factor of modelRadius. */
       haloDistanceFraction?: number;
+    };
+    /**
+     * Inside-the-tower PointLights (12 total, ring layers only) positioned just
+     * behind each seal's back face. Light radiates omnidirectionally and shines
+     * out through the carved openings in the seal mesh, mimicking real LEDs
+     * inside the physical tower.
+     */
+    sealBacklights?: {
+      enabled?: boolean;
+      color?: HexColor;
+      /** PointLight intensity at full driver. */
+      intensity?: number;
+      /** Light placement radius as a factor of modelRadius (close to 1 = near seal back). */
+      radiusFactor?: number;
+      /** PointLight distance (max reach) as a factor of modelRadius. */
+      distanceFactor?: number;
+      decay?: number;
+      /** Keep the light on after the seal breaks (seal mesh hidden). */
+      backlightWhenBroken?: boolean;
     };
   };
 
@@ -118,21 +130,8 @@ export interface LightingConfigCore {
   };
 }
 
-/**
- * Public lighting config. Extends {@link LightingConfigCore} with four
- * deprecated flat aliases for pre-0.3 callers. When both the flat field and
- * its nested equivalent are supplied, the nested value wins.
- */
-export interface LightingConfig extends LightingConfigCore {
-  /** @deprecated Use `scene.hemisphere.intensity`. Kept for backward compat. */
-  hemisphere?: number;
-  /** @deprecated Use `scene.key.intensity`. Kept for backward compat. */
-  key?: number;
-  /** @deprecated Use `scene.fill.intensity`. Kept for backward compat. */
-  fill?: number;
-  /** @deprecated Use `scene.exposure`. Kept for backward compat. */
-  exposure?: number;
-}
+/** Public lighting config — a nested partial of {@link LightingConfigCore}. */
+export type LightingConfig = LightingConfigCore;
 
 /** Fully-resolved lighting config (all nested fields required) used internally by Tower3DView. */
 export type ResolvedLightingConfig = DeepRequired<LightingConfigCore>;

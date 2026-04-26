@@ -68,11 +68,14 @@ class Vector3 {
 }
 class Color {
   constructor(c) {
-    this.value = c;
+    this.value = c ?? 0;
   }
   setHex(c) {
     this.value = c;
     return this;
+  }
+  getHex() {
+    return this.value;
   }
   set(c) {
     this.value = c;
@@ -236,6 +239,29 @@ class PointLight {
   }
 }
 
+class SpotLight {
+  constructor(color, intensity = 1, distance = 0, angle = Math.PI / 3, penumbra = 0, decay = 2) {
+    this.color = new Color(color);
+    this.intensity = intensity;
+    this.distance = distance;
+    this.angle = angle;
+    this.penumbra = penumbra;
+    this.decay = decay;
+    this.visible = true;
+    this.castShadow = false;
+    this.position = new Vector3();
+    this.target = null;
+    this.parent = null;
+  }
+  removeFromParent() {
+    if (this.parent && this.parent.children) {
+      const i = this.parent.children.indexOf(this);
+      if (i >= 0) this.parent.children.splice(i, 1);
+    }
+    this.parent = null;
+  }
+}
+
 class SphereGeometry {
   constructor(radius, widthSegments, heightSegments) {
     this.radius = radius;
@@ -286,9 +312,15 @@ module.exports = {
   Mesh,
   MeshStandardMaterial,
   PointLight,
+  SpotLight,
   SphereGeometry,
   CircleGeometry,
   AxesHelper,
+  MOUSE: {
+    ROTATE: 0,
+    DOLLY: 1,
+    PAN: 2,
+  },
   SRGBColorSpace: 'srgb',
   ACESFilmicToneMapping: 1,
   PCFSoftShadowMap: 2,

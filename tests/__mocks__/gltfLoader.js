@@ -3,6 +3,9 @@
 let autoLoad = true;
 // Test hook: which seal nodes to include in the mock scene. null → full 12.
 let sealNamesOverride = null;
+// Test hook: when true, seal nodes are made meshlike (isMesh + MeshStandardMaterial)
+// so the seal-backlight material-clone path can be exercised in unit tests.
+let sealsAsMeshes = false;
 const instances = [];
 
 const DEFAULT_SEAL_NAMES = [
@@ -13,13 +16,28 @@ const DEFAULT_SEAL_NAMES = [
 ];
 
 function makeNode(name) {
-  return {
+  const node = {
     name,
     visible: true,
     children: [],
     parent: null,
-    traverse(cb) { cb(this); },
   };
+  node.traverse = function (cb) {
+    cb(this);
+    for (const c of this.children) {
+      if (typeof c.traverse === 'function') c.traverse(cb);
+    }
+  };
+  if (sealsAsMeshes) {
+    const three = require('three');
+    node.isMesh = true;
+    node.material = new three.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0x000000,
+      emissiveIntensity: 0,
+    });
+  }
+  return node;
 }
 
 function makeMockScene() {
@@ -78,6 +96,12 @@ module.exports = {
   GLTFLoader,
   __setAutoLoad(v) { autoLoad = v; },
   __setSealNames(names) { sealNamesOverride = names; },
+  __setSealsAsMeshes(v) { sealsAsMeshes = v; },
   __getLastInstance() { return instances[instances.length - 1]; },
-  __reset() { autoLoad = true; sealNamesOverride = null; instances.length = 0; },
+  __reset() {
+    autoLoad = true;
+    sealNamesOverride = null;
+    sealsAsMeshes = false;
+    instances.length = 0;
+  },
 };

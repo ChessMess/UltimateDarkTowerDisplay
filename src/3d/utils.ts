@@ -22,20 +22,6 @@ export function polarToXZ(azimuth: number, r: number): { x: number; z: number } 
   };
 }
 
-export function computeLedPosition(
-  layer: number,
-  light: number,
-  radius: number
-): { x: number; y: number; z: number } {
-  const isRing = layer < 3;
-  const r = radius * (isRing ? LED_LAYOUT.drumRadius : LED_LAYOUT.cornerRadius);
-  const azimuth = isRing ? RING_AZIMUTH[light] : CORNER_AZIMUTH[light];
-  return {
-    ...polarToXZ(azimuth, r),
-    y: radius * LED_Y_FRACTIONS[layer],
-  };
-}
-
 export function computeRedLightPosition(
   layer: number,
   light: number,
@@ -49,6 +35,20 @@ export function computeRedLightPosition(
   return {
     ...polarToXZ(azimuth, r),
     y: radius * LED_Y_FRACTIONS[layer],
+  };
+}
+
+export function computeSealBacklightPose(
+  layer: number,
+  light: number,
+  radius: number,
+  radiusFactor: number,
+): { position: { x: number; y: number; z: number } } {
+  const y = radius * LED_Y_FRACTIONS[layer];
+  const azimuth = RING_AZIMUTH[light];
+  const inside = polarToXZ(azimuth, radius * radiusFactor);
+  return {
+    position: { x: inside.x, y, z: inside.z },
   };
 }
 

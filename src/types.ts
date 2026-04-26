@@ -23,14 +23,17 @@ export interface TowerDisplayOptions {
   clickToToggleSeals?: boolean;
   /** Called when any side-aware renderer changes its selected side. */
   onSideChange?: (side: TowerSide) => void;
-  /** Optional override for the 3D view's GLB model URL. */
+  /**
+   * URL of the GLB model for the 3D view. **Required** when `renderers` includes `'3d-view'`.
+   * The package ships the model at `dist/3d/assets/tower.glb` — reference it through your
+   * bundler (e.g. `import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb'`)
+   * or copy it to a static asset path and pass that URL here.
+   */
   modelUrl?: string;
   /** Optional override for where Draco decoder wasm/js files are loaded from. */
   dracoDecoderPath?: string;
   /** Enable verbose 3D diagnostics (logs, render heartbeats, axes helpers). Forwarded to Tower3DView. */
   debug3D?: boolean;
-  /** Show the amber LED proxy spheres in the 3D view. Defaults to false. Use for debugging / visibility aid. */
-  showLedProxies?: boolean;
   /** Show the noir ground disc that catches the key-light shadow. Defaults to true. */
   showGroundDisc?: boolean;
   /** Light intensities for the 3D view. Forwarded to Tower3DView. */

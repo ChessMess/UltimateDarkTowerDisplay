@@ -27,7 +27,6 @@ export interface DomElements {
   lblKeyY: HTMLElement | null;
   lblKeyZ: HTMLElement | null;
   debug3dCheckbox: HTMLInputElement | null;
-  showLedProxiesCheckbox: HTMLInputElement | null;
   chkGroundDisc: HTMLInputElement | null;
   chkBoardDisc: HTMLInputElement | null;
   inpSkyboxUrl: HTMLInputElement | null;
@@ -81,7 +80,6 @@ export function queryDom(): DomElements {
     lblKeyY: document.getElementById('lbl-key-y'),
     lblKeyZ: document.getElementById('lbl-key-z'),
     debug3dCheckbox: document.getElementById('chk-debug3d') as HTMLInputElement | null,
-    showLedProxiesCheckbox: document.getElementById('chk-show-led-proxies') as HTMLInputElement | null,
     chkGroundDisc: document.getElementById('chk-ground-disc') as HTMLInputElement | null,
     chkBoardDisc: document.getElementById('chk-board-disc') as HTMLInputElement | null,
     inpSkyboxUrl: document.getElementById('inp-skybox-url') as HTMLInputElement | null,

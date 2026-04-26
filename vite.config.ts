@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import { resolve } from 'path';
+import { copyFileSync, mkdirSync } from 'fs';
 
 function redirectExamplePath(): Plugin {
   const redirect = (req: { url?: string }, res: { statusCode: number; setHeader(name: string, value: string): void; end(): void }, next: () => void) => {
@@ -31,8 +32,25 @@ function redirectExamplePath(): Plugin {
   };
 }
 
+// Copies the tower GLB into dist/3d/assets/ so consumers can import it via
+// `ultimatedarktowerdisplay/dist/3d/assets/tower.glb`. The source no longer
+// imports the asset directly (it's consumer-supplied via TowerDisplayOptions.modelUrl),
+// so Vite wouldn't otherwise emit it.
+function copyTowerAsset(): Plugin {
+  return {
+    name: 'copy-tower-asset',
+    apply: 'build',
+    closeBundle() {
+      const src = resolve(__dirname, 'src/3d/assets/tower.glb');
+      const destDir = resolve(__dirname, 'dist/3d/assets');
+      mkdirSync(destDir, { recursive: true });
+      copyFileSync(src, resolve(destDir, 'tower.glb'));
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [redirectExamplePath()],
+  plugins: [redirectExamplePath(), copyTowerAsset()],
   resolve: {
     alias: {
       // The ESM build of ultimatedarktower uses createRequire which is not

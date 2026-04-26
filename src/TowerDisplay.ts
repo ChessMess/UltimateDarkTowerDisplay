@@ -19,11 +19,17 @@ function createRenderer(type: RendererType, container: HTMLElement, options: Tow
     case 'side-view':
       return new TowerSideView(container);
     case '3d-view':
+      if (!options.modelUrl) {
+        throw new Error(
+          "TowerDisplay: `modelUrl` is required when using the '3d-view' renderer. " +
+          "The package ships the model at `dist/3d/assets/tower.glb` — import it through " +
+          "your bundler or copy it to a static asset path and pass the URL via `modelUrl`."
+        );
+      }
       return new Tower3DView(container, {
         modelUrl: options.modelUrl,
         dracoDecoderPath: options.dracoDecoderPath,
         debug3D: options.debug3D,
-        showLedProxies: options.showLedProxies,
         showGroundDisc: options.showGroundDisc,
         lighting: options.lighting,
       });

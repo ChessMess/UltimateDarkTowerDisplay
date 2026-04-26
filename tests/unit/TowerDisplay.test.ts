@@ -2,6 +2,8 @@ import { TowerDisplay } from '../../src/TowerDisplay';
 import { _resetStyleInjection } from '../../src/styles';
 import { createDefaultTowerState } from 'ultimatedarktower';
 
+const TEST_MODEL_URL = 'mock://tower.glb';
+
 describe('TowerDisplay', () => {
   let container: HTMLElement;
   let display: TowerDisplay;
@@ -85,7 +87,7 @@ describe('TowerDisplay', () => {
 
   it('lighting config helpers delegate when 3D renderer is active', () => {
     display.dispose();
-    display = new TowerDisplay({ container, renderers: '3d-view' });
+    display = new TowerDisplay({ container, renderers: '3d-view', modelUrl: TEST_MODEL_URL });
 
     const before = display.getLightingConfig();
     expect(before).toBeDefined();
@@ -112,7 +114,7 @@ describe('TowerDisplay', () => {
   describe('seal click propagation across renderers', () => {
     it('clicking a seal in the 2D view hides it on both 2D and 3D renderers', () => {
       display.dispose();
-      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'] });
+      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'], modelUrl: TEST_MODEL_URL });
 
       const topSeal = container.querySelector('.tsv-seal-top') as Element;
       expect(topSeal.getAttribute('data-broken')).toBe('false');
@@ -125,14 +127,14 @@ describe('TowerDisplay', () => {
       const view3d = (display as unknown as {
         view3d: { getSealNode?: (s: string, l: string) => { visible: boolean } };
       }).view3d;
-      const sealNodes = (view3d as unknown as { sealNodes: Map<string, { visible: boolean }> }).sealNodes;
+      const sealNodes = (view3d as unknown as { sealManager: { sealNodes: Map<string, { visible: boolean }> } }).sealManager.sealNodes;
       expect(sealNodes.get('north:top')!.visible).toBe(false);
       expect(sealNodes.get('north:middle')!.visible).toBe(true);
     });
 
     it('clicking the same seal twice restores it on both renderers', () => {
       display.dispose();
-      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'] });
+      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'], modelUrl: TEST_MODEL_URL });
 
       const topSeal = container.querySelector('.tsv-seal-top') as Element;
       topSeal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -140,21 +142,21 @@ describe('TowerDisplay', () => {
 
       expect(topSeal.getAttribute('data-broken')).toBe('false');
       const sealNodes = (display as unknown as {
-        view3d: { sealNodes: Map<string, { visible: boolean }> };
-      }).view3d.sealNodes;
+        view3d: { sealManager: { sealNodes: Map<string, { visible: boolean }> } };
+      }).view3d.sealManager.sealNodes;
       expect(sealNodes.get('north:top')!.visible).toBe(true);
     });
 
     it('external applySeals merges with user toggles when calling fanOut', () => {
       display.dispose();
-      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'] });
+      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'], modelUrl: TEST_MODEL_URL });
 
       // External breaks north-top
       display.applySeals([{ side: 'north', level: 'top' }]);
 
       const sealNodes = (display as unknown as {
-        view3d: { sealNodes: Map<string, { visible: boolean }> };
-      }).view3d.sealNodes;
+        view3d: { sealManager: { sealNodes: Map<string, { visible: boolean }> } };
+      }).view3d.sealManager.sealNodes;
       expect(sealNodes.get('north:top')!.visible).toBe(false);
 
       // User clicks middle to additionally toggle it hidden
@@ -177,6 +179,7 @@ describe('TowerDisplay', () => {
       display = new TowerDisplay({
         container,
         renderers: ['side-view', '3d-view'],
+        modelUrl: TEST_MODEL_URL,
         onSealClick: handler,
       });
 
@@ -192,6 +195,7 @@ describe('TowerDisplay', () => {
       display = new TowerDisplay({
         container,
         renderers: ['side-view', '3d-view'],
+        modelUrl: TEST_MODEL_URL,
         clickToToggleSeals: false,
         onSealClick: handler,
       });
@@ -201,8 +205,8 @@ describe('TowerDisplay', () => {
 
       expect(topSeal.getAttribute('data-broken')).toBe('false');
       const sealNodes = (display as unknown as {
-        view3d: { sealNodes: Map<string, { visible: boolean }> };
-      }).view3d.sealNodes;
+        view3d: { sealManager: { sealNodes: Map<string, { visible: boolean }> } };
+      }).view3d.sealManager.sealNodes;
       expect(sealNodes.get('north:top')!.visible).toBe(true);
       expect(handler).toHaveBeenCalledTimes(1);
     });
@@ -229,7 +233,7 @@ describe('TowerDisplay', () => {
   describe('side change propagation', () => {
     it('selectSide fans out to every side-aware renderer', () => {
       display.dispose();
-      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'] });
+      display = new TowerDisplay({ container, renderers: ['side-view', '3d-view'], modelUrl: TEST_MODEL_URL });
 
       display.selectSide('east');
 
@@ -244,6 +248,7 @@ describe('TowerDisplay', () => {
       display = new TowerDisplay({
         container,
         renderers: ['side-view', '3d-view'],
+        modelUrl: TEST_MODEL_URL,
         onSideChange: handler,
       });
 

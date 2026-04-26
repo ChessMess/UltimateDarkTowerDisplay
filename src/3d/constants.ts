@@ -28,6 +28,13 @@ export const LIGHTS_PER_LAYER = 4;
 /** Cardinal azimuths (rad) for ring lights. Indexed by RING_LIGHT_POSITIONS (N=0, E=1, S=2, W=3). */
 export const RING_AZIMUTH: readonly number[] = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
 
+/** Layer-index (0/1/2) → seal level string. Aligned with LED_LAYOUT.topY/middleY/bottomY. */
+export const RING_LEVEL_BY_LAYER_INDEX: readonly ('top' | 'middle' | 'bottom')[] = [
+  'top',
+  'middle',
+  'bottom',
+];
+
 /** Corner azimuths (rad) for ledge/base lights. Indexed by LEDGE_BASE_LIGHT_POSITIONS (NE=0, SE=1, SW=2, NW=3). */
 export const CORNER_AZIMUTH: readonly number[] = [
   Math.PI / 4,
@@ -42,15 +49,12 @@ export const CORNER_AZIMUTH: readonly number[] = [
  * educated guesses — tuning is expected with `debug3D: true`.
  */
 export const LED_LAYOUT = {
-  drumRadius: 0.42,
-  cornerRadius: 0.52,
   topY: 0.83,
   middleY: 0.53,
   bottomY: 0.23,
   ledgeY: -0.36,
   base1Y: -0.26,
   base2Y: 0.02,
-  ledSize: 0.02,
 } as const;
 
 /**

@@ -5,13 +5,16 @@ import * as gltfLoaderMock from '../__mocks__/gltfLoader.js';
 import * as gsapMock from '../__mocks__/gsap.js';
 
 const {
-  computeLedPosition, LED_LAYOUT, RING_AZIMUTH, CORNER_AZIMUTH,
+  LED_LAYOUT, RING_AZIMUTH, CORNER_AZIMUTH,
   computeRedLightPosition, RED_LIGHT_LAYOUT, getLedRef,
   getSealNode, getSealNodeCount,
+  computeSealBacklightPose, getSealBacklight, getSealBacklightCount,
 } = __testables;
 
 const EPS = 1e-9;
 const close = (a: number, b: number, eps = EPS): boolean => Math.abs(a - b) < eps;
+
+const TEST_MODEL_URL = 'mock://tower.glb';
 
 function makeLayer(): TowerState['layer'][number] {
   return {
@@ -37,91 +40,6 @@ function makeState(): TowerState {
     led_sequence: 0,
   };
 }
-
-describe('computeLedPosition', () => {
-  const R = 1.0;
-
-  describe('ring layers (0–2) use drumRadius + cardinal azimuths', () => {
-    it('layer 0 light 0 (top ring, North) → +Z axis at topY', () => {
-      const p = computeLedPosition(0, 0, R);
-      expect(close(p.x, 0)).toBe(true);
-      expect(p.y).toBeCloseTo(LED_LAYOUT.topY, 10);
-      expect(p.z).toBeCloseTo(LED_LAYOUT.drumRadius, 10);
-    });
-
-    it('layer 0 light 1 (top ring, East) → +X axis at topY', () => {
-      const p = computeLedPosition(0, 1, R);
-      expect(p.x).toBeCloseTo(LED_LAYOUT.drumRadius, 10);
-      expect(p.y).toBeCloseTo(LED_LAYOUT.topY, 10);
-      expect(close(p.z, 0)).toBe(true);
-    });
-
-    it('layer 0 light 2 (top ring, South) → -Z axis at topY', () => {
-      const p = computeLedPosition(0, 2, R);
-      expect(close(p.x, 0)).toBe(true);
-      expect(p.y).toBeCloseTo(LED_LAYOUT.topY, 10);
-      expect(p.z).toBeCloseTo(-LED_LAYOUT.drumRadius, 10);
-    });
-
-    it('layer 0 light 3 (top ring, West) → -X axis at topY', () => {
-      const p = computeLedPosition(0, 3, R);
-      expect(p.x).toBeCloseTo(-LED_LAYOUT.drumRadius, 10);
-      expect(p.y).toBeCloseTo(LED_LAYOUT.topY, 10);
-      expect(close(p.z, 0)).toBe(true);
-    });
-  });
-
-  describe('corner layers (3–5) use cornerRadius + diagonal azimuths', () => {
-    it('layer 3 light 0 (ledge, NE) → +X+Z at ledgeY', () => {
-      const p = computeLedPosition(3, 0, R);
-      const expected = Math.sin(Math.PI / 4) * LED_LAYOUT.cornerRadius;
-      expect(p.x).toBeCloseTo(expected, 10);
-      expect(p.y).toBeCloseTo(LED_LAYOUT.ledgeY, 10);
-      expect(p.z).toBeCloseTo(expected, 10);
-    });
-
-    it('layer 4 light 2 (base1, SW) → -X-Z at base1Y', () => {
-      const p = computeLedPosition(4, 2, R);
-      const cornerR = LED_LAYOUT.cornerRadius;
-      expect(p.x).toBeCloseTo(Math.sin((5 * Math.PI) / 4) * cornerR, 10);
-      expect(p.y).toBeCloseTo(LED_LAYOUT.base1Y, 10);
-      expect(p.z).toBeCloseTo(Math.cos((5 * Math.PI) / 4) * cornerR, 10);
-    });
-  });
-
-  describe('layer → y-fraction dispatch', () => {
-    const cases: Array<[number, number]> = [
-      [0, LED_LAYOUT.topY],
-      [1, LED_LAYOUT.middleY],
-      [2, LED_LAYOUT.bottomY],
-      [3, LED_LAYOUT.ledgeY],
-      [4, LED_LAYOUT.base1Y],
-      [5, LED_LAYOUT.base2Y],
-    ];
-    it.each(cases)('layer %i → y = %f', (layer, expectedY) => {
-      const p = computeLedPosition(layer, 0, R);
-      expect(p.y).toBeCloseTo(expectedY, 10);
-    });
-  });
-
-  it('scales linearly with radius', () => {
-    const p1 = computeLedPosition(0, 0, 1.0);
-    const p2 = computeLedPosition(0, 0, 2.5);
-    expect(p2.x).toBeCloseTo(p1.x * 2.5, 10);
-    expect(p2.y).toBeCloseTo(p1.y * 2.5, 10);
-    expect(p2.z).toBeCloseTo(p1.z * 2.5, 10);
-  });
-
-  it('exposes correct azimuth tables', () => {
-    expect(RING_AZIMUTH).toEqual([0, Math.PI / 2, Math.PI, -Math.PI / 2]);
-    expect(CORNER_AZIMUTH).toEqual([
-      Math.PI / 4,
-      (3 * Math.PI) / 4,
-      (5 * Math.PI) / 4,
-      (7 * Math.PI) / 4,
-    ]);
-  });
-});
 
 describe('computeRedLightPosition', () => {
   const R = 1.0;
@@ -182,7 +100,7 @@ describe('Tower3DView instance', () => {
 
   describe('applyState', () => {
     it('after load, dispatches one tween per LED (24 total)', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
       const state = makeState();
@@ -198,7 +116,7 @@ describe('Tower3DView instance', () => {
 
     it('replays latestState when buildLeds runs after pre-load applyState', () => {
       gltfLoaderMock.__setAutoLoad(false);
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       const state = makeState();
       state.layer[0].light[0].effect = LIGHT_EFFECTS.on;
@@ -219,7 +137,7 @@ describe('Tower3DView instance', () => {
 
   describe('showIdle', () => {
     it('dispatches 24 off effects', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
       view.showIdle();
@@ -234,7 +152,7 @@ describe('Tower3DView instance', () => {
 
   describe('dispose', () => {
     it('kills every LED tween and clears the ledRefs map', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       const state = makeState();
       for (const layer of state.layer) {
@@ -253,8 +171,8 @@ describe('Tower3DView instance', () => {
   });
 
   describe('red light creation', () => {
-    it('creates a redLight for every LED regardless of showLedProxies', () => {
-      const view = new Tower3DView(container);
+    it('creates a redLight for every LED', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       for (let layer = 0; layer < 6; layer++) {
         for (let light = 0; light < 4; light++) {
           const ref = getLedRef(view, layer, light);
@@ -264,29 +182,11 @@ describe('Tower3DView instance', () => {
       }
       view.dispose();
     });
-
-    it('amber fields are null when showLedProxies is false (default)', () => {
-      const view = new Tower3DView(container);
-      const ref = getLedRef(view, 0, 0)!;
-      expect(ref.mesh).toBeNull();
-      expect(ref.material).toBeNull();
-      expect(ref.light).toBeNull();
-      view.dispose();
-    });
-
-    it('amber fields are populated when showLedProxies is true', () => {
-      const view = new Tower3DView(container, { showLedProxies: true });
-      const ref = getLedRef(view, 0, 0)!;
-      expect(ref.mesh).not.toBeNull();
-      expect(ref.material).not.toBeNull();
-      expect(ref.light).not.toBeNull();
-      view.dispose();
-    });
   });
 
   describe('lockstep animation', () => {
     it('write() drives redLight intensity and visibility from driver.v', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
       const state = makeState();
@@ -304,26 +204,8 @@ describe('Tower3DView instance', () => {
       view.dispose();
     });
 
-    it('write() also drives amber when showLedProxies is true', () => {
-      const view = new Tower3DView(container, { showLedProxies: true });
-      gsapMock.__reset();
-
-      const state = makeState();
-      state.layer[1].light[2].effect = LIGHT_EFFECTS.on;
-      view.applyState(state);
-
-      const ref = getLedRef(view, 1, 2)!;
-      ref.driver.v = 0.5;
-      (ref.tween as unknown as { vars: { onUpdate: () => void } }).vars.onUpdate();
-
-      expect(ref.redLight.intensity).toBeCloseTo(0.5, 10);
-      expect(ref.material!.emissiveIntensity).toBeCloseTo(0.5, 10);
-      expect(ref.light!.intensity).toBeCloseTo(0.4, 10);
-      view.dispose();
-    });
-
     it('write() hides redLight when driver.v is at zero threshold', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
       const state = makeState();
@@ -341,7 +223,7 @@ describe('Tower3DView instance', () => {
 
   describe('dispose cleans up red lights', () => {
     it('removes redLight from parent for every LED', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       const state = makeState();
       for (const layer of state.layer) {
         for (const light of layer.light) light.effect = LIGHT_EFFECTS.on;
@@ -365,7 +247,7 @@ describe('Tower3DView instance', () => {
 
   describe('applySeals', () => {
     it('registers all 12 seal nodes after load and leaves them visible by default', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       expect(getSealNodeCount(view)).toBe(12);
       for (const side of ['north', 'south', 'east', 'west']) {
@@ -379,7 +261,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('hides only the seals in the broken list; leaves the others visible', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       view.applySeals([
         { side: 'north', level: 'top' },
@@ -395,7 +277,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('restores previously hidden seals when called with an empty list', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       view.applySeals([{ side: 'south', level: 'bottom' }]);
       expect(getSealNode(view, 'south', 'bottom')!.visible).toBe(false);
@@ -407,7 +289,7 @@ describe('Tower3DView instance', () => {
 
     it('applies a pre-load applySeals call once the model finishes loading', () => {
       gltfLoaderMock.__setAutoLoad(false);
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       // Registry is empty before the load fires; apply is stored but a no-op.
       view.applySeals([{ side: 'west', level: 'top' }]);
@@ -429,7 +311,7 @@ describe('Tower3DView instance', () => {
       ]);
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
 
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy.mock.calls[0][0]).toMatch(/9 seal node\(s\) missing/);
@@ -443,23 +325,225 @@ describe('Tower3DView instance', () => {
 
     it('does not warn when every expected seal is present', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       expect(warnSpy).not.toHaveBeenCalled();
       warnSpy.mockRestore();
       view.dispose();
     });
 
     it('clears the seal registry on dispose', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       expect(getSealNodeCount(view)).toBe(12);
       view.dispose();
       expect(getSealNodeCount(view)).toBe(0);
     });
   });
 
+  describe('computeSealBacklightPose', () => {
+    const R = 1.0;
+    const RF = 0.88;
+
+    it('positions just behind north top seal: +Z at radiusFactor depth', () => {
+      const pose = computeSealBacklightPose(0, 0, R, RF);
+      expect(pose.position.x).toBeCloseTo(0, 10);
+      expect(pose.position.y).toBeCloseTo(LED_LAYOUT.topY, 10);
+      expect(pose.position.z).toBeCloseTo(RF, 10);
+    });
+
+    it('east middle: +X axis at middleY', () => {
+      const pose = computeSealBacklightPose(1, 1, R, RF);
+      expect(pose.position.x).toBeCloseTo(RF, 10);
+      expect(pose.position.y).toBeCloseTo(LED_LAYOUT.middleY, 10);
+      expect(pose.position.z).toBeCloseTo(0, 10);
+    });
+
+    it('south bottom: -Z axis at bottomY', () => {
+      const pose = computeSealBacklightPose(2, 2, R, RF);
+      expect(pose.position.x).toBeCloseTo(0, 10);
+      expect(pose.position.y).toBeCloseTo(LED_LAYOUT.bottomY, 10);
+      expect(pose.position.z).toBeCloseTo(-RF, 10);
+    });
+
+    it('scales linearly with radius', () => {
+      const a = computeSealBacklightPose(0, 0, 1.0, RF);
+      const b = computeSealBacklightPose(0, 0, 4.0, RF);
+      expect(b.position.z).toBeCloseTo(a.position.z * 4, 10);
+    });
+  });
+
+  describe('seal backlights', () => {
+    it('creates 12 PointLights (one per side:level), each parented to the model', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      expect(getSealBacklightCount(view)).toBe(12);
+      for (const side of ['north', 'south', 'east', 'west']) {
+        for (const level of ['top', 'middle', 'bottom']) {
+          const ref = getSealBacklight(view, side, level);
+          expect(ref).toBeDefined();
+          expect(ref!.light).toBeDefined();
+          expect(ref!.light.parent).not.toBeNull();
+        }
+      }
+      view.dispose();
+    });
+
+    it('creates only as many backlights as available seal nodes', () => {
+      gltfLoaderMock.__setSealNames([
+        'seal_north_top', 'seal_north_middle', 'seal_north_bottom',
+      ]);
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
+
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      expect(getSealBacklightCount(view)).toBe(3);
+      expect(getSealBacklight(view, 'north', 'top')).toBeDefined();
+      expect(getSealBacklight(view, 'south', 'top')).toBeUndefined();
+
+      warnSpy.mockRestore();
+      view.dispose();
+    });
+
+    it('positions each backlight just behind the seal at the correct cardinal bearing', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      const cfg = view.getLightingConfig().leds.sealBacklights;
+      const radius = (view as unknown as { modelRadius: number }).modelRadius;
+
+      const cases: Array<[string, string, (p: { x: number; y: number; z: number }) => void]> = [
+        ['north', 'top', (p) => {
+          expect(p.x).toBeCloseTo(0, 10);
+          expect(p.z).toBeCloseTo(radius * cfg.radiusFactor, 10);
+        }],
+        ['east', 'middle', (p) => {
+          expect(p.x).toBeCloseTo(radius * cfg.radiusFactor, 10);
+          expect(p.z).toBeCloseTo(0, 10);
+        }],
+        ['south', 'bottom', (p) => {
+          expect(p.x).toBeCloseTo(0, 10);
+          expect(p.z).toBeCloseTo(-radius * cfg.radiusFactor, 10);
+        }],
+        ['west', 'top', (p) => {
+          expect(p.x).toBeCloseTo(-radius * cfg.radiusFactor, 10);
+          expect(p.z).toBeCloseTo(0, 10);
+        }],
+      ];
+
+      for (const [side, level, check] of cases) {
+        const ref = getSealBacklight(view, side, level)!;
+        check(ref.light.position);
+      }
+      view.dispose();
+    });
+
+    it('initialises each light with configured color, distance, decay and zero intensity', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      const cfg = view.getLightingConfig().leds.sealBacklights;
+      const radius = (view as unknown as { modelRadius: number }).modelRadius;
+
+      const ref = getSealBacklight(view, 'north', 'top')!;
+      expect(ref.light.color.getHex()).toBe(cfg.color);
+      expect(ref.light.distance).toBeCloseTo(radius * cfg.distanceFactor, 10);
+      expect(ref.light.decay).toBe(cfg.decay);
+      // Off until driven.
+      expect(ref.light.intensity).toBe(0);
+      expect(ref.light.visible).toBe(false);
+      view.dispose();
+    });
+
+    it('intensity scales with driver.v after applyLightingConfig', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+
+      const ref = getSealBacklight(view, 'north', 'top')!;
+      ref.driver.v = 1;
+      view.applyLightingConfig(view.getLightingConfig());
+
+      const cfg = view.getLightingConfig().leds.sealBacklights;
+      expect(ref.light.intensity).toBeCloseTo(cfg.intensity, 10);
+      expect(ref.light.visible).toBe(true);
+      view.dispose();
+    });
+
+    it('with backlightWhenBroken=true, light stays available when seal is broken', () => {
+      const view = new Tower3DView(container, {
+        modelUrl: TEST_MODEL_URL,
+        lighting: { leds: { sealBacklights: { backlightWhenBroken: true } } },
+      });
+
+      const ref = getSealBacklight(view, 'north', 'top')!;
+      ref.driver.v = 1;
+      view.applySeals([{ side: 'north', level: 'top' }]);
+
+      const cfg = view.getLightingConfig().leds.sealBacklights;
+      expect(ref.light.intensity).toBeCloseTo(cfg.intensity, 10);
+      expect(ref.light.visible).toBe(true);
+      view.dispose();
+    });
+
+    it('with backlightWhenBroken=false, light hides when seal is broken', () => {
+      const view = new Tower3DView(container, {
+        modelUrl: TEST_MODEL_URL,
+        lighting: { leds: { sealBacklights: { backlightWhenBroken: false } } },
+      });
+
+      const ref = getSealBacklight(view, 'north', 'top')!;
+      ref.driver.v = 1;
+      view.applySeals([{ side: 'north', level: 'top' }]);
+
+      expect(ref.light.intensity).toBe(0);
+      expect(ref.light.visible).toBe(false);
+      view.dispose();
+    });
+
+    it('applyLightingConfig({ enabled: false }) drops every backlight to zero intensity', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      // Force drivers on so the only thing keeping lights off is enabled=false.
+      for (const side of ['north', 'south', 'east', 'west']) {
+        for (const level of ['top', 'middle', 'bottom']) {
+          getSealBacklight(view, side, level)!.driver.v = 1;
+        }
+      }
+
+      view.applyLightingConfig({ leds: { sealBacklights: { enabled: false } } });
+
+      for (const side of ['north', 'south', 'east', 'west']) {
+        for (const level of ['top', 'middle', 'bottom']) {
+          const ref = getSealBacklight(view, side, level)!;
+          expect(ref.light.intensity).toBe(0);
+          expect(ref.light.visible).toBe(false);
+        }
+      }
+      view.dispose();
+    });
+
+    it('applyLightingConfig hot-reloads color', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      view.applyLightingConfig({ leds: { sealBacklights: { color: 0x00ff00 } } });
+
+      for (const side of ['north', 'south', 'east', 'west']) {
+        for (const level of ['top', 'middle', 'bottom']) {
+          const ref = getSealBacklight(view, side, level)!;
+          expect(ref.light.color.getHex()).toBe(0x00ff00);
+        }
+      }
+      view.dispose();
+    });
+
+    it('removes lights from parent on dispose', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      const refs: Array<{ light: { parent: unknown } }> = [];
+      for (const side of ['north', 'south', 'east', 'west']) {
+        for (const level of ['top', 'middle', 'bottom']) {
+          refs.push(getSealBacklight(view, side, level)!);
+        }
+      }
+      expect(refs.every((r) => r.light.parent !== null)).toBe(true);
+
+      view.dispose();
+      expect(refs.every((r) => r.light.parent === null)).toBe(true);
+      expect(getSealBacklightCount(view)).toBe(0);
+    });
+  });
+
   describe('selectSide', () => {
     it('marks north active after initial load', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       const camCtrl = (view as unknown as {
         cameraController: { getCurrentSide(): string | null };
@@ -472,7 +556,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('after load, selectSide updates cameraController.currentSide and fires onSideChange', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       const spy = jest.fn();
       view.onSideChange = spy;
 
@@ -487,7 +571,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('selectSide to the current side is a no-op (loop prevention)', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       view.selectSide('east');
 
       const spy = jest.fn();
@@ -499,15 +583,16 @@ describe('Tower3DView instance', () => {
 
     it('applies a pre-load selectSide call once the model finishes loading', () => {
       gltfLoaderMock.__setAutoLoad(false);
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       view.selectSide('south');
 
-      // Model not loaded yet — cameraController.snapToSide no-ops since defaultCamera is null.
+      // Model not loaded yet — snapToSide sets currentSide immediately (for re-entry guard
+      // correctness) but defers the camera tween until the model loads.
       const camCtrl = (view as unknown as {
         cameraController: { getCurrentSide(): string | null };
       }).cameraController;
-      expect(camCtrl.getCurrentSide()).toBeNull();
+      expect(camCtrl.getCurrentSide()).toBe('south');
 
       const loader = gltfLoaderMock.__getLastInstance();
       loader.fireLoad();
@@ -517,7 +602,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('reset returns the active side to north', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       view.selectSide('west');
 
@@ -539,7 +624,7 @@ describe('Tower3DView instance', () => {
 
   describe('lighting config runtime helpers', () => {
     it('getLightingConfig returns a deep-cloned snapshot', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       const snapshot = view.getLightingConfig();
       snapshot.scene.key.intensity = 99;
 
@@ -549,7 +634,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('setSceneLights updates getter-visible scene values', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       view.setSceneLights({
         hemi: 0.12,
         key: 2.4,
@@ -570,7 +655,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('applyLightingConfig resolves partial input over defaults', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       view.applyLightingConfig({
         scene: {
           key: { intensity: 2.8, position: [2, 3, 4] },
@@ -589,7 +674,7 @@ describe('Tower3DView instance', () => {
     });
 
     it('manual setSceneLights cancels active entrance timeline', () => {
-      const view = new Tower3DView(container);
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       view.playEntrance();
 
       const timelines = gsapMock.__getTimelines();
@@ -632,12 +717,6 @@ describe('DEFAULT_LIGHTING', () => {
   });
 
   it('leds values match historical literals', () => {
-    expect(DEFAULT_LIGHTING.leds.amber).toEqual({
-      color: 0xf0c040,
-      maxEmissive: 1.0,
-      maxHalo: 0.8,
-      haloDistanceFraction: 0.12,
-    });
     expect(DEFAULT_LIGHTING.leds.red).toEqual({
       color: 0xff2020,
       maxHalo: 1.0,
@@ -700,29 +779,6 @@ describe('resolveLighting', () => {
     // sibling sections untouched
     expect(resolved.scene.hemisphere).toEqual(DEFAULT_LIGHTING.scene.hemisphere);
     expect(resolved.leds).toEqual(DEFAULT_LIGHTING.leds);
-  });
-
-  it('honors deprecated flat hemisphere alias', () => {
-    const resolved = resolveLighting({ hemisphere: 0.9 });
-    expect(resolved.scene.hemisphere.intensity).toBe(0.9);
-    // other hemisphere fields still at default
-    expect(resolved.scene.hemisphere.color).toBe(DEFAULT_LIGHTING.scene.hemisphere.color);
-    expect(resolved.scene.hemisphere.ground).toBe(DEFAULT_LIGHTING.scene.hemisphere.ground);
-  });
-
-  it('honors deprecated flat key/fill/exposure aliases', () => {
-    const resolved = resolveLighting({ key: 2.5, fill: 0.1, exposure: 1.2 });
-    expect(resolved.scene.key.intensity).toBe(2.5);
-    expect(resolved.scene.fill.intensity).toBe(0.1);
-    expect(resolved.scene.exposure).toBe(1.2);
-  });
-
-  it('prefers nested value when both nested and deprecated flat alias are supplied', () => {
-    const resolved = resolveLighting({
-      hemisphere: 0.9,
-      scene: { hemisphere: { intensity: 0.5 } },
-    });
-    expect(resolved.scene.hemisphere.intensity).toBe(0.5);
   });
 
   it('does not mutate DEFAULT_LIGHTING', () => {

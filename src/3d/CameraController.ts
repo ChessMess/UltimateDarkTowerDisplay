@@ -62,10 +62,9 @@ export class CameraController {
   }
 
   snapToSide(side: TowerSide): void {
-    if (!this.defaultCamera) return;
-
     this.currentSide = side;
     this.updateSideButtons();
+    if (!this.defaultCamera) return; // tween deferred; currentSide updated for re-entry guard
 
     const elevation = this.modelRadius * 0.15;
     const distance = this.defaultCamera.position.length();

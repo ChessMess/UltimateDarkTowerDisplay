@@ -1,10 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import gsap from 'gsap';
-
 
 import { LIGHT_EFFECTS } from 'ultimatedarktower';
 import type { TowerState, SealIdentifier, TowerSide } from 'ultimatedarktower';
@@ -17,8 +12,6 @@ import {
   LED_LAYOUT, RED_LIGHT_LAYOUT,
 } from './constants';
 import { injectStyles } from '../styles';
-import towerModelUrl from './assets/tower.glb?url';
-import { buildBoardTexture } from './GameBoardTexture';
 import { DEFAULT_LIGHTING, resolveLighting } from './LightingResolver';
 export { DEFAULT_LIGHTING, resolveLighting };
 import { LedEffectAnimator } from './LedEffectAnimator';
@@ -26,18 +19,16 @@ import type { LedRef } from './LedEffectAnimator';
 import { CameraController } from './CameraController';
 import { SideButtons } from '../shared/SideButtons';
 import { SceneLighting } from './SceneLighting';
-import {
-  computeLedPosition,
-  computeRedLightPosition,
-  disposeObject,
-} from './utils';
+import { computeRedLightPosition, computeSealBacklightPose, disposeObject } from './utils';
+import { EntranceAnimator } from './EntranceAnimator';
+import { GroundDiscManager } from './GroundDiscManager';
+import { SkyboxManager } from './SkyboxManager';
+import { SealManager } from './SealManager';
+import type { SealBacklightRef } from './SealManager';
+export type { SealBacklightRef };
+import { loadTowerModel } from './ModelLoader';
 
 const DEFAULT_DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
-
-const SEAL_NAME_PREFIX = 'seal_';
-const SEAL_SIDES = ['north', 'south', 'east', 'west'] as const;
-const SEAL_LEVELS = ['top', 'middle', 'bottom'] as const;
-const sealKey = (side: string, level: string): string => `${side}:${level}`;
 
 /** @internal — exported for unit tests only. */
 export const __testables = {
@@ -53,27 +44,38 @@ export const __testables = {
   get RED_LIGHT_LAYOUT(): typeof RED_LIGHT_LAYOUT {
     return RED_LIGHT_LAYOUT;
   },
-  computeLedPosition: (layer: number, light: number, radius: number) =>
-    computeLedPosition(layer, light, radius),
   computeRedLightPosition: (layer: number, light: number, radius: number) =>
     computeRedLightPosition(layer, light, radius),
+  computeSealBacklightPose: (
+    layer: number,
+    light: number,
+    radius: number,
+    radiusFactor: number,
+  ) => computeSealBacklightPose(layer, light, radius, radiusFactor),
   getLedRef: (view: Tower3DView, layer: number, light: number): LedRef | undefined =>
     (view as unknown as { ledRefs: Map<string, LedRef> }).ledRefs.get(`${layer}:${light}`),
   getSealNode: (view: Tower3DView, side: string, level: string): THREE.Object3D | undefined =>
-    (view as unknown as { sealNodes: Map<string, THREE.Object3D> }).sealNodes.get(`${side}:${level}`),
+    (view as unknown as { sealManager: SealManager }).sealManager.sealNodes.get(`${side}:${level}`),
   getSealNodeCount: (view: Tower3DView): number =>
-    (view as unknown as { sealNodes: Map<string, THREE.Object3D> }).sealNodes.size,
+    (view as unknown as { sealManager: SealManager }).sealManager.sealNodes.size,
+  getSealBacklight: (view: Tower3DView, side: string, level: string): SealBacklightRef | undefined =>
+    (view as unknown as { sealManager: SealManager }).sealManager.sealBacklights.get(`${side}:${level}`),
+  getSealBacklightCount: (view: Tower3DView): number =>
+    (view as unknown as { sealManager: SealManager }).sealManager.sealBacklights.size,
 };
 
 export interface Tower3DViewOptions {
-  /** Override the default bundled GLB URL. */
-  modelUrl?: string;
+  /**
+   * URL of the tower GLB model. The package ships the model file at
+   * `dist/3d/assets/tower.glb` — consumers must reference it via their bundler
+   * (e.g. `import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb'`)
+   * or copy it to a static asset path and pass that URL here.
+   */
+  modelUrl: string;
   /** Override the URL path used to fetch Draco decoders (wasm/js). */
   dracoDecoderPath?: string;
   /** Enable verbose 3D diagnostics (logs + axes helper). */
   debug3D?: boolean;
-  /** Show the amber LED proxy spheres. Defaults to false. Use for debugging / visibility aid. */
-  showLedProxies?: boolean;
   /** Show the noir ground disc that catches the key-light shadow. Defaults to true. */
   showGroundDisc?: boolean;
   /** Light intensities for the three-point rig. */
@@ -94,16 +96,14 @@ export class Tower3DView implements ITowerDisplay {
   private readonly modelUrl: string;
   private readonly dracoDecoderPath: string;
   private readonly debug3D: boolean;
-  private readonly showLedProxies: boolean;
   private lighting: ResolvedLightingConfig;
   private readonly showGroundDisc: boolean;
 
   private sceneLighting: SceneLighting | null = null;
-  private groundDisc: THREE.Mesh | null = null;
-  private boardDiscTexture: THREE.CanvasTexture | null = null;
-  private skyboxTexture: THREE.Texture | null = null;
-  private skyboxCurrentUrl = '';
-  private entranceTween: gsap.core.Timeline | null = null;
+  private entranceAnimator: EntranceAnimator = new EntranceAnimator();
+  private groundDiscManager: GroundDiscManager | null = null;
+  private skyboxManager: SkyboxManager | null = null;
+  private sealManager: SealManager = new SealManager();
 
   private wrapper: HTMLDivElement | null = null;
   private canvasContainer: HTMLDivElement | null = null;
@@ -130,19 +130,16 @@ export class Tower3DView implements ITowerDisplay {
   private ledRefs: Map<string, LedRef> = new Map();
   private ledAnimator: LedEffectAnimator | null = null;
 
-  private sealNodes: Map<string, THREE.Object3D> = new Map();
-
   /** Optional callback fired when the selected side changes (user click or programmatic). */
   onSideChange?: (side: TowerSide) => void;
 
-  constructor(container: HTMLElement, options?: Tower3DViewOptions) {
+  constructor(container: HTMLElement, options: Tower3DViewOptions) {
     this.container = container;
-    this.modelUrl = options?.modelUrl ?? towerModelUrl;
-    this.dracoDecoderPath = options?.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH;
-    this.debug3D = options?.debug3D ?? false;
-    this.showLedProxies = options?.showLedProxies ?? false;
-    this.lighting = resolveLighting(options?.lighting);
-    this.showGroundDisc = options?.showGroundDisc ?? true;
+    this.modelUrl = options.modelUrl;
+    this.dracoDecoderPath = options.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH;
+    this.debug3D = options.debug3D ?? false;
+    this.lighting = resolveLighting(options.lighting);
+    this.showGroundDisc = options.showGroundDisc ?? true;
     injectStyles();
     this.build();
     this.initScene();
@@ -158,23 +155,15 @@ export class Tower3DView implements ITowerDisplay {
 
   applySeals(brokenSeals: SealIdentifier[]): void {
     this.latestBrokenSeals = brokenSeals;
-    if (this.sealNodes.size === 0) return; // model not loaded — replayed in loadModel.
-    const broken = new Set(brokenSeals.map(s => sealKey(s.side, s.level)));
-    for (const [key, node] of this.sealNodes) {
-      node.visible = !broken.has(key);
-    }
+    this.sealManager.applySeals(brokenSeals, this.lighting);
   }
 
   selectSide(side: TowerSide): void {
     if (this.cameraController?.getCurrentSide() === side) return;
     this.cameraController?.snapToSide(side);
-    // snapToSide no-ops before the model is loaded (defaultCamera is null).
-    // Stash the pending side so loadModel can replay it once the camera is ready.
-    if (this.cameraController?.getCurrentSide() === side) {
-      this.pendingSide = null;
-    } else {
-      this.pendingSide = side;
-    }
+    // Stash the pending side so loadModel can replay the tween once the camera
+    // is ready (snapToSide skips the tween before the model loads).
+    this.pendingSide = this.model ? null : side;
     this.onSideChange?.(side);
   }
 
@@ -199,10 +188,7 @@ export class Tower3DView implements ITowerDisplay {
     keyZ?: number;
   }): void {
     // Manual lighting edits should always win over the cinematic timeline.
-    if (this.entranceTween) {
-      this.entranceTween.kill();
-      this.entranceTween = null;
-    }
+    this.entranceAnimator.stop();
 
     const sl = this.sceneLighting;
     if (sl) {
@@ -249,200 +235,37 @@ export class Tower3DView implements ITowerDisplay {
    * breathing tween is killed before a new run.
    */
   playEntrance(): void {
-    const sl = this.sceneLighting;
-    if (!sl || !this.renderer) return;
-
-    this.entranceTween?.kill();
-    sl.stopBreathing();
-    this.entranceTween = null;
-
-    const targets = {
-      hemi: sl.hemi.intensity,
-      key: sl.key.intensity,
-      fill: sl.fill.intensity,
-      exposure: this.renderer.toneMappingExposure,
-      keyX: sl.key.position.x,
-      keyY: sl.key.position.y,
-      keyZ: sl.key.position.z,
-    };
-
-    sl.hemi.intensity = 0;
-    sl.key.intensity = 0;
-    sl.fill.intensity = 0;
-    this.renderer.toneMappingExposure = 0;
-
-    // Snap the key far off to the opposite side and low — the searchlight
-    // will arc across the top of the model from there into the target.
-    sl.key.position.set(-Math.abs(targets.keyX) * 1.8, targets.keyY * 0.25, targets.keyZ - 8);
-
-    const { peakKeyFactor, beats } = this.lighting.entrance;
-    const peakKey = targets.key * peakKeyFactor;
-
-    const tl = gsap.timeline({
-      onComplete: () => sl.startBreathing(targets.key, this.lighting),
-    });
-
-    // Beat 1 — long silhouette hold: exposure + minimal hemi creep in
-    // barely enough to suggest a shape in the dark.
-    tl.to(this.renderer, {
-      toneMappingExposure: targets.exposure * beats.silhouetteExposureFactor,
-      duration: beats.silhouetteDurationS,
-      ease: 'power1.in',
-    }, 0);
-    tl.to(sl.hemi, {
-      intensity: targets.hemi * beats.silhouetteHemiFactor,
-      duration: beats.silhouetteDurationS,
-      ease: 'power1.in',
-    }, 0);
-
-    // Beat 2 — key arcs over the top: first leg to an overhead waypoint.
-    tl.to(sl.key.position, {
-      x: targets.keyX * 0.2,
-      y: Math.max(targets.keyY * 1.8, targets.keyY + 3),
-      z: targets.keyZ - 3,
-      duration: beats.keyArc1DurationS,
-      ease: 'power2.in',
-    }, beats.keyArc1DelayS);
-
-    // Beat 3 — key punches on during the arc: intensity overshoots past
-    // target for the flash beat, exposure climbs to full.
-    tl.to(sl.key, {
-      intensity: peakKey,
-      duration: beats.keyPunchDurationS,
-      ease: 'power3.out',
-    }, beats.keyPunchDelayS);
-    tl.to(this.renderer, {
-      toneMappingExposure: targets.exposure,
-      duration: beats.exposureInDurationS,
-      ease: 'power2.out',
-    }, beats.keyPunchDelayS);
-
-    // Beat 4 — second arc leg: key descends from waypoint to target.
-    tl.to(sl.key.position, {
-      x: targets.keyX,
-      y: targets.keyY,
-      z: targets.keyZ,
-      duration: beats.keyArc2DurationS,
-      ease: 'power2.out',
-    }, beats.keyArc2DelayS);
-
-    // Beat 5 — key settles from peak back to its resting intensity.
-    tl.to(sl.key, {
-      intensity: targets.key,
-      duration: beats.keySettleDurationS,
-      ease: 'power2.inOut',
-    }, beats.keySettleDelayS);
-
-    // Beat 6 — fill + remaining hemi ease in last so the shadow side stays
-    // mysterious until the reveal has landed.
-    tl.to(sl.fill, {
-      intensity: targets.fill,
-      duration: beats.fillInDurationS,
-      ease: 'power1.out',
-    }, beats.fillInDelayS);
-    tl.to(sl.hemi, {
-      intensity: targets.hemi,
-      duration: beats.hemiInDurationS,
-      ease: 'power1.out',
-    }, beats.hemiInDelayS);
-
-    this.entranceTween = tl;
+    if (!this.sceneLighting || !this.renderer) return;
+    this.entranceAnimator.play(this.sceneLighting, this.renderer, this.lighting);
   }
 
   /** Toggle the shadow-catching ground disc. Builds lazily on first enable. */
   setGroundDiscVisible(visible: boolean): void {
-    if (visible && !this.groundDisc) {
-      this.buildGroundDisc();
-    }
-    if (this.groundDisc) this.groundDisc.visible = visible;
+    this.groundDiscManager?.setVisible(visible, this.modelRadius, this.modelBottomY, this.lighting);
   }
 
   /** Toggle the canvas-generated game board texture on the ground disc. */
   setBoardDiscEnabled(enabled: boolean): void {
     this.lighting.boardDisc.enabled = enabled;
-    if (!this.groundDisc) return;
-    const mat = this.groundDisc.material;
-    if (!(mat instanceof THREE.MeshStandardMaterial)) return;
-    if (enabled) {
-      if (!this.boardDiscTexture) this.boardDiscTexture = buildBoardTexture();
-      mat.map = this.boardDiscTexture;
-      mat.color.set(0xffffff);
-      mat.roughness = 0.95;
-      mat.metalness = 0;
-      mat.opacity = this.lighting.boardDisc.opacity;
-      mat.transparent = this.lighting.boardDisc.opacity < 1;
-    } else {
-      mat.map = null;
-      mat.color.setHex(this.lighting.groundDisc.color);
-      mat.roughness = this.lighting.groundDisc.roughness;
-      mat.metalness = this.lighting.groundDisc.metalness;
-      mat.opacity = 1;
-      mat.transparent = false;
-      this.boardDiscTexture?.dispose();
-      this.boardDiscTexture = null;
-    }
-    mat.needsUpdate = true;
+    this.groundDiscManager?.setBoardDiscEnabled(enabled, this.lighting);
   }
 
   /** Load an equirectangular image or .hdr/.exr file as the scene skybox. Pass null to clear. */
   setSkyboxUrl(url: string | null): void {
     this.lighting.scene.skyboxUrl = url ?? '';
-    this.applySkybox(url ?? '');
-  }
-
-  private applySkybox(url: string): void {
-    this.skyboxCurrentUrl = url;
-    if (!url) {
-      if (this.skyboxTexture) {
-        this.skyboxTexture.dispose();
-        this.skyboxTexture = null;
-      }
-      if (this.scene) this.scene.background = new THREE.Color(this.lighting.scene.background);
-      return;
-    }
-    const onLoad = (texture: THREE.Texture) => {
-      if (this.skyboxCurrentUrl !== url) { texture.dispose(); return; }
-      texture.mapping = THREE.EquirectangularReflectionMapping;
-      if (this.skyboxTexture) this.skyboxTexture.dispose();
-      this.skyboxTexture = texture;
-      if (this.scene) this.scene.background = texture;
-    };
-    const onError = () => console.warn('[Tower3DView] Skybox load failed:', url);
-    if (/\.(hdr|exr)$/i.test(url)) {
-      new HDRLoader().load(url, onLoad, undefined, onError);
-    } else {
-      new THREE.TextureLoader().load(url, onLoad, undefined, onError);
-    }
+    this.skyboxManager?.apply(url ?? '', this.lighting.scene.background);
   }
 
   dispose(): void {
     this.cameraController?.dispose();
     this.cameraController = null;
-    if (this.entranceTween) {
-      this.entranceTween.kill();
-      this.entranceTween = null;
-    }
+    this.entranceAnimator.dispose();
     this.sceneLighting?.dispose();
     this.sceneLighting = null;
-    if (this.groundDisc) {
-      this.groundDisc.geometry?.dispose();
-      const mat = this.groundDisc.material;
-      if (Array.isArray(mat)) {
-        for (const m of mat) m.dispose();
-      } else {
-        mat?.dispose();
-      }
-      this.groundDisc.removeFromParent();
-      this.groundDisc = null;
-    }
-    if (this.boardDiscTexture) {
-      this.boardDiscTexture.dispose();
-      this.boardDiscTexture = null;
-    }
-    if (this.skyboxTexture) {
-      this.skyboxTexture.dispose();
-      this.skyboxTexture = null;
-    }
+    this.groundDiscManager?.dispose();
+    this.groundDiscManager = null;
+    this.skyboxManager?.dispose();
+    this.skyboxManager = null;
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -458,12 +281,10 @@ export class Tower3DView implements ITowerDisplay {
     this.ledAnimator?.dispose();
     this.ledAnimator = null;
     for (const ref of this.ledRefs.values()) {
-      ref.material?.dispose();
-      ref.light?.removeFromParent();
       ref.redLight.removeFromParent();
     }
     this.ledRefs.clear();
-    this.sealNodes.clear();
+    this.sealManager.dispose();
     if (this.model) {
       disposeObject(this.model);
       this.model = null;
@@ -549,8 +370,11 @@ export class Tower3DView implements ITowerDisplay {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.target.set(0, 0, 0);
+    this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
 
     this.sceneLighting = new SceneLighting(this.scene, this.camera, this.renderer, lighting);
+    this.groundDiscManager = new GroundDiscManager(this.scene);
+    this.skyboxManager = new SkyboxManager(this.scene);
 
     if (this.debug3D) {
       this.axesHelper = new THREE.AxesHelper(1);
@@ -573,221 +397,87 @@ export class Tower3DView implements ITowerDisplay {
 
     this.cameraController = new CameraController(this.camera, this.controls, this.sideButtons!);
 
-    if (this.lighting.scene.skyboxUrl) this.applySkybox(this.lighting.scene.skyboxUrl);
+    if (this.lighting.scene.skyboxUrl) {
+      this.skyboxManager.apply(this.lighting.scene.skyboxUrl, this.lighting.scene.background);
+    }
   }
 
   private loadModel(url: string): void {
-    const loader = new GLTFLoader();
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath(this.dracoDecoderPath);
-    loader.setDRACOLoader(dracoLoader);
-
-    loader.load(
+    loadTowerModel(
       url,
-      (gltf) => {
-        dracoLoader.dispose();
-
+      this.dracoDecoderPath,
+      ({ root, modelRadius, modelBottomY }) => {
         if (!this.scene) return;
 
-        const root = gltf.scene;
-
-        // Center and measure the model.
-        const box = new THREE.Box3().setFromObject(root);
-        const center = new THREE.Vector3();
-        const size = new THREE.Vector3();
-        box.getCenter(center);
-        box.getSize(size);
-        root.position.sub(center);
-
-        const sphere = new THREE.Sphere();
-        box.getBoundingSphere(sphere);
-        this.modelRadius = sphere.radius || 1;
-        this.modelBottomY = -size.y / 2;
+        this.modelRadius = modelRadius;
+        this.modelBottomY = modelBottomY;
 
         this.debugLog('modelLoaded', {
           url,
-          center: center.toArray(),
-          size: size.toArray(),
-          radius: this.modelRadius,
+          radius: modelRadius,
           rootPosition: root.position.toArray(),
         });
 
         if (this.axesHelper) {
-          this.axesHelper.scale.setScalar(Math.max(1, this.modelRadius * 0.35));
+          this.axesHelper.scale.setScalar(Math.max(1, modelRadius * 0.35));
           this.axesHelper.visible = true;
         }
 
-        root.traverse((child) => {
-          const mesh = child as THREE.Mesh;
-          if (mesh.isMesh) {
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-          }
-          if (child.name.startsWith(SEAL_NAME_PREFIX)) {
-            const rest = child.name.slice(SEAL_NAME_PREFIX.length);
-            const underscore = rest.indexOf('_');
-            if (underscore > 0) {
-              const side = rest.slice(0, underscore);
-              const level = rest.slice(underscore + 1);
-              this.sealNodes.set(sealKey(side, level), child);
-            }
-          }
-        });
-
+        this.sealManager.buildSealNodes(root);
         this.scene.add(root);
         this.model = root;
 
-        this.sceneLighting?.applyLights(this.lighting, this.modelRadius);
-        if (this.showGroundDisc) this.buildGroundDisc();
+        this.sceneLighting?.applyLights(this.lighting, modelRadius);
+        if (this.showGroundDisc) this.groundDiscManager?.build(modelRadius, modelBottomY, this.lighting);
         this.buildLeds();
-        this.warnOnMissingSeals();
+        this.sealManager.buildSealBacklights(root, modelRadius, this.lighting);
+        this.sealManager.warnOnMissing();
         if (this.latestBrokenSeals.length > 0) this.applySeals(this.latestBrokenSeals);
-        this.cameraController?.fitToModel(this.modelRadius, (l, d) => this.debugLog(l, d));
+        this.cameraController?.fitToModel(modelRadius, (l, d) => this.debugLog(l, d));
         if (this.pendingSide !== null) {
           const pending = this.pendingSide;
           this.pendingSide = null;
           this.cameraController?.snapToSide(pending);
         }
-      },
-      undefined,
-      (err) => {
-        dracoLoader.dispose();
 
+        // Replay state AFTER all visuals are built (seals + LEDs)
+        if (this.latestState) this.applyState(this.latestState);
+      },
+      (details) => {
         // eslint-disable-next-line no-console
-        console.error('[Tower3DView] Failed to load GLB model:', this.describeLoadError(url, err));
+        console.error('[Tower3DView] Failed to load GLB model:', details);
       },
     );
-  }
-
-  private describeLoadError(url: string, err: unknown): Record<string, unknown> {
-    const details: Record<string, unknown> = {
-      url,
-      dracoDecoderPath: this.dracoDecoderPath,
-      errorType: typeof err,
-    };
-
-    if (err instanceof Error) {
-      details.name = err.name;
-      details.message = err.message;
-      if (err.stack) details.stack = err.stack;
-
-      if (err.message.includes('KHR_draco_mesh_compression')) {
-        details.hint = 'Model requires Draco decoding; ensure decoder files are reachable from dracoDecoderPath.';
-      }
-    }
-
-    if (err && typeof err === 'object') {
-      const e = err as {
-        type?: unknown;
-        message?: unknown;
-        target?: unknown;
-        currentTarget?: unknown;
-      };
-
-      if (typeof e.type === 'string') details.eventType = e.type;
-      if (typeof e.message === 'string') details.eventMessage = e.message;
-
-      const target = e.target ?? e.currentTarget;
-      if (target && typeof target === 'object') {
-        const xhr = target as {
-          status?: unknown;
-          statusText?: unknown;
-          responseURL?: unknown;
-          readyState?: unknown;
-        };
-
-        if (typeof xhr.status === 'number') details.httpStatus = xhr.status;
-        if (typeof xhr.statusText === 'string') details.httpStatusText = xhr.statusText;
-        if (typeof xhr.responseURL === 'string') details.responseURL = xhr.responseURL;
-        if (typeof xhr.readyState === 'number') details.readyState = xhr.readyState;
-      }
-    }
-
-    return details;
   }
 
   /** Apply current `this.lighting` values onto live three.js scene resources. */
   private applyLightingToScene(): void {
     const lighting = this.lighting;
-    this.applySkybox(lighting.scene.skyboxUrl);
+    this.skyboxManager?.apply(lighting.scene.skyboxUrl, lighting.scene.background);
 
     this.sceneLighting?.applyLights(lighting, this.modelRadius);
+    this.groundDiscManager?.updateLighting(lighting, this.modelRadius, this.modelBottomY);
 
-    if (this.groundDisc) {
-      const mat = this.groundDisc.material;
-      if (mat instanceof THREE.MeshStandardMaterial) {
-        if (lighting.boardDisc.enabled) {
-          if (!this.boardDiscTexture) this.boardDiscTexture = buildBoardTexture();
-          mat.map = this.boardDiscTexture;
-          mat.color.set(0xffffff);
-          mat.roughness = 0.95;
-          mat.metalness = 0;
-          mat.opacity = lighting.boardDisc.opacity;
-          mat.transparent = lighting.boardDisc.opacity < 1;
-        } else {
-          if (this.boardDiscTexture) {
-            this.boardDiscTexture.dispose();
-            this.boardDiscTexture = null;
-          }
-          mat.map = null;
-          mat.color.setHex(lighting.groundDisc.color);
-          mat.roughness = lighting.groundDisc.roughness;
-          mat.metalness = lighting.groundDisc.metalness;
-          mat.opacity = 1;
-          mat.transparent = false;
-        }
-        mat.needsUpdate = true;
-      }
-      this.groundDisc.geometry.dispose();
-      this.groundDisc.geometry = new THREE.CircleGeometry(this.modelRadius * lighting.groundDisc.radiusFactor, 64);
-      this.groundDisc.position.y = this.modelBottomY - this.modelRadius * 0.002;
-    }
-
-    const amberHaloDistance = this.modelRadius * lighting.leds.amber.haloDistanceFraction;
     const redHaloDistance = this.modelRadius * lighting.leds.red.haloDistanceFraction;
     for (const ref of this.ledRefs.values()) {
       ref.redLight.color.setHex(lighting.leds.red.color);
       ref.redLight.distance = redHaloDistance;
       ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
       ref.redLight.visible = ref.driver.v > 0.001;
-
-      if (ref.material) {
-        ref.material.emissive.setHex(lighting.leds.amber.color);
-        ref.material.emissiveIntensity = ref.driver.v * lighting.leds.amber.maxEmissive;
-      }
-      if (ref.light) {
-        ref.light.color.setHex(lighting.leds.amber.color);
-        ref.light.distance = amberHaloDistance;
-        ref.light.intensity = ref.driver.v * lighting.leds.amber.maxHalo;
-        ref.light.visible = ref.driver.v > 0.001;
-      }
     }
+
+    this.sealManager.updateLighting(lighting, this.modelRadius);
   }
 
   /**
-   * Populate `ledRefs` with 24 proxy LEDs (6 layers × 4 lights), each an
-   * emissive sphere with a child PointLight for halo spill. Positions are
-   * computed relative to the model's bounding radius.
+   * Populate `ledRefs` with 24 red PointLights (6 layers × 4 lights) positioned
+   * relative to the model's bounding radius.
    */
   private buildLeds(): void {
     if (!this.model) return;
 
-    const { amber, red } = this.lighting.leds;
+    const { red } = this.lighting.leds;
     const redHaloDistance = this.modelRadius * red.haloDistanceFraction;
-
-    let sharedGeom: THREE.SphereGeometry | null = null;
-    let baseMaterial: THREE.MeshStandardMaterial | null = null;
-    const amberHaloDistance = this.modelRadius * amber.haloDistanceFraction;
-
-    if (this.showLedProxies) {
-      sharedGeom = new THREE.SphereGeometry(this.modelRadius * LED_LAYOUT.ledSize, 12, 8);
-      baseMaterial = new THREE.MeshStandardMaterial({
-        color: 0x000000,
-        emissive: amber.color,
-        emissiveIntensity: 0,
-        toneMapped: false,
-      });
-    }
 
     for (let layer = 0; layer < TOWER_LAYER_COUNT; layer++) {
       for (let light = 0; light < LIGHTS_PER_LAYER; light++) {
@@ -797,33 +487,7 @@ export class Tower3DView implements ITowerDisplay {
         redLight.position.set(redPos.x, redPos.y, redPos.z);
         this.model.add(redLight);
 
-        let mesh: THREE.Mesh | null = null;
-        let material: THREE.MeshStandardMaterial | null = null;
-        let pointLight: THREE.PointLight | null = null;
-
-        if (this.showLedProxies && sharedGeom && baseMaterial) {
-          material = baseMaterial.clone();
-          mesh = new THREE.Mesh(sharedGeom, material);
-          const pos = computeLedPosition(layer, light, this.modelRadius);
-          mesh.position.set(pos.x, pos.y, pos.z);
-
-          pointLight = new THREE.PointLight(amber.color, 0, amberHaloDistance, 2);
-          pointLight.visible = false;
-          mesh.add(pointLight);
-
-          this.model.add(mesh);
-
-          if (this.debug3D) {
-            const axes = new THREE.AxesHelper(this.modelRadius * 0.02);
-            axes.position.set(pos.x, pos.y, pos.z);
-            this.model.add(axes);
-          }
-        }
-
         this.ledRefs.set(`${layer}:${light}`, {
-          mesh,
-          material,
-          light: pointLight,
           redLight,
           driver: { v: 0 },
           tween: null,
@@ -831,56 +495,12 @@ export class Tower3DView implements ITowerDisplay {
       }
     }
 
-    baseMaterial?.dispose();
+    this.debugLog('buildLeds', { count: this.ledRefs.size, radius: this.modelRadius });
 
-    this.debugLog('buildLeds', {
-      count: this.ledRefs.size,
-      radius: this.modelRadius,
-      ledSize: this.modelRadius * LED_LAYOUT.ledSize,
-    });
-
-    this.ledAnimator = new LedEffectAnimator(this.ledRefs, () => this.lighting);
-
-    if (this.latestState) this.applyState(this.latestState);
+    this.ledAnimator = new LedEffectAnimator(this.ledRefs, () => this.lighting, this.sealManager.sealBacklights);
   }
 
-  /**
-   * Build the noir ground disc that catches the key-light shadow. Sized from
-   * the loaded model's bounding radius, positioned just below it. Idempotent —
-   * subsequent calls are ignored if the disc already exists.
-   */
-  private buildGroundDisc(): void {
-    if (this.groundDisc || !this.scene) return;
-    const { roughness, metalness, radiusFactor } = this.lighting.groundDisc;
-    const geom = new THREE.CircleGeometry(this.modelRadius * radiusFactor, 64);
-
-    if (this.lighting.boardDisc.enabled && !this.boardDiscTexture) {
-      this.boardDiscTexture = buildBoardTexture();
-    }
-    const useBoardTex = this.lighting.boardDisc.enabled && this.boardDiscTexture;
-    const mat = useBoardTex
-      ? new THREE.MeshStandardMaterial({
-        map: this.boardDiscTexture!,
-        roughness: 0.95,
-        metalness: 0,
-        opacity: this.lighting.boardDisc.opacity,
-        transparent: this.lighting.boardDisc.opacity < 1,
-      })
-      : new THREE.MeshStandardMaterial({
-        color: this.lighting.groundDisc.color,
-        roughness,
-        metalness,
-      });
-
-    const disc = new THREE.Mesh(geom, mat);
-    disc.rotation.x = -Math.PI / 2;
-    disc.position.y = this.modelBottomY - this.modelRadius * 0.002;
-    disc.receiveShadow = true;
-    this.scene.add(disc);
-    this.groundDisc = disc;
-  }
-
-
+  // ─────────────────────────────────────────────────────────────────────────
 
   private startRenderLoop(): void {
     const tick = () => {
@@ -932,24 +552,6 @@ export class Tower3DView implements ITowerDisplay {
     if (!this.debug3D) return;
     // eslint-disable-next-line no-console
     console.log(`[Tower3DView] ${label}`, data);
-  }
-
-  private warnOnMissingSeals(): void {
-    const missing: string[] = [];
-    for (const side of SEAL_SIDES) {
-      for (const level of SEAL_LEVELS) {
-        if (!this.sealNodes.has(sealKey(side, level))) {
-          missing.push(`${SEAL_NAME_PREFIX}${side}_${level}`);
-        }
-      }
-    }
-    if (missing.length === 0) return;
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[Tower3DView] ${missing.length} seal node(s) missing from the loaded model; ` +
-      `applySeals will be a no-op for them. Missing: ${missing.join(', ')}. ` +
-      `Found: ${Array.from(this.sealNodes.keys()).sort().join(', ') || '(none)'}.`,
-    );
   }
 
 }

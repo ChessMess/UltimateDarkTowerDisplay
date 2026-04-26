@@ -41,19 +41,18 @@ const display = new TowerDisplay({
 new TowerDisplay(options: TowerDisplayOptions)
 ```
 
-| Parameter                    | Type                             | Default                    | Description                                                                                                      |
-| ---------------------------- | -------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `options.container`          | `HTMLElement`                    | —                          | DOM element to render into                                                                                       |
-| `options.renderers`          | `RendererType \| RendererType[]` | `['readout', 'side-view']` | Which renderer(s) to show                                                                                        |
-| `options.onSealClick`        | `(seal: SealIdentifier) => void` | —                          | Callback fired whenever the user clicks a seal in the side view or the readout seal grid                         |
+| Parameter                    | Type                             | Default                    | Description                                                                                                                                                                  |
+| ---------------------------- | -------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `options.container`          | `HTMLElement`                    | —                          | DOM element to render into                                                                                                                                                   |
+| `options.renderers`          | `RendererType \| RendererType[]` | `['readout', 'side-view']` | Which renderer(s) to show                                                                                                                                                    |
+| `options.onSealClick`        | `(seal: SealIdentifier) => void` | —                          | Callback fired whenever the user clicks a seal in the side view or the readout seal grid                                                                                     |
 | `options.clickToToggleSeals` | `boolean`                        | `true`                     | When `true`, clicking a seal toggles its visibility across every active renderer (2D hides in 3D, and vice-versa). Set to `false` to disable click-driven toggling entirely. |
-| `options.onSideChange`       | `(side: TowerSide) => void`      | —                          | Callback fired whenever the user or an external `selectSide` call moves the active side on any side-aware renderer |
-| `options.modelUrl`           | `string`                         | bundled GLB                | Forwarded to `Tower3DView` — override the default bundled model URL                                              |
-| `options.dracoDecoderPath`   | `string`                         | gstatic CDN                | Forwarded to `Tower3DView` — override where Draco decoder wasm/js files are loaded from                          |
-| `options.debug3D`            | `boolean`                        | `false`                    | Forwarded to `Tower3DView` — enables diagnostic logs, render heartbeats, and axes helpers                        |
-| `options.showLedProxies`     | `boolean`                        | `false`                    | Forwarded to `Tower3DView` — shows the amber LED proxy spheres. Hidden by default; enable as a layout/debug aid. |
-| `options.showGroundDisc`     | `boolean`                        | `true`                     | Forwarded to `Tower3DView` — shows the noir ground disc that catches the key-light shadow                        |
-| `options.lighting`           | `LightingConfig`                 | `DEFAULT_LIGHTING`         | Forwarded to `Tower3DView` — see [`LightingConfig`](#lightingconfig)                                             |
+| `options.onSideChange`       | `(side: TowerSide) => void`      | —                          | Callback fired whenever the user or an external `selectSide` call moves the active side on any side-aware renderer                                                           |
+| `options.modelUrl`           | `string`                         | bundled GLB                | Forwarded to `Tower3DView` — override the default bundled model URL                                                                                                          |
+| `options.dracoDecoderPath`   | `string`                         | gstatic CDN                | Forwarded to `Tower3DView` — override where Draco decoder wasm/js files are loaded from                                                                                      |
+| `options.debug3D`            | `boolean`                        | `false`                    | Forwarded to `Tower3DView` — enables diagnostic logs, render heartbeats, and axes helpers                                                                                    |
+| `options.showGroundDisc`     | `boolean`                        | `true`                     | Forwarded to `Tower3DView` — shows the noir ground disc that catches the key-light shadow                                                                                    |
+| `options.lighting`           | `LightingConfig`                 | `DEFAULT_LIGHTING`         | Forwarded to `Tower3DView` — see [`LightingConfig`](#lightingconfig)                                                                                                         |
 
 #### Methods
 
@@ -148,10 +147,10 @@ new TowerSideView(container: HTMLElement)
 
 #### Public Properties
 
-| Property             | Type                             | Default | Description                                                           |
-| -------------------- | -------------------------------- | ------- | --------------------------------------------------------------------- |
-| `onSealClick`        | `(seal: SealIdentifier) => void` | —       | Callback fired on every seal click regardless of `clickToToggleSeals` |
-| `clickToToggleSeals` | `boolean`                        | `true`  | Enables built-in click-to-toggle visibility on seal overlays          |
+| Property             | Type                             | Default | Description                                                                |
+| -------------------- | -------------------------------- | ------- | -------------------------------------------------------------------------- |
+| `onSealClick`        | `(seal: SealIdentifier) => void` | —       | Callback fired on every seal click regardless of `clickToToggleSeals`      |
+| `clickToToggleSeals` | `boolean`                        | `true`  | Enables built-in click-to-toggle visibility on seal overlays               |
 | `onSideChange`       | `(side: TowerSide) => void`      | —       | Callback fired when the selected side changes (user click or `selectSide`) |
 
 When `clickToToggleSeals` is `true`:
@@ -194,7 +193,7 @@ new TowerStateReadout(container: HTMLElement)
 
 | Property             | Type                             | Default | Description                                                                   |
 | -------------------- | -------------------------------- | ------- | ----------------------------------------------------------------------------- |
-| `onSealClick`        | `(seal: SealIdentifier) => void` | —       | Callback fired when a seal button in the grid is clicked                     |
+| `onSealClick`        | `(seal: SealIdentifier) => void` | —       | Callback fired when a seal button in the grid is clicked                      |
 | `clickToToggleSeals` | `boolean`                        | `false` | When `true`, enables click interaction on the seal grid. Default is read-only |
 
 The seal grid renders 12 buttons (4 sides × 3 levels); filled = present, hollow = broken. `applySeals` updates the grid. When `clickToToggleSeals` is `false` (the default for the readout), the buttons render as disabled — they still reflect state but don't emit events.
@@ -223,20 +222,19 @@ new Tower3DView(container: HTMLElement, options?: Tower3DViewOptions)
 
 #### Options (`Tower3DViewOptions`)
 
-| Option             | Type             | Default                                                   | Description                                                                        |
-| ------------------ | ---------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `modelUrl`         | `string`         | bundled GLB                                               | Override the default bundled model URL                                             |
-| `dracoDecoderPath` | `string`         | `https://www.gstatic.com/draco/versioned/decoders/1.5.7/` | Override where Draco decoder wasm/js files are loaded from                         |
-| `debug3D`          | `boolean`        | `false`                                                   | Enables diagnostic console logs, render heartbeats, and an origin axes helper      |
-| `showLedProxies`   | `boolean`        | `false`                                                   | Show the amber LED proxy spheres. Hidden by default; enable as a layout/debug aid. |
-| `showGroundDisc`   | `boolean`        | `true`                                                    | Show the noir ground disc that catches the key-light shadow                        |
-| `lighting`         | `LightingConfig` | `DEFAULT_LIGHTING`                                        | Deep-merged nested config for every lighting-tunable value — see below             |
+| Option             | Type             | Default                                                   | Description                                                                   |
+| ------------------ | ---------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `modelUrl`         | `string`         | bundled GLB                                               | Override the default bundled model URL                                        |
+| `dracoDecoderPath` | `string`         | `https://www.gstatic.com/draco/versioned/decoders/1.5.7/` | Override where Draco decoder wasm/js files are loaded from                    |
+| `debug3D`          | `boolean`        | `false`                                                   | Enables diagnostic console logs, render heartbeats, and an origin axes helper |
+| `showGroundDisc`   | `boolean`        | `true`                                                    | Show the noir ground disc that catches the key-light shadow                   |
+| `lighting`         | `LightingConfig` | `DEFAULT_LIGHTING`                                        | Deep-merged nested config for every lighting-tunable value — see below        |
 
 ##### `LightingConfig`
 
 Every lighting-tunable value consumed by the 3D view lives under a single nested config. All fields are optional — unset fields fall back to the exported `DEFAULT_LIGHTING` constant. User-supplied values are deep-merged over the defaults at construction time.
 
-```ts
+````ts
 interface LightingConfig {
   scene?: {
     background?: number; // 0x000000
@@ -263,12 +261,6 @@ interface LightingConfig {
     exposure?: number; // 0.7 (renderer tone-mapping)
   };
   leds?: {
-    amber?: {
-      color?: number;
-      maxEmissive?: number;
-      maxHalo?: number;
-      haloDistanceFraction?: number;
-    };
     red?: { color?: number; maxHalo?: number; haloDistanceFraction?: number };
   };
   animation?: {
@@ -291,22 +283,12 @@ interface LightingConfig {
     radiusFactor?: number; // 3 × modelRadius
   };
 
-  // Deprecated flat aliases (pre-0.3). Prefer the nested equivalents above.
-  hemisphere?: number; // → scene.hemisphere.intensity
-  key?: number; // → scene.key.intensity
-  fill?: number; // → scene.fill.intensity
-  exposure?: number; // → scene.exposure
-}
-```
-
-When both a deprecated flat field and its nested equivalent are supplied, the nested value wins.
-
 ```ts
 // Examples
 new Tower3DView(el, { lighting: { scene: { exposure: 0.9 } } });
 new Tower3DView(el, { lighting: { leds: { red: { color: 0x00ff00 } } } }); // green LEDs
 new Tower3DView(el, { lighting: { animation: { breatheS: 3 } } }); // slower breathe
-```
+````
 
 #### Methods
 
@@ -334,9 +316,7 @@ Trigger the cinematic entrance sequence. See [`TowerDisplay#playEntrance`](#play
 
 ##### LED visualization
 
-`applyState()` drives 24 red `PointLight` sources (`#ff2020`) matching the physical tower's LED color. Lights are positioned independently from the amber proxies: ring layers (0–2) are inset inside the drum so light shines outward through doors/seals; ledge/base layers (3–5) sit near the outer corner surface so light shines onto the faces.
-
-When `showLedProxies` is `true`, an additional 24 amber emissive spheres (`#f0c040`) are shown at the LED marker positions as a layout and debugging aid. Both the red lights and the amber proxies animate in lockstep via the same GSAP driver per LED — no extra tweens.
+`applyState()` drives 24 red `PointLight` sources (`#ff2020`) matching the physical tower's LED color. Ring layers (0–2) are inset inside the drum so light shines outward through doors/seals; ledge/base layers (3–5) sit near the outer corner surface so light shines onto the faces.
 
 All six `LIGHT_EFFECTS` values are supported:
 
@@ -349,7 +329,7 @@ All six `LIGHT_EFFECTS` values are supported:
 | `breathe50percent` | Sine ease 0→0.5→0 over 2.0s, loops |
 | `flicker`          | Stepped 1↔0.2 at 0.3s, loops       |
 
-Timing parity with [`TowerSideView`](#towersideview) is intentional. Color parity is not — 2D uses per-effect blues, 3D uses a single amber for physical realism.
+Timing parity with [`TowerSideView`](#towersideview) is intentional.
 
 Enable `debug3D: true` to render a tiny axes helper at each LED origin for layout debugging.
 

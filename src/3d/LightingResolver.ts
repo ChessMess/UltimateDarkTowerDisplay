@@ -27,16 +27,19 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
     exposure: 0.7,
   },
   leds: {
-    amber: {
-      color: 0xf0c040,
-      maxEmissive: 1.0,
-      maxHalo: 0.8,
-      haloDistanceFraction: 0.12,
-    },
     red: {
       color: 0xff2020,
       maxHalo: 1.0,
       haloDistanceFraction: 0.20,
+    },
+    sealBacklights: {
+      enabled: true,
+      color: 0xff2020,
+      intensity: 8,
+      radiusFactor: 0.88,
+      distanceFactor: 0.4,
+      decay: 2.0,
+      backlightWhenBroken: true,
     },
   },
   animation: {
@@ -113,18 +116,30 @@ export function resolveLighting(user?: LightingConfig): ResolvedLightingConfig {
       exposure: user?.scene?.exposure ?? DEFAULT_LIGHTING.scene.exposure,
     },
     leds: {
-      amber: {
-        color: user?.leds?.amber?.color ?? DEFAULT_LIGHTING.leds.amber.color,
-        maxEmissive: user?.leds?.amber?.maxEmissive ?? DEFAULT_LIGHTING.leds.amber.maxEmissive,
-        maxHalo: user?.leds?.amber?.maxHalo ?? DEFAULT_LIGHTING.leds.amber.maxHalo,
-        haloDistanceFraction:
-          user?.leds?.amber?.haloDistanceFraction ?? DEFAULT_LIGHTING.leds.amber.haloDistanceFraction,
-      },
       red: {
         color: user?.leds?.red?.color ?? DEFAULT_LIGHTING.leds.red.color,
         maxHalo: user?.leds?.red?.maxHalo ?? DEFAULT_LIGHTING.leds.red.maxHalo,
         haloDistanceFraction:
           user?.leds?.red?.haloDistanceFraction ?? DEFAULT_LIGHTING.leds.red.haloDistanceFraction,
+      },
+      sealBacklights: {
+        enabled:
+          user?.leds?.sealBacklights?.enabled ?? DEFAULT_LIGHTING.leds.sealBacklights.enabled,
+        color:
+          user?.leds?.sealBacklights?.color ?? DEFAULT_LIGHTING.leds.sealBacklights.color,
+        intensity:
+          user?.leds?.sealBacklights?.intensity ?? DEFAULT_LIGHTING.leds.sealBacklights.intensity,
+        radiusFactor:
+          user?.leds?.sealBacklights?.radiusFactor ??
+          DEFAULT_LIGHTING.leds.sealBacklights.radiusFactor,
+        distanceFactor:
+          user?.leds?.sealBacklights?.distanceFactor ??
+          DEFAULT_LIGHTING.leds.sealBacklights.distanceFactor,
+        decay:
+          user?.leds?.sealBacklights?.decay ?? DEFAULT_LIGHTING.leds.sealBacklights.decay,
+        backlightWhenBroken:
+          user?.leds?.sealBacklights?.backlightWhenBroken ??
+          DEFAULT_LIGHTING.leds.sealBacklights.backlightWhenBroken,
       },
     },
     animation: {
@@ -154,20 +169,6 @@ export function resolveLighting(user?: LightingConfig): ResolvedLightingConfig {
       opacity: user?.boardDisc?.opacity ?? DEFAULT_LIGHTING.boardDisc.opacity,
     },
   };
-
-  // Deprecated flat aliases — only apply when the nested equivalent was not supplied.
-  if (user?.hemisphere !== undefined && user?.scene?.hemisphere?.intensity === undefined) {
-    out.scene.hemisphere.intensity = user.hemisphere;
-  }
-  if (user?.key !== undefined && user?.scene?.key?.intensity === undefined) {
-    out.scene.key.intensity = user.key;
-  }
-  if (user?.fill !== undefined && user?.scene?.fill?.intensity === undefined) {
-    out.scene.fill.intensity = user.fill;
-  }
-  if (user?.exposure !== undefined && user?.scene?.exposure === undefined) {
-    out.scene.exposure = user.exposure;
-  }
 
   return out;
 }
