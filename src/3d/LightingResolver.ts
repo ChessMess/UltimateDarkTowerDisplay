@@ -25,6 +25,12 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
       position: [-4, 1.5, -8],
     },
     exposure: 0.7,
+    bloom: {
+      enabled: true,
+      strength: 1.5,
+      radius: 0.5,
+      threshold: 0.0,
+    },
   },
   leds: {
     red: {
@@ -35,11 +41,52 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
     sealBacklights: {
       enabled: true,
       color: 0xff2020,
-      intensity: 8,
-      radiusFactor: 0.88,
-      distanceFactor: 0.4,
+      // Radial placement inside the drum (fraction of bounding-sphere radius).
+      // 0.15 puts the proxy between the central axis and the drum inner wall so
+      // light traverses drum-interior → glyph/chute → seal → camera correctly.
+      radiusFactor: 0.15,
+      // Accent PointLight (atmospheric spill onto drum interior).
+      intensity: 2,
+      distanceFactor: 0.20,
       decay: 2.0,
+      accentLight: true,
       backlightWhenBroken: true,
+      proxy: {
+        enabled: true,
+        sizeFactor: 0.025,
+        geometry: 'sphere',
+      },
+      halo: {
+        enabled: true,
+        sizeFactor: 0.14,
+        opacity: 0.75,
+      },
+    },
+    ledgeLeds: {
+      enabled: true,
+      color: 0xff2020,
+      proxy: {
+        enabled: true,
+        sizeFactor: 0.025,
+      },
+      halo: {
+        enabled: true,
+        sizeFactor: 0.14,
+        opacity: 0.75,
+      },
+    },
+    baseLeds: {
+      enabled: true,
+      color: 0xff2020,
+      proxy: {
+        enabled: true,
+        sizeFactor: 0.025,
+      },
+      halo: {
+        enabled: true,
+        sizeFactor: 0.14,
+        opacity: 0.75,
+      },
     },
   },
   animation: {
@@ -82,91 +129,170 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
   },
 };
 
-export function resolveLighting(user?: LightingConfig): ResolvedLightingConfig {
+export function resolveLighting(
+  user?: LightingConfig,
+  base: ResolvedLightingConfig = DEFAULT_LIGHTING,
+): ResolvedLightingConfig {
   const out: ResolvedLightingConfig = {
     scene: {
-      background: user?.scene?.background ?? DEFAULT_LIGHTING.scene.background,
-      skyboxUrl: user?.scene?.skyboxUrl ?? DEFAULT_LIGHTING.scene.skyboxUrl,
+      background: user?.scene?.background ?? base.scene.background,
+      skyboxUrl: user?.scene?.skyboxUrl ?? base.scene.skyboxUrl,
       hemisphere: {
-        color: user?.scene?.hemisphere?.color ?? DEFAULT_LIGHTING.scene.hemisphere.color,
-        ground: user?.scene?.hemisphere?.ground ?? DEFAULT_LIGHTING.scene.hemisphere.ground,
-        intensity: user?.scene?.hemisphere?.intensity ?? DEFAULT_LIGHTING.scene.hemisphere.intensity,
+        color: user?.scene?.hemisphere?.color ?? base.scene.hemisphere.color,
+        ground: user?.scene?.hemisphere?.ground ?? base.scene.hemisphere.ground,
+        intensity: user?.scene?.hemisphere?.intensity ?? base.scene.hemisphere.intensity,
       },
       key: {
-        color: user?.scene?.key?.color ?? DEFAULT_LIGHTING.scene.key.color,
-        intensity: user?.scene?.key?.intensity ?? DEFAULT_LIGHTING.scene.key.intensity,
-        position: user?.scene?.key?.position ?? DEFAULT_LIGHTING.scene.key.position,
+        color: user?.scene?.key?.color ?? base.scene.key.color,
+        intensity: user?.scene?.key?.intensity ?? base.scene.key.intensity,
+        position: user?.scene?.key?.position ?? base.scene.key.position,
         shadow: {
-          mapSize: user?.scene?.key?.shadow?.mapSize ?? DEFAULT_LIGHTING.scene.key.shadow.mapSize,
-          bias: user?.scene?.key?.shadow?.bias ?? DEFAULT_LIGHTING.scene.key.shadow.bias,
-          normalBias: user?.scene?.key?.shadow?.normalBias ?? DEFAULT_LIGHTING.scene.key.shadow.normalBias,
+          mapSize: user?.scene?.key?.shadow?.mapSize ?? base.scene.key.shadow.mapSize,
+          bias: user?.scene?.key?.shadow?.bias ?? base.scene.key.shadow.bias,
+          normalBias: user?.scene?.key?.shadow?.normalBias ?? base.scene.key.shadow.normalBias,
           frustumRadiusFactor:
             user?.scene?.key?.shadow?.frustumRadiusFactor ??
             DEFAULT_LIGHTING.scene.key.shadow.frustumRadiusFactor,
-          farFactor: user?.scene?.key?.shadow?.farFactor ?? DEFAULT_LIGHTING.scene.key.shadow.farFactor,
+          farFactor: user?.scene?.key?.shadow?.farFactor ?? base.scene.key.shadow.farFactor,
         },
       },
       fill: {
-        color: user?.scene?.fill?.color ?? DEFAULT_LIGHTING.scene.fill.color,
-        intensity: user?.scene?.fill?.intensity ?? DEFAULT_LIGHTING.scene.fill.intensity,
-        width: user?.scene?.fill?.width ?? DEFAULT_LIGHTING.scene.fill.width,
-        height: user?.scene?.fill?.height ?? DEFAULT_LIGHTING.scene.fill.height,
-        position: user?.scene?.fill?.position ?? DEFAULT_LIGHTING.scene.fill.position,
+        color: user?.scene?.fill?.color ?? base.scene.fill.color,
+        intensity: user?.scene?.fill?.intensity ?? base.scene.fill.intensity,
+        width: user?.scene?.fill?.width ?? base.scene.fill.width,
+        height: user?.scene?.fill?.height ?? base.scene.fill.height,
+        position: user?.scene?.fill?.position ?? base.scene.fill.position,
       },
-      exposure: user?.scene?.exposure ?? DEFAULT_LIGHTING.scene.exposure,
+      exposure: user?.scene?.exposure ?? base.scene.exposure,
+      bloom: {
+        enabled: user?.scene?.bloom?.enabled ?? base.scene.bloom.enabled,
+        strength: user?.scene?.bloom?.strength ?? base.scene.bloom.strength,
+        radius: user?.scene?.bloom?.radius ?? base.scene.bloom.radius,
+        threshold: user?.scene?.bloom?.threshold ?? base.scene.bloom.threshold,
+      },
     },
     leds: {
       red: {
-        color: user?.leds?.red?.color ?? DEFAULT_LIGHTING.leds.red.color,
-        maxHalo: user?.leds?.red?.maxHalo ?? DEFAULT_LIGHTING.leds.red.maxHalo,
+        color: user?.leds?.red?.color ?? base.leds.red.color,
+        maxHalo: user?.leds?.red?.maxHalo ?? base.leds.red.maxHalo,
         haloDistanceFraction:
-          user?.leds?.red?.haloDistanceFraction ?? DEFAULT_LIGHTING.leds.red.haloDistanceFraction,
+          user?.leds?.red?.haloDistanceFraction ?? base.leds.red.haloDistanceFraction,
       },
       sealBacklights: {
         enabled:
-          user?.leds?.sealBacklights?.enabled ?? DEFAULT_LIGHTING.leds.sealBacklights.enabled,
+          user?.leds?.sealBacklights?.enabled ?? base.leds.sealBacklights.enabled,
         color:
-          user?.leds?.sealBacklights?.color ?? DEFAULT_LIGHTING.leds.sealBacklights.color,
-        intensity:
-          user?.leds?.sealBacklights?.intensity ?? DEFAULT_LIGHTING.leds.sealBacklights.intensity,
+          user?.leds?.sealBacklights?.color ?? base.leds.sealBacklights.color,
         radiusFactor:
           user?.leds?.sealBacklights?.radiusFactor ??
           DEFAULT_LIGHTING.leds.sealBacklights.radiusFactor,
+        intensity:
+          user?.leds?.sealBacklights?.intensity ?? base.leds.sealBacklights.intensity,
         distanceFactor:
           user?.leds?.sealBacklights?.distanceFactor ??
           DEFAULT_LIGHTING.leds.sealBacklights.distanceFactor,
         decay:
-          user?.leds?.sealBacklights?.decay ?? DEFAULT_LIGHTING.leds.sealBacklights.decay,
+          user?.leds?.sealBacklights?.decay ?? base.leds.sealBacklights.decay,
+        accentLight:
+          user?.leds?.sealBacklights?.accentLight ?? base.leds.sealBacklights.accentLight,
         backlightWhenBroken:
           user?.leds?.sealBacklights?.backlightWhenBroken ??
           DEFAULT_LIGHTING.leds.sealBacklights.backlightWhenBroken,
+        proxy: {
+          enabled:
+            user?.leds?.sealBacklights?.proxy?.enabled ??
+            DEFAULT_LIGHTING.leds.sealBacklights.proxy.enabled,
+          sizeFactor:
+            user?.leds?.sealBacklights?.proxy?.sizeFactor ??
+            DEFAULT_LIGHTING.leds.sealBacklights.proxy.sizeFactor,
+          geometry:
+            user?.leds?.sealBacklights?.proxy?.geometry ??
+            DEFAULT_LIGHTING.leds.sealBacklights.proxy.geometry,
+        },
+        halo: {
+          enabled:
+            user?.leds?.sealBacklights?.halo?.enabled ??
+            DEFAULT_LIGHTING.leds.sealBacklights.halo.enabled,
+          sizeFactor:
+            user?.leds?.sealBacklights?.halo?.sizeFactor ??
+            DEFAULT_LIGHTING.leds.sealBacklights.halo.sizeFactor,
+          opacity:
+            user?.leds?.sealBacklights?.halo?.opacity ??
+            DEFAULT_LIGHTING.leds.sealBacklights.halo.opacity,
+        },
+      },
+      ledgeLeds: {
+        enabled: user?.leds?.ledgeLeds?.enabled ?? DEFAULT_LIGHTING.leds.ledgeLeds.enabled,
+        color: user?.leds?.ledgeLeds?.color ?? DEFAULT_LIGHTING.leds.ledgeLeds.color,
+        proxy: {
+          enabled:
+            user?.leds?.ledgeLeds?.proxy?.enabled ??
+            DEFAULT_LIGHTING.leds.ledgeLeds.proxy.enabled,
+          sizeFactor:
+            user?.leds?.ledgeLeds?.proxy?.sizeFactor ??
+            DEFAULT_LIGHTING.leds.ledgeLeds.proxy.sizeFactor,
+        },
+        halo: {
+          enabled:
+            user?.leds?.ledgeLeds?.halo?.enabled ??
+            DEFAULT_LIGHTING.leds.ledgeLeds.halo.enabled,
+          sizeFactor:
+            user?.leds?.ledgeLeds?.halo?.sizeFactor ??
+            DEFAULT_LIGHTING.leds.ledgeLeds.halo.sizeFactor,
+          opacity:
+            user?.leds?.ledgeLeds?.halo?.opacity ??
+            DEFAULT_LIGHTING.leds.ledgeLeds.halo.opacity,
+        },
+      },
+      baseLeds: {
+        enabled: user?.leds?.baseLeds?.enabled ?? DEFAULT_LIGHTING.leds.baseLeds.enabled,
+        color: user?.leds?.baseLeds?.color ?? DEFAULT_LIGHTING.leds.baseLeds.color,
+        proxy: {
+          enabled:
+            user?.leds?.baseLeds?.proxy?.enabled ??
+            DEFAULT_LIGHTING.leds.baseLeds.proxy.enabled,
+          sizeFactor:
+            user?.leds?.baseLeds?.proxy?.sizeFactor ??
+            DEFAULT_LIGHTING.leds.baseLeds.proxy.sizeFactor,
+        },
+        halo: {
+          enabled:
+            user?.leds?.baseLeds?.halo?.enabled ??
+            DEFAULT_LIGHTING.leds.baseLeds.halo.enabled,
+          sizeFactor:
+            user?.leds?.baseLeds?.halo?.sizeFactor ??
+            DEFAULT_LIGHTING.leds.baseLeds.halo.sizeFactor,
+          opacity:
+            user?.leds?.baseLeds?.halo?.opacity ??
+            DEFAULT_LIGHTING.leds.baseLeds.halo.opacity,
+        },
       },
     },
     animation: {
-      fadeS: user?.animation?.fadeS ?? DEFAULT_LIGHTING.animation.fadeS,
-      breatheS: user?.animation?.breatheS ?? DEFAULT_LIGHTING.animation.breatheS,
-      breatheFastS: user?.animation?.breatheFastS ?? DEFAULT_LIGHTING.animation.breatheFastS,
-      flickerS: user?.animation?.flickerS ?? DEFAULT_LIGHTING.animation.flickerS,
+      fadeS: user?.animation?.fadeS ?? base.animation.fadeS,
+      breatheS: user?.animation?.breatheS ?? base.animation.breatheS,
+      breatheFastS: user?.animation?.breatheFastS ?? base.animation.breatheFastS,
+      flickerS: user?.animation?.flickerS ?? base.animation.flickerS,
       idleBreathe: {
         peakFactor:
-          user?.animation?.idleBreathe?.peakFactor ?? DEFAULT_LIGHTING.animation.idleBreathe.peakFactor,
+          user?.animation?.idleBreathe?.peakFactor ?? base.animation.idleBreathe.peakFactor,
         durationS:
-          user?.animation?.idleBreathe?.durationS ?? DEFAULT_LIGHTING.animation.idleBreathe.durationS,
+          user?.animation?.idleBreathe?.durationS ?? base.animation.idleBreathe.durationS,
       },
     },
     entrance: {
-      peakKeyFactor: user?.entrance?.peakKeyFactor ?? DEFAULT_LIGHTING.entrance.peakKeyFactor,
-      beats: { ...DEFAULT_LIGHTING.entrance.beats, ...user?.entrance?.beats },
+      peakKeyFactor: user?.entrance?.peakKeyFactor ?? base.entrance.peakKeyFactor,
+      beats: { ...base.entrance.beats, ...user?.entrance?.beats },
     },
     groundDisc: {
-      color: user?.groundDisc?.color ?? DEFAULT_LIGHTING.groundDisc.color,
-      roughness: user?.groundDisc?.roughness ?? DEFAULT_LIGHTING.groundDisc.roughness,
-      metalness: user?.groundDisc?.metalness ?? DEFAULT_LIGHTING.groundDisc.metalness,
-      radiusFactor: user?.groundDisc?.radiusFactor ?? DEFAULT_LIGHTING.groundDisc.radiusFactor,
+      color: user?.groundDisc?.color ?? base.groundDisc.color,
+      roughness: user?.groundDisc?.roughness ?? base.groundDisc.roughness,
+      metalness: user?.groundDisc?.metalness ?? base.groundDisc.metalness,
+      radiusFactor: user?.groundDisc?.radiusFactor ?? base.groundDisc.radiusFactor,
     },
     boardDisc: {
-      enabled: user?.boardDisc?.enabled ?? DEFAULT_LIGHTING.boardDisc.enabled,
-      opacity: user?.boardDisc?.opacity ?? DEFAULT_LIGHTING.boardDisc.opacity,
+      enabled: user?.boardDisc?.enabled ?? base.boardDisc.enabled,
+      opacity: user?.boardDisc?.opacity ?? base.boardDisc.opacity,
     },
   };
 

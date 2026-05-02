@@ -11,7 +11,7 @@ import {
 } from 'ultimatedarktower';
 import type { ITowerDisplay, SealIdentifier } from './types';
 import { injectStyles } from './styles';
-import { EFFECT_LABELS } from './effectLabels';
+import { EFFECT_LABELS, EFFECT_TOOLTIP_LABELS, EFFECT_CYCLE } from './effectLabels';
 
 const COMPASS = ['N', 'E', 'S', 'W'] as const;
 const COMPASS_FULL = ['north', 'east', 'south', 'west'] as const;
@@ -63,7 +63,12 @@ export class TowerStateReadout implements ITowerDisplay {
   /** Optional callback fired when a user clicks a seal indicator in the readout grid. */
   onSealClick?: (seal: SealIdentifier) => void;
 
+  /** Optional callback fired when a user clicks an LED circle to cycle its effect. */
+  onLedClick?: (layer: number, light: number, effect: number) => void;
+
   private _clickToToggleSeals = false;
+  private userOverriddenLeds: Map<string, number> = new Map();
+  private _clickToToggleLeds = false;
 
   /** When true, the readout's seal grid is interactive. Defaults to false (read-only). */
   get clickToToggleSeals(): boolean {
@@ -74,6 +79,19 @@ export class TowerStateReadout implements ITowerDisplay {
     if (this._clickToToggleSeals === value) return;
     this._clickToToggleSeals = value;
     // Re-render so the seal buttons pick up the new disabled state.
+    if (this.latestState) this.render(false);
+    else this.renderIdle();
+  }
+
+  /** When true, the readout's LED circles are interactive (click to cycle effect). Defaults to false (read-only). */
+  get clickToToggleLeds(): boolean {
+    return this._clickToToggleLeds;
+  }
+
+  set clickToToggleLeds(value: boolean) {
+    if (this._clickToToggleLeds === value) return;
+    this._clickToToggleLeds = value;
+    // Re-render so the LED buttons pick up the new disabled state.
     if (this.latestState) this.render(false);
     else this.renderIdle();
   }
@@ -114,11 +132,35 @@ export class TowerStateReadout implements ITowerDisplay {
     this.prevBeamCount = null;
     this.latestState = null;
     this.brokenSeals.clear();
+    this.userOverriddenLeds.clear();
   }
 
   private onContainerClick(evt: Event): void {
-    if (!this.clickToToggleSeals) return;
     const target = evt.target as HTMLElement | null;
+
+    // ── LED click ──────────────────────────────────────────────────────────
+    if (this.clickToToggleLeds) {
+      const ledBtn = target?.closest<HTMLElement>('[data-tdr-led]');
+      if (ledBtn) {
+        const layer = parseInt(ledBtn.getAttribute('data-layer') ?? '', 10);
+        const light = parseInt(ledBtn.getAttribute('data-light') ?? '', 10);
+        if (!isNaN(layer) && !isNaN(light)) {
+          const key = `${layer}:${light}`;
+          const current =
+            this.userOverriddenLeds.get(key) ??
+            (this.latestState?.layer[layer]?.light[light]?.effect ?? 0);
+          const idx = EFFECT_CYCLE.indexOf(current);
+          const next = EFFECT_CYCLE[(idx === -1 ? 0 : idx + 1) % EFFECT_CYCLE.length];
+          this.userOverriddenLeds.set(key, next);
+          if (this.latestState) this.render(false);
+          this.onLedClick?.(layer, light, next);
+        }
+        return;
+      }
+    }
+
+    // ── Seal click ─────────────────────────────────────────────────────────
+    if (!this.clickToToggleSeals) return;
     const btn = target?.closest<HTMLElement>('[data-tdr-seal]');
     if (!btn) return;
     const side = btn.getAttribute('data-side') as TowerSide | null;
@@ -144,9 +186,16 @@ export class TowerStateReadout implements ITowerDisplay {
     const ledRows = state.layer.map((layer, li) => {
       const layerName = LAYER_TO_POSITION[li as keyof typeof LAYER_TO_POSITION] ?? `L${li}`;
       const lights = layer.light.map((light, ji) => {
-        const eff = EFFECT_LABELS[light.effect] ?? 'off';
+        const key = `${li}:${ji}`;
+        const hasOverride = this.userOverriddenLeds.has(key);
+        const effectValue = hasOverride ? this.userOverriddenLeds.get(key)! : light.effect;
+        const eff = EFFECT_LABELS[effectValue] ?? 'off';
+        const tooltip = EFFECT_TOOLTIP_LABELS[effectValue] ?? eff;
         const dir = LIGHT_INDEX_TO_DIRECTION[ji as keyof typeof LIGHT_INDEX_TO_DIRECTION] ?? ji;
-        return `<span class="tdr-led" data-effect="${esc(eff)}" title="${esc(`${layerName} ${dir}: ${eff}${light.loop ? ' (loop)' : ''}`)}"></span>`;
+        const overrideMark = hasOverride ? ' [override]' : '';
+        const loopMark = light.loop ? ' (loop)' : '';
+        const disabled = this._clickToToggleLeds ? '' : 'disabled';
+        return `<button type="button" class="tdr-led" data-tdr-led data-layer="${li}" data-light="${ji}" data-effect="${esc(eff)}" data-overridden="${hasOverride}" title="${esc(`${layerName} ${dir}: ${tooltip}${overrideMark}${loopMark}`)}" ${disabled}></button>`;
       }).join('');
       return `<div class="tdr-layer"><span class="tdr-layer-label">${esc(layerName)}</span>${lights}</div>`;
     }).join('');

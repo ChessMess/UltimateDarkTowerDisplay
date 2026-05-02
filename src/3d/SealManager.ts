@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { SealIdentifier } from 'ultimatedarktower';
 import type { ResolvedLightingConfig } from './types';
-import { LIGHTS_PER_LAYER, RING_LEVEL_BY_LAYER_INDEX, SIDES } from './constants';
-import { computeSealBacklightPose } from './utils';
+import { LIGHTS_PER_LAYER, RING_LEVEL_BY_LAYER_INDEX, SIDES, BLOOM_LAYER } from './constants';
+import { computeSealLedPose } from './utils';
 
 const SEAL_NAME_PREFIX = 'seal_';
 const SEAL_SIDES = ['north', 'south', 'east', 'west'] as const;
@@ -13,25 +13,34 @@ function sealKey(side: string, level: string): string {
 }
 
 export interface SealBacklightRef {
+  /** Optional atmospheric accent PointLight (disabled by default). */
   light: THREE.PointLight;
+  /** Bright proxy mesh — the directly-visible "LED bulb" seen through cutouts. */
+  proxyMesh: THREE.Mesh;
+  /** Soft additive halo sprite around the proxy. */
+  haloSprite: THREE.Sprite;
   sealNode: THREE.Object3D;
   driver: { v: number };
 }
 
 /**
  * Manages the 12 seal mesh nodes (4 sides × 3 ring levels) and their
- * corresponding interior PointLights. Exposes the backing maps as readonly
- * properties so LedEffectAnimator and __testables can reference live data
- * without coupling to Tower3DView internals.
+ * corresponding inside-the-drum LED proxies (proxy mesh + halo sprite +
+ * optional accent PointLight). Three.js depth testing naturally handles
+ * glyph/chute alignment: the proxy is occluded by solid drum surfaces and
+ * visible through real cutout holes — no manual alignment logic needed.
+ *
+ * All LED visuals are parented to the model root (not the seal node) so they
+ * remain at fixed cardinal positions while drums rotate.
  */
 export class SealManager {
   readonly sealNodes: Map<string, THREE.Object3D> = new Map();
   readonly sealBacklights: Map<string, SealBacklightRef> = new Map();
 
-  /**
-   * Walk the loaded GLTF root and register every node whose name matches
-   * the `seal_<side>_<level>` convention.
-   */
+  private debugHelpers: THREE.Mesh[] = [];
+  private gradientTexture: THREE.CanvasTexture | null = null;
+
+  /** Walk the loaded GLTF root and register every seal_<side>_<level> node. */
   buildSealNodes(root: THREE.Object3D): void {
     root.traverse((child) => {
       if (child.name.startsWith(SEAL_NAME_PREFIX)) {
@@ -47,8 +56,10 @@ export class SealManager {
   }
 
   /**
-   * Create one interior PointLight per registered seal node and attach it to
-   * `model`. Must be called after `buildSealNodes`.
+   * Create one proxy mesh + halo sprite (+ optional accent PointLight) per
+   * registered seal node. All attached to `model` (root) — not to the seal
+   * node — so they stay at fixed cardinal positions when drums rotate.
+   * Must be called after `buildSealNodes`.
    */
   buildSealBacklights(
     model: THREE.Object3D,
@@ -56,6 +67,7 @@ export class SealManager {
     lighting: ResolvedLightingConfig,
   ): void {
     const cfg = lighting.leds.sealBacklights;
+    const gradTex = this.getOrCreateGradientTexture();
 
     for (let layer = 0; layer < 3; layer++) {
       const level = RING_LEVEL_BY_LAYER_INDEX[layer];
@@ -65,64 +77,169 @@ export class SealManager {
         const sealNode = this.sealNodes.get(key);
         if (!sealNode) continue;
 
-        const pose = computeSealBacklightPose(layer, lightIdx, modelRadius, cfg.radiusFactor);
+        const pose = computeSealLedPose(layer, lightIdx, modelRadius, cfg.radiusFactor);
+        const { x, y, z } = pose.position;
 
+        // Proxy mesh — bright "LED bulb" visible through aligned cutout holes.
+        const proxyRadius = modelRadius * cfg.proxy.sizeFactor;
+        const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
+        const proxyMat = new THREE.MeshBasicMaterial({
+          color: cfg.color,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          toneMapped: false,
+        });
+        const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
+        proxyMesh.position.set(x, y, z);
+        proxyMesh.layers.enable(BLOOM_LAYER);
+        proxyMesh.renderOrder = 2;
+        proxyMesh.castShadow = false;
+        proxyMesh.receiveShadow = false;
+        proxyMesh.visible = false;
+        model.add(proxyMesh);
+
+        // Halo sprite — soft additive glow, also depth-tested so it's occluded
+        // by solid drum surfaces like the proxy.
+        const haloMat = new THREE.SpriteMaterial({
+          color: cfg.color,
+          map: gradTex,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        });
+        const haloSprite = new THREE.Sprite(haloMat);
+        const haloScale = modelRadius * cfg.halo.sizeFactor;
+        haloSprite.scale.setScalar(haloScale);
+        haloSprite.position.set(x, y, z);
+        haloSprite.layers.enable(BLOOM_LAYER);
+        haloSprite.renderOrder = 3;
+        haloSprite.visible = false;
+        model.add(haloSprite);
+
+        // Accent PointLight — atmospheric spill onto drum interior surfaces.
+        // Created regardless, but left at intensity 0 when accentLight is off.
         const light = new THREE.PointLight(
           cfg.color,
           0,
           modelRadius * cfg.distanceFactor,
           cfg.decay,
         );
-        light.position.set(pose.position.x, pose.position.y, pose.position.z);
+        light.position.set(x, y, z);
         light.visible = false;
         model.add(light);
 
-        this.sealBacklights.set(key, { light, sealNode, driver: { v: 0 } });
+        this.sealBacklights.set(key, {
+          light,
+          proxyMesh,
+          haloSprite,
+          sealNode,
+          driver: { v: 0 },
+        });
       }
     }
   }
 
-  /** Show/hide seal nodes and drive backlight visibility according to the broken list. */
-  applySeals(brokenSeals: SealIdentifier[], lighting: ResolvedLightingConfig): void {
-    if (this.sealNodes.size === 0) return;
-
-    const broken = new Set(brokenSeals.map(s => sealKey(s.side, s.level)));
+  /**
+   * Drive proxy opacity, halo opacity, and accent PointLight intensity from
+   * `driverV` (0–1). This is the single write path — both the LedEffectAnimator
+   * (effect changes) and applySeals (broken-list changes) call through here.
+   */
+  setSealLed(key: string, driverV: number, lighting: ResolvedLightingConfig): void {
+    const ref = this.sealBacklights.get(key);
+    if (!ref) return;
     const cfg = lighting.leds.sealBacklights;
 
+    if (!cfg.enabled) {
+      ref.proxyMesh.visible = false;
+      ref.haloSprite.visible = false;
+      ref.light.visible = false;
+      return;
+    }
+
+    ref.driver.v = driverV;
+    const on = driverV > 0.001;
+
+    if (cfg.proxy.enabled) {
+      (ref.proxyMesh.material as THREE.MeshBasicMaterial).opacity = driverV;
+      ref.proxyMesh.visible = on;
+    } else {
+      ref.proxyMesh.visible = false;
+    }
+
+    if (cfg.halo.enabled) {
+      (ref.haloSprite.material as THREE.SpriteMaterial).opacity = driverV * cfg.halo.opacity;
+      ref.haloSprite.visible = on;
+    } else {
+      ref.haloSprite.visible = false;
+    }
+
+    if (cfg.accentLight) {
+      ref.light.intensity = driverV * cfg.intensity;
+      ref.light.visible = on;
+    } else {
+      ref.light.intensity = 0;
+      ref.light.visible = false;
+    }
+  }
+
+  /**
+   * Show/hide seal nodes according to the broken list. When a seal is broken, the
+   * backlight is also updated: if `backlightWhenBroken` is false, the LED is forced
+   * off; if true (default), the LED keeps its current driver state.
+   */
+  applySeals(brokenSeals: SealIdentifier[], lighting?: ResolvedLightingConfig): void {
+    if (this.sealNodes.size === 0) return;
+    const broken = new Set(brokenSeals.map(s => sealKey(s.side, s.level)));
     for (const [key, node] of this.sealNodes) {
       const isBroken = broken.has(key);
       node.visible = !isBroken;
-      const ref = this.sealBacklights.get(key);
-      if (!ref) continue;
-      const on = cfg.enabled && (!isBroken || cfg.backlightWhenBroken);
-      ref.light.visible = on && ref.driver.v > 0.001;
-      ref.light.intensity = (isBroken && !cfg.backlightWhenBroken ? 0 : ref.driver.v) * cfg.intensity;
+      if (isBroken && lighting) {
+        const ref = this.sealBacklights.get(key);
+        const keepOn = lighting.leds.sealBacklights.backlightWhenBroken;
+        const driverV = keepOn ? (ref?.driver.v ?? 0) : 0;
+        this.setSealLed(key, driverV, lighting);
+      }
     }
   }
 
-  /** Reapply lighting config to all backlight PointLights. */
+  /** Reapply lighting config to all seal LED visuals. */
   updateLighting(lighting: ResolvedLightingConfig, modelRadius: number): void {
     const cfg = lighting.leds.sealBacklights;
+    const color = new THREE.Color(cfg.color);
     const backlightDistance = modelRadius * cfg.distanceFactor;
 
-    for (const ref of this.sealBacklights.values()) {
-      const pose = computeSealBacklightPose(
-        this.layerFromSealNode(ref.sealNode),
-        this.lightIndexFromSealNode(ref.sealNode),
+    for (const [key, ref] of this.sealBacklights) {
+      const pose = computeSealLedPose(
+        this.layerFromKey(key),
+        this.lightIndexFromKey(key),
         modelRadius,
         cfg.radiusFactor,
       );
-      ref.light.position.set(pose.position.x, pose.position.y, pose.position.z);
-      ref.light.color.setHex(cfg.color);
+      const { x, y, z } = pose.position;
+
+      ref.proxyMesh.position.set(x, y, z);
+      (ref.proxyMesh.material as THREE.MeshBasicMaterial).color.copy(color);
+      const proxyRadius = modelRadius * cfg.proxy.sizeFactor;
+      ref.proxyMesh.scale.setScalar(proxyRadius / (ref.proxyMesh.geometry as THREE.SphereGeometry).parameters.radius);
+
+      ref.haloSprite.position.set(x, y, z);
+      (ref.haloSprite.material as THREE.SpriteMaterial).color.copy(color);
+      const haloScale = modelRadius * cfg.halo.sizeFactor;
+      ref.haloSprite.scale.setScalar(haloScale);
+
+      ref.light.position.set(x, y, z);
+      ref.light.color.copy(color);
       ref.light.distance = backlightDistance;
       ref.light.decay = cfg.decay;
-      const on = cfg.enabled && (ref.sealNode.visible || cfg.backlightWhenBroken);
-      ref.light.intensity = (on ? ref.driver.v : 0) * cfg.intensity;
-      ref.light.visible = on && ref.driver.v > 0.001;
+
+      this.setSealLed(key, ref.driver.v, lighting);
     }
   }
 
-  /** Emit a console warning listing any expected seal nodes absent from the model. */
+  /** Emit a console warning for any expected seal nodes absent from the model. */
   warnOnMissing(): void {
     const missing: string[] = [];
     for (const side of SEAL_SIDES) {
@@ -141,29 +258,90 @@ export class SealManager {
     );
   }
 
-  /** Remove all backlights from their parents and clear both maps. */
+  /**
+   * Show/hide small yellow debug spheres at each proxy position.
+   * Enabled by the `debug3D` flag so placement can be validated against the real GLB.
+   */
+  setDebug(enabled: boolean, parent: THREE.Object3D): void {
+    for (const helper of this.debugHelpers) {
+      helper.removeFromParent();
+      (helper.material as THREE.Material).dispose();
+      helper.geometry.dispose();
+    }
+    this.debugHelpers = [];
+
+    if (!enabled) return;
+
+    const debugMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    for (const ref of this.sealBacklights.values()) {
+      const geo = new THREE.SphereGeometry(
+        (ref.proxyMesh.geometry as THREE.SphereGeometry).parameters.radius * 0.8,
+        6, 4,
+      );
+      const mesh = new THREE.Mesh(geo, debugMat);
+      mesh.position.copy(ref.proxyMesh.position);
+      mesh.renderOrder = 10;
+      parent.add(mesh);
+      this.debugHelpers.push(mesh);
+    }
+  }
+
+  /** Remove all LED visuals from their parents and clear both maps. */
   dispose(): void {
     for (const ref of this.sealBacklights.values()) {
       ref.light.removeFromParent();
+      ref.proxyMesh.geometry.dispose();
+      (ref.proxyMesh.material as THREE.Material).dispose();
+      ref.proxyMesh.removeFromParent();
+      (ref.haloSprite.material as THREE.Material).dispose();
+      ref.haloSprite.removeFromParent();
     }
     this.sealBacklights.clear();
     this.sealNodes.clear();
+
+    for (const helper of this.debugHelpers) {
+      helper.removeFromParent();
+      (helper.material as THREE.Material).dispose();
+      helper.geometry.dispose();
+    }
+    this.debugHelpers = [];
+
+    this.gradientTexture?.dispose();
+    this.gradientTexture = null;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
 
-  private layerFromSealNode(node: THREE.Object3D): number {
-    const rest = node.name.slice(SEAL_NAME_PREFIX.length);
-    const underscore = rest.indexOf('_');
-    const level = rest.slice(underscore + 1);
-    const idx = RING_LEVEL_BY_LAYER_INDEX.indexOf(level as 'top' | 'middle' | 'bottom');
+  private getOrCreateGradientTexture(): THREE.CanvasTexture {
+    if (this.gradientTexture) return this.gradientTexture;
+
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const center = size / 2;
+      const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+    }
+
+    this.gradientTexture = new THREE.CanvasTexture(canvas);
+    return this.gradientTexture;
+  }
+
+  private layerFromKey(key: string): number {
+    const level = key.split(':')[1] as 'top' | 'middle' | 'bottom';
+    const idx = RING_LEVEL_BY_LAYER_INDEX.indexOf(level);
     return idx >= 0 ? idx : 0;
   }
 
-  private lightIndexFromSealNode(node: THREE.Object3D): number {
-    const rest = node.name.slice(SEAL_NAME_PREFIX.length);
-    const underscore = rest.indexOf('_');
-    const side = rest.slice(0, underscore);
+  private lightIndexFromKey(key: string): number {
+    const side = key.split(':')[0];
     const idx = SIDES.indexOf(side as typeof SIDES[number]);
     return idx >= 0 ? idx : 0;
   }

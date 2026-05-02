@@ -1,21 +1,13 @@
 import type { TowerDisplay, TowerStateReadout } from '../src/index';
 import type { TowerState } from 'ultimatedarktower';
 import type { DomElements } from './dom';
-import { showBannerError, bindCopyButton } from './utils';
-import { refreshLightingConfigBox, syncLightingEditorVisibility } from './lightingController';
-import { is3DViewVisible } from './rendererController';
+import { refreshConfigPreview, setConfigPreviewMessage, syncConfigSelectorVisibility } from './configEditor';
+import { refreshLightingConfigBox } from './lightingController';
+import { is3DViewVisible, getLastState } from './rendererController';
 import { createReadmeExampleState, createRandomState, createAllOnState } from './presets';
 import { resetSeals } from './sealController';
 
-let cleanJson = '';
-
-export function showState(state: TowerState, els: DomElements): void {
-  if (!els.statePreview) return;
-  const json = JSON.stringify(state, null, 2);
-  els.statePreview.value = json;
-  cleanJson = json;
-  if (els.btnApply) els.btnApply.disabled = true;
-}
+const DRUM_INDEX_BY_LEVEL: Record<string, number> = { top: 0, middle: 1, bottom: 2 };
 
 function setStateName(name: string, els: DomElements): void {
   if (els.stateBadge) els.stateBadge.textContent = name;
@@ -31,8 +23,11 @@ function applyAndShow(
   setLastState(state);
   getDisplay().applyState(state);
   getReadout().applyState(state);
-  showState(state, els);
-  if (is3DViewVisible()) refreshLightingConfigBox(getDisplay, els);
+  refreshConfigPreview(getDisplay, els);
+  refreshDrumRotateActive(state, els);
+  if (is3DViewVisible()) {
+    refreshLightingConfigBox(getDisplay, els);
+  }
 }
 
 export function initStateEditor(
@@ -41,31 +36,6 @@ export function initStateEditor(
   setLastState: (s: TowerState) => void,
   els: DomElements
 ): void {
-  if (els.statePreview) {
-    els.statePreview.addEventListener('input', () => {
-      if (els.btnApply) els.btnApply.disabled = els.statePreview!.value === cleanJson;
-    });
-  }
-
-  if (els.btnCopy && els.statePreview) {
-    bindCopyButton(els.btnCopy, () => els.statePreview!.value, els.banner);
-  }
-
-  if (els.btnApply) {
-    els.btnApply.addEventListener('click', () => {
-      if (!els.statePreview) return;
-      try {
-        if (els.banner) els.banner.hidden = true;
-        const parsed = JSON.parse(els.statePreview.value) as TowerState;
-        getDisplay().applyState(parsed);
-        cleanJson = els.statePreview.value;
-        els.btnApply!.disabled = true;
-      } catch (err) {
-        showBannerError(els.banner, 'Invalid JSON', err);
-      }
-    });
-  }
-
   if (els.btnReadme) {
     els.btnReadme.addEventListener('click', () => {
       setStateName('readme example', els);
@@ -92,11 +62,7 @@ export function initStateEditor(
       setStateName('idle', els);
       getDisplay().showIdle();
       getReadout().showIdle();
-      if (els.statePreview) {
-        els.statePreview.value = 'Idle view: no state currently rendered.';
-        cleanJson = els.statePreview.value;
-        if (els.btnApply) els.btnApply.disabled = true;
-      }
+      setConfigPreviewMessage('Idle view: no state currently rendered.', els);
     });
   }
 
@@ -105,6 +71,42 @@ export function initStateEditor(
       resetSeals(getDisplay(), getReadout());
     });
   }
+
+  if (els.drumRotateGrid) {
+    els.drumRotateGrid.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const level = target.dataset.drumLevel;
+      const sideAttr = target.dataset.drumSide;
+      if (!level || sideAttr === undefined) return;
+      const drumIndex = DRUM_INDEX_BY_LEVEL[level];
+      const side = Number(sideAttr);
+      if (drumIndex === undefined || Number.isNaN(side)) return;
+
+      const base = getLastState() ?? createReadmeExampleState();
+      const next: TowerState = {
+        ...base,
+        drum: base.drum.map((d, i) =>
+          i === drumIndex ? { ...d, position: side, calibrated: true } : { ...d },
+        ) as TowerState['drum'],
+      };
+      setStateName(`drum ${level} → ${'NESW'[side]}`, els);
+      applyAndShow(next, getDisplay, getReadout, setLastState, els);
+      refreshDrumRotateActive(next, els);
+    });
+  }
+}
+
+export function refreshDrumRotateActive(state: TowerState, els: DomElements): void {
+  if (!els.drumRotateGrid) return;
+  const buttons = els.drumRotateGrid.querySelectorAll<HTMLButtonElement>('button[data-drum-level]');
+  buttons.forEach((btn) => {
+    const level = btn.dataset.drumLevel;
+    const side = Number(btn.dataset.drumSide);
+    const idx = level ? DRUM_INDEX_BY_LEVEL[level] : undefined;
+    if (idx === undefined || Number.isNaN(side)) return;
+    btn.classList.toggle('active', state.drum[idx]?.position === side);
+  });
 }
 
 export function initInitialState(
@@ -113,7 +115,7 @@ export function initInitialState(
   setLastState: (s: TowerState) => void,
   els: DomElements
 ): void {
-  syncLightingEditorVisibility(getDisplay, els);
+  syncConfigSelectorVisibility(getDisplay, els);
   if (els.stateBadge) els.stateBadge.textContent = 'readme example';
   applyAndShow(createReadmeExampleState(), getDisplay, getReadout, setLastState, els);
 }

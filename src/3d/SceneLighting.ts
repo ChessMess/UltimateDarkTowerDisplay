@@ -84,6 +84,14 @@ export class SceneLighting {
     this.renderer.toneMappingExposure = config.scene.exposure;
   }
 
+  /**
+   * Per-frame update. The fill light is parented to the camera, so it must
+   * re-aim at world origin every frame as the camera orbits.
+   */
+  tick(): void {
+    this.fill.lookAt(0, 0, 0);
+  }
+
   startBreathing(keyTarget: number, config: ResolvedLightingConfig): void {
     this.breatheTween?.kill();
     const { peakFactor, durationS } = config.animation.idleBreathe;

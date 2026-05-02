@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- Ledge LEDs (layer 3) and base LEDs (layers 4–5) now render as ball-type visuals — a `MeshBasicMaterial` sphere proxy plus an additive halo `Sprite` — matching the seal backlight style. Previously ledge/base layers had only a `PointLight` with no visible mesh.
+- `ledgeLeds` and `baseLeds` config sections in `LightingConfigCore` (and `DEFAULT_LIGHTING`), each with `enabled`, `color`, `proxy.enabled`, `proxy.sizeFactor`, `halo.enabled`, `halo.sizeFactor`, and `halo.opacity`. Live sliders exposed in the example app under "3D Options → Ledge LEDs / Base LEDs".
+- `LEDGE_LED_LAYOUT`, `BASE1_LED_LAYOUT`, and `BASE2_LED_LAYOUT` layout constants in `constants.ts` — each has `y` (vertical height), `radius` (distance from tower axis), and `azimuthOffset` (angular shift in radians, positive = counter-clockwise from above). `BASE_LED_LAYOUT` has been removed; the two independent per-layer objects give separate control over layer-4 and layer-5 lights.
+- Seal backlights (`SealManager`) redesigned: each of the 12 seal positions now gets a `MeshBasicMaterial` sphere proxy, an additive halo `Sprite`, and an optional atmospheric accent `PointLight`. Configurable via `lighting.leds.sealLeds` (`proxy`, `halo`, `accentLight`).
+- `CameraController` accepts a `CameraConfig` object: `elevationFactor`, `targetHeightFactor`, `zoomToCursor`, and `preserveViewOnSideSelect`. Side-to-side camera snaps animate with a short zoom-dip tween (`SIDE_SNAP_DURATION_S = 0.4 s`). `onSideChange` callback fires on both user-driven orbits and programmatic `selectSide` calls.
+
+### Changed
+
+- LED position constants consolidated: `xOffset` (raw world-space X translation) replaced with `azimuthOffset` (rotation around the tower axis) on all layout objects. The old approach shifted lights asymmetrically — south/west lights moved further from the tower while north/east were brought closer. `azimuthOffset` rotates all 4 lights by the same angle so every light stays equidistant from the surface.
+- `BASE_LED_LAYOUT` split into `BASE1_LED_LAYOUT` (layer 4) and `BASE2_LED_LAYOUT` (layer 5). Previously the shared `base1Y`/`base2Y` fields meant changing radius or azimuthOffset required touching one object but only half the lights would move in Y independently. Each layer now has a fully independent layout object.
+
 ### Removed
 
 - **Breaking:** Deprecated flat `LightingConfig` aliases (`hemisphere`, `key`, `fill`, `exposure`) removed. Use the nested equivalents: `scene.hemisphere.intensity`, `scene.key.intensity`, `scene.fill.intensity`, `scene.exposure`.

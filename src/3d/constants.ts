@@ -35,6 +35,24 @@ export const RING_LEVEL_BY_LAYER_INDEX: readonly ('top' | 'middle' | 'bottom')[]
   'bottom',
 ];
 
+// --- Drum Rotation ---
+
+/** Drum-array index (0/1/2) → drum level. Matches `state.drum[i]`. */
+export const DRUM_LEVELS_BY_INDEX: readonly ('top' | 'middle' | 'bottom')[] = [
+  'top',
+  'middle',
+  'bottom',
+];
+
+/** Radians of Y-rotation per cardinal step (N→E→S→W). Sign chosen so position 0 = base orientation. Flip if drums rotate the wrong way visually. */
+export const DRUM_RADIANS_PER_SIDE = -Math.PI / 2;
+
+/** Rotation tween duration when a drum's `position` changes via applyState. */
+export const DRUM_ROTATION_DURATION_S = 0.6;
+
+/** Easing curve for drum rotation tweens. */
+export const DRUM_ROTATION_EASE = 'power2.inOut';
+
 /** Corner azimuths (rad) for ledge/base lights. Indexed by LEDGE_BASE_LIGHT_POSITIONS (NE=0, SE=1, SW=2, NW=3). */
 export const CORNER_AZIMUTH: readonly number[] = [
   Math.PI / 4,
@@ -48,22 +66,66 @@ export const CORNER_AZIMUTH: readonly number[] = [
  * sphere radius so the layout scales if the GLB is swapped. Initial values are
  * educated guesses — tuning is expected with `debug3D: true`.
  */
+
+/**
+ * Radial placement of the seal LED proxy mesh, as a fraction of modelRadius.
+ * Must sit between the central axis and the drum's inner wall so light travels
+ * drum-interior → glyph/chute → seal → camera in the correct order.
+ * (The red ring halo lights use ringInsetRadius = 0.35; seal LEDs go deeper.)
+ */
+export const SEAL_LED_RADIUS_FACTOR = 0.15;
+
 export const LED_LAYOUT = {
   topY: 0.83,
   middleY: 0.53,
   bottomY: 0.23,
-  ledgeY: -0.36,
-  base1Y: -0.26,
-  base2Y: 0.02,
+} as const;
+
+/**
+ * Position of the 4 ledge-ring LEDs, as fractions of modelRadius.
+ * `y` is the vertical height; `radius` is the outward distance from the tower axis.
+ * `azimuthOffset` rotates all 4 lights around the tower axis (radians, positive = CCW from above).
+ */
+export const LEDGE_LED_LAYOUT = {
+  y: 0.08,
+  radius: 0.35,
+  /** Rotation (radians) applied to all 4 corner azimuths. Positive = counter-clockwise from above. */
+  azimuthOffset: 0.0,
+} as const;
+
+/**
+ * Position of the 4 BASE1 LEDs (layer 4), as fractions of modelRadius.
+ * `y` is the vertical height; `radius` is the outward distance from the tower axis.
+ * `azimuthOffset` rotates all 4 lights around the tower axis (radians, positive = CCW from above).
+ */
+export const BASE1_LED_LAYOUT = {
+  y: -0.02,
+  radius: 0.44,
+  /** Rotation (radians) applied to all 4 corner azimuths. Positive = counter-clockwise from above. */
+  azimuthOffset: 0.0,
+} as const;
+
+/**
+ * Position of the 4 BASE2 LEDs (layer 5), as fractions of modelRadius.
+ * `y` is the vertical height; `radius` is the outward distance from the tower axis.
+ * `azimuthOffset` rotates all 4 lights around the tower axis (radians, positive = CCW from above).
+ */
+export const BASE2_LED_LAYOUT = {
+  y: -0.26,
+  radius: 0.44,
+  /** Rotation (radians) applied to all 4 corner azimuths. Positive = counter-clockwise from above. */
+  azimuthOffset: 0.0,
 } as const;
 
 /**
  * Red light positions are independent from the amber proxy positions.
  * Ring layers (0–2): inset inside the drum so light shines outward through doors/seals.
- * Ledge/base (3–5): at the outer corner surface so light shines onto the face.
  * Values are initial guesses; expected tuning with debug3D: true.
  */
 export const RED_LIGHT_LAYOUT = {
   ringInsetRadius: 0.35,
   cornerNearSurfaceRadius: 0.52,
 } as const;
+
+/** Three.js layer reserved for objects that receive selective bloom. */
+export const BLOOM_LAYER = 1;

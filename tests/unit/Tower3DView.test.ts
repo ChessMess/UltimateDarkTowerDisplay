@@ -5,7 +5,7 @@ import * as gltfLoaderMock from '../__mocks__/gltfLoader.js';
 import * as gsapMock from '../__mocks__/gsap.js';
 
 const {
-  LED_LAYOUT, RING_AZIMUTH, CORNER_AZIMUTH,
+  LED_LAYOUT, LEDGE_LED_LAYOUT, RING_AZIMUTH, CORNER_AZIMUTH,
   computeRedLightPosition, RED_LIGHT_LAYOUT, getLedRef,
   getSealNode, getSealNodeCount,
   computeSealBacklightPose, getSealBacklight, getSealBacklightCount,
@@ -58,11 +58,11 @@ describe('computeRedLightPosition', () => {
     expect(p.z).toBeCloseTo(0, 10);
   });
 
-  it('layer 3 light 0 (ledge, NE) → cornerNearSurfaceRadius at ledgeY', () => {
+  it('layer 3 light 0 (ledge, NE) → LEDGE_LED_LAYOUT radius at LEDGE_LED_LAYOUT y', () => {
     const p = computeRedLightPosition(3, 0, R);
-    const expected = Math.sin(Math.PI / 4) * RED_LIGHT_LAYOUT.cornerNearSurfaceRadius;
+    const expected = Math.sin(Math.PI / 4) * LEDGE_LED_LAYOUT.radius;
     expect(p.x).toBeCloseTo(expected, 10);
-    expect(p.y).toBeCloseTo(LED_LAYOUT.ledgeY, 10);
+    expect(p.y).toBeCloseTo(LEDGE_LED_LAYOUT.y, 10);
     expect(p.z).toBeCloseTo(expected, 10);
   });
 
@@ -180,6 +180,58 @@ describe('Tower3DView instance', () => {
           expect(ref!.redLight).toBeDefined();
         }
       }
+      view.dispose();
+    });
+  });
+
+  describe('breathe / breatheFast reset driver.v to 0 before animating', () => {
+    it('breathe resets driver.v to 0 when switching from on (was stuck at v=1)', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      gsapMock.__reset();
+
+      // First apply "on" so driver.v reaches 1
+      const onState = makeState();
+      onState.layer[0].light[0].effect = LIGHT_EFFECTS.on;
+      view.applyState(onState);
+      const ref = getLedRef(view, 0, 0)!;
+      ref.driver.v = 1; // simulate tween having completed
+
+      gsapMock.__reset();
+
+      // Now switch to breathe — driver.v must be reset to 0 so the yoyo range is [0,1]
+      const breatheState = makeState();
+      breatheState.layer[0].light[0].effect = LIGHT_EFFECTS.breathe;
+      view.applyState(breatheState);
+
+      expect(ref.driver.v).toBe(0);
+      const tween = gsapMock.__getTweens().find(
+        (t: { target: object; vars: { v: number } }) => t.target === ref.driver && t.vars.v === 1
+      );
+      expect(tween).toBeDefined();
+      view.dispose();
+    });
+
+    it('breatheFast resets driver.v to 0 when switching from on', () => {
+      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
+      gsapMock.__reset();
+
+      const onState = makeState();
+      onState.layer[0].light[0].effect = LIGHT_EFFECTS.on;
+      view.applyState(onState);
+      const ref = getLedRef(view, 0, 0)!;
+      ref.driver.v = 1;
+
+      gsapMock.__reset();
+
+      const breatheFastState = makeState();
+      breatheFastState.layer[0].light[0].effect = LIGHT_EFFECTS.breatheFast;
+      view.applyState(breatheFastState);
+
+      expect(ref.driver.v).toBe(0);
+      const tween = gsapMock.__getTweens().find(
+        (t: { target: object; vars: { v: number } }) => t.target === ref.driver && t.vars.v === 1
+      );
+      expect(tween).toBeDefined();
       view.dispose();
     });
   });

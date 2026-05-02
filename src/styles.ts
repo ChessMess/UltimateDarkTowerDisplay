@@ -67,6 +67,37 @@ const CSS = `
   border: 1px solid #555;
   display: inline-block;
   transition: background 0.2s;
+  /* Button reset */
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: default;
+  outline: none;
+  font: inherit;
+  color: inherit;
+  vertical-align: middle;
+}
+
+button.tdr-led:not([disabled]) {
+  cursor: pointer;
+}
+
+button.tdr-led:not([disabled]):hover {
+  filter: brightness(1.35);
+  border-color: #aaa;
+}
+
+button.tdr-led:not([disabled]):focus-visible {
+  outline: 2px solid #80a0ff;
+  outline-offset: 2px;
+}
+
+button.tdr-led[data-overridden="true"] {
+  box-shadow: 0 0 0 2px #f39c12;
+}
+
+button.tdr-led[data-overridden="true"][data-effect="on"] {
+  box-shadow: 0 0 6px rgba(240, 192, 64, 0.5), 0 0 0 2px #f39c12;
 }
 
 .tdr-led[data-effect="on"] {
@@ -418,6 +449,10 @@ const CSS = `
 }
 `;
 
+/** The raw CSS string for all tower display components.
+ *  Import and ship via your own bundler when using `injectStyles: false` on TowerDisplayOptions. */
+export const TOWER_DISPLAY_CSS: string = CSS;
+
 /**
  * Injects the tower display readout stylesheet into `document.head`.
  * Safe to call multiple times — the `<style>` tag is only appended once.
@@ -427,6 +462,16 @@ export function injectStyles(): void {
   styleElement = document.createElement('style');
   styleElement.textContent = CSS;
   document.head.appendChild(styleElement);
+  injected = true;
+}
+
+/**
+ * Marks styles as already handled so subsequent injectStyles() calls from any
+ * renderer become no-ops. Call this before creating any renderers when you are
+ * supplying TOWER_DISPLAY_CSS via your own bundler (e.g. Electron with strict CSP).
+ * @internal
+ */
+export function suppressStyleInjection(): void {
   injected = true;
 }
 

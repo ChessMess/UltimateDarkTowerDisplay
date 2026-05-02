@@ -48,6 +48,16 @@ export interface LightingConfigCore {
     };
     /** Renderer tone-mapping exposure. */
     exposure?: number;
+    /** Post-process bloom (UnrealBloomPass). Applied at initScene time; `strength: 0` disables visually. */
+    bloom?: {
+      enabled?: boolean;
+      /** Glow intensity (0–3). */
+      strength?: number;
+      /** Bloom spread radius (0–1). */
+      radius?: number;
+      /** Luminance threshold — 0 means all bright pixels bloom. */
+      threshold?: number;
+    };
   };
 
   /** Per-LED emissive + halo parameters. */
@@ -59,23 +69,101 @@ export interface LightingConfigCore {
       haloDistanceFraction?: number;
     };
     /**
-     * Inside-the-tower PointLights (12 total, ring layers only) positioned just
-     * behind each seal's back face. Light radiates omnidirectionally and shines
-     * out through the carved openings in the seal mesh, mimicking real LEDs
-     * inside the physical tower.
+     * Inside-the-drum LED proxies (12 total, ring layers only). Each LED is a
+     * bright proxy mesh + halo sprite positioned at the cardinal azimuth,
+     * deep inside the drum (between central axis and drum inner wall). Three.js
+     * depth testing naturally handles glyph/chute alignment: the proxy is
+     * occluded by solid drum surfaces and visible through cutout holes.
+     * An optional atmospheric PointLight (accentLight) adds faint spill onto
+     * drum interior surfaces visible through the cutouts.
      */
     sealBacklights?: {
+      /** Master enable/disable for all seal LED visuals. */
       enabled?: boolean;
+      /** Color for the proxy mesh, halo sprite, and accent PointLight. */
       color?: HexColor;
-      /** PointLight intensity at full driver. */
-      intensity?: number;
-      /** Light placement radius as a factor of modelRadius (close to 1 = near seal back). */
+      /**
+       * Radial placement of the proxy mesh as a factor of modelRadius.
+       * Must be well inside the drum inner wall so light traverses
+       * drum-interior → glyph/chute → seal → camera in the correct order.
+       */
       radiusFactor?: number;
-      /** PointLight distance (max reach) as a factor of modelRadius. */
+      /** Accent PointLight intensity at full driver (atmospheric spill only). */
+      intensity?: number;
+      /** Accent PointLight distance (max reach) as a factor of modelRadius. */
       distanceFactor?: number;
       decay?: number;
-      /** Keep the light on after the seal breaks (seal mesh hidden). */
+      /** Enable the atmospheric accent PointLight. Defaults to true. */
+      accentLight?: boolean;
+      /** Keep the backlight on when the seal is broken. Defaults to true. */
       backlightWhenBroken?: boolean;
+      /** Bright proxy mesh — the directly-visible "LED bulb." */
+      proxy?: {
+        enabled?: boolean;
+        /** Sphere radius as a factor of modelRadius. */
+        sizeFactor?: number;
+        geometry?: 'sphere' | 'cylinder';
+      };
+      /** Soft additive halo sprite around the proxy. */
+      halo?: {
+        enabled?: boolean;
+        /** Sprite scale as a factor of modelRadius. */
+        sizeFactor?: number;
+        /** Peak opacity at driver=1. */
+        opacity?: number;
+      };
+    };
+
+    /**
+     * Ball-type LED visuals for the 4 ledge-ring lights (layer 3).
+     * A bright proxy sphere + soft halo sprite are placed at each corner position
+     * on the outer tower surface, mirroring the seal backlight approach.
+     */
+    ledgeLeds?: {
+      /** Master enable/disable. */
+      enabled?: boolean;
+      /** Color for the proxy mesh and halo sprite. */
+      color?: HexColor;
+      /** Bright proxy sphere — the directly-visible "LED bulb." */
+      proxy?: {
+        enabled?: boolean;
+        /** Sphere radius as a factor of modelRadius. */
+        sizeFactor?: number;
+      };
+      /** Soft additive halo sprite. */
+      halo?: {
+        enabled?: boolean;
+        /** Sprite scale as a factor of modelRadius. */
+        sizeFactor?: number;
+        /** Peak opacity at driver=1. */
+        opacity?: number;
+      };
+    };
+
+    /**
+     * Ball-type LED visuals for the 8 base lights (layers 4–5, BASE1 and BASE2).
+     * A bright proxy sphere + soft halo sprite are placed at each corner position,
+     * mirroring the ledge LED approach.
+     */
+    baseLeds?: {
+      /** Master enable/disable. */
+      enabled?: boolean;
+      /** Color for the proxy mesh and halo sprite. */
+      color?: HexColor;
+      /** Bright proxy sphere — the directly-visible "LED bulb." */
+      proxy?: {
+        enabled?: boolean;
+        /** Sphere radius as a factor of modelRadius. */
+        sizeFactor?: number;
+      };
+      /** Soft additive halo sprite. */
+      halo?: {
+        enabled?: boolean;
+        /** Sprite scale as a factor of modelRadius. */
+        sizeFactor?: number;
+        /** Peak opacity at driver=1. */
+        opacity?: number;
+      };
     };
   };
 
@@ -132,6 +220,39 @@ export interface LightingConfigCore {
 
 /** Public lighting config — a nested partial of {@link LightingConfigCore}. */
 export type LightingConfig = LightingConfigCore;
+
+/**
+ * Camera defaults for the 3D view.
+ *
+ * All factors are multiples of `modelRadius` (the half-size of the loaded GLB),
+ * so they scale correctly regardless of the model's physical size.
+ */
+export interface CameraConfig {
+  /**
+   * Camera eye height as a fraction of `modelRadius`.
+   * Negative values place the eye below the model's geometric centre.
+   * Defaults to `-0.5`.
+   */
+  elevationFactor?: number;
+  /**
+   * Vertical position of the orbit target (look-at point) as a fraction of
+   * `modelRadius`. Negative values aim the camera lower on the model.
+   * Defaults to `-0.15`.
+   */
+  targetHeightFactor?: number;
+  /**
+   * When `true`, scroll-wheel zoom-in moves the camera toward the point under
+   * the cursor rather than the orbit target. Zoom-out always uses the standard
+   * OrbitControls behavior. Defaults to `true`.
+   */
+  zoomToCursor?: boolean;
+  /**
+   * When `true`, selecting a cardinal direction keeps the current orbit target,
+   * tilt, pan offset, and zoom distance instead of resetting to the fitted
+   * default camera framing. Defaults to `false`.
+   */
+  preserveViewOnSideSelect?: boolean;
+}
 
 /** Fully-resolved lighting config (all nested fields required) used internally by Tower3DView. */
 export type ResolvedLightingConfig = DeepRequired<LightingConfigCore>;

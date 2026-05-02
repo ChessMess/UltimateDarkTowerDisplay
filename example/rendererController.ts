@@ -25,8 +25,8 @@ let display: TowerDisplay;
 let readout: TowerStateReadout;
 let lastState: TowerState | null = null;
 let lastSide: TowerSide | null = null;
-let currentRenderers: RendererType | RendererType[] = 'side-view';
-let currentActiveId: ViewButtonId = 'btn-view-2d';
+let currentRenderers: RendererType | RendererType[] = '3d-view';
+let currentActiveId: ViewButtonId = 'btn-view-3d';
 let onViewChanged: (() => void) | null = null;
 
 function publishDisplay(): void {
@@ -71,6 +71,10 @@ function buildDisplayOptions(renderers: RendererType | RendererType[], els: DomE
     onSealClick: (seal) => toggleSeal(seal, display, readout),
     onSideChange: (side) => { lastSide = side; },
     debug3D: (els.debug3dCheckbox?.checked ?? false),
+    camera: {
+      zoomToCursor: els.chkZoomToCursor?.checked ?? true,
+      preserveViewOnSideSelect: els.chkPreserveViewOnSideSelect?.checked ?? false,
+    },
     lighting: {
       scene: {
         hemisphere: { intensity: sceneLights.hemiIntensity },
@@ -112,7 +116,9 @@ export function initRendererController(els: DomElements): void {
   readout = new TowerStateReadout(els.readoutContainer);
   readout.clickToToggleSeals = true;
   readout.onSealClick = (seal) => toggleSeal(seal, display, readout);
-  display = new TowerDisplay(buildDisplayOptions('side-view', els));
+  readout.clickToToggleLeds = true;
+  readout.onLedClick = (layer, light, effect) => display.setLedOverride(layer, light, effect);
+  display = new TowerDisplay(buildDisplayOptions('3d-view', els));
   publishDisplay();
 
   for (const [id, renderers] of Object.entries(viewButtons) as [ViewButtonId, RendererType | RendererType[]][]) {

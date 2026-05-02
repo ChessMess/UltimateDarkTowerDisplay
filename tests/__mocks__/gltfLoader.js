@@ -6,6 +6,8 @@ let sealNamesOverride = null;
 // Test hook: when true, seal nodes are made meshlike (isMesh + MeshStandardMaterial)
 // so the seal-backlight material-clone path can be exercised in unit tests.
 let sealsAsMeshes = false;
+// Test hook: which drum nodes to include in the mock scene. null → full 3.
+let drumNamesOverride = null;
 const instances = [];
 
 const DEFAULT_SEAL_NAMES = [
@@ -15,12 +17,35 @@ const DEFAULT_SEAL_NAMES = [
   'seal_west_top',  'seal_west_middle',  'seal_west_bottom',
 ];
 
+const DEFAULT_DRUM_NAMES = ['drum_top', 'drum_middle', 'drum_bottom'];
+
+function sealWorldPos(name) {
+  const parts = name.split('_'); // seal_<side>_<level>
+  const side = parts[1];
+  const level = parts[2];
+  const y = { top: 0.83, middle: 0.53, bottom: 0.23 }[level] ?? 0;
+  return {
+    north: { x: 0, y, z: 1.0 },
+    east:  { x: 1.0, y, z: 0 },
+    south: { x: 0, y, z: -1.0 },
+    west:  { x: -1.0, y, z: 0 },
+  }[side] ?? { x: 0, y: 0, z: 1.0 };
+}
+
 function makeNode(name) {
+  const pos = name.startsWith('seal_') ? sealWorldPos(name) : { x: 0, y: 0, z: 0 };
   const node = {
     name,
     visible: true,
     children: [],
     parent: null,
+    position: { x: pos.x, y: pos.y, z: pos.z },
+  };
+  node.getWorldPosition = function (v) {
+    v.x = this.position.x;
+    v.y = this.position.y;
+    v.z = this.position.z;
+    return v;
   };
   node.traverse = function (cb) {
     cb(this);
@@ -63,9 +88,16 @@ function makeMockScene() {
     removeFromParent() { this.parent = null; },
   };
 
-  const names = sealNamesOverride ?? DEFAULT_SEAL_NAMES;
-  for (const name of names) {
+  const sealNames = sealNamesOverride ?? DEFAULT_SEAL_NAMES;
+  for (const name of sealNames) {
     scene.add(makeNode(name));
+  }
+
+  const drumNames = drumNamesOverride ?? DEFAULT_DRUM_NAMES;
+  for (const name of drumNames) {
+    const node = makeNode(name);
+    node.rotation = { x: 0, y: 0, z: 0 };
+    scene.add(node);
   }
   return scene;
 }
@@ -97,11 +129,13 @@ module.exports = {
   __setAutoLoad(v) { autoLoad = v; },
   __setSealNames(names) { sealNamesOverride = names; },
   __setSealsAsMeshes(v) { sealsAsMeshes = v; },
+  __setDrumNames(names) { drumNamesOverride = names; },
   __getLastInstance() { return instances[instances.length - 1]; },
   __reset() {
     autoLoad = true;
     sealNamesOverride = null;
     sealsAsMeshes = false;
+    drumNamesOverride = null;
     instances.length = 0;
   },
 };

@@ -3,6 +3,7 @@ module.exports = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/tests'],
   testMatch: ['**/*.(test|spec).+(ts|tsx|js)'],
+  setupFiles: ['<rootDir>/tests/setup.js'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
@@ -29,6 +30,7 @@ module.exports = {
     '^three/examples/jsm/loaders/HDRLoader\\.js$': '<rootDir>/tests/__mocks__/hdrLoader.js',
     '^three/examples/jsm/lights/RectAreaLightUniformsLib\\.js$':
       '<rootDir>/tests/__mocks__/rectAreaLightUniformsLib.js',
+    '^three/addons/postprocessing/.*$': '<rootDir>/tests/__mocks__/postprocessing.js',
     '^gsap$': '<rootDir>/tests/__mocks__/gsap.js',
   },
 };

@@ -2,12 +2,36 @@
 // runs on Node + jsdom) free of WebGL + ESM-only imports. Tower3DView is not
 // unit-tested directly; this mock simply prevents accidental imports from
 // crashing the suite.
+
+let _uuidSeq = 0;
+
+class Layers {
+  constructor() {
+    this.mask = 1; // default: layer 0
+  }
+  set(channel) {
+    this.mask = 1 << channel;
+  }
+  enable(channel) {
+    this.mask |= (1 << channel);
+  }
+  test(layers) {
+    return (this.mask & layers.mask) !== 0;
+  }
+}
+
 class Scene {
   constructor() {
     this.children = [];
   }
   add(obj) {
     this.children.push(obj);
+  }
+  traverse(cb) {
+    cb(this);
+    for (const c of this.children) {
+      if (c && typeof c.traverse === 'function') c.traverse(cb);
+    }
   }
 }
 class Group {
@@ -18,6 +42,12 @@ class Group {
   add(obj) {
     this.children.push(obj);
     if (obj) obj.parent = this;
+  }
+  traverse(cb) {
+    cb(this);
+    for (const c of this.children) {
+      if (c && typeof c.traverse === 'function') c.traverse(cb);
+    }
   }
 }
 class Object3D {
@@ -30,12 +60,24 @@ class Object3D {
     this.children.push(obj);
     if (obj) obj.parent = this;
   }
+  getWorldPosition(v) {
+    v.x = this.position.x;
+    v.y = this.position.y;
+    v.z = this.position.z;
+    return v;
+  }
   removeFromParent() {
     if (this.parent && this.parent.children) {
       const i = this.parent.children.indexOf(this);
       if (i >= 0) this.parent.children.splice(i, 1);
     }
     this.parent = null;
+  }
+}
+class Vector2 {
+  constructor(x = 0, y = 0) {
+    this.x = x;
+    this.y = y;
   }
 }
 class Vector3 {
@@ -62,6 +104,12 @@ class Vector3 {
   lengthSq() {
     return 0;
   }
+  setScalar(s) {
+    this.x = s;
+    this.y = s;
+    this.z = s;
+    return this;
+  }
   toArray() {
     return [this.x, this.y, this.z];
   }
@@ -79,6 +127,10 @@ class Color {
   }
   set(c) {
     this.value = c;
+    return this;
+  }
+  copy(other) {
+    this.value = other.value;
     return this;
   }
 }
@@ -181,6 +233,7 @@ class Mesh {
     this.geometry = geometry;
     this.material = material;
     this.position = new Vector3();
+    this.scale = new Vector3(1, 1, 1);
     this.rotation = { x: 0, y: 0, z: 0 };
     this.children = [];
     this.parent = null;
@@ -188,6 +241,8 @@ class Mesh {
     this.visible = true;
     this.castShadow = false;
     this.receiveShadow = false;
+    this.layers = new Layers();
+    this.uuid = 'mock-mesh-' + (++_uuidSeq);
   }
   add(obj) {
     this.children.push(obj);
@@ -204,6 +259,65 @@ class Mesh {
     }
     this.parent = null;
   }
+}
+
+class ShaderMaterial {
+  constructor(params = {}) {
+    this.uniforms = params.uniforms ?? {};
+    this.vertexShader = params.vertexShader ?? '';
+    this.fragmentShader = params.fragmentShader ?? '';
+  }
+  dispose() {}
+}
+
+class MeshBasicMaterial {
+  constructor(opts = {}) {
+    this.color = new Color(opts.color);
+    this.transparent = opts.transparent ?? false;
+    this.opacity = opts.opacity ?? 1;
+    this.depthWrite = opts.depthWrite ?? true;
+    this.toneMapped = opts.toneMapped ?? true;
+  }
+  dispose() {}
+}
+
+class SpriteMaterial {
+  constructor(opts = {}) {
+    this.color = new Color(opts.color);
+    this.map = opts.map ?? null;
+    this.transparent = opts.transparent ?? false;
+    this.opacity = opts.opacity ?? 1;
+    this.blending = opts.blending ?? 0;
+    this.depthWrite = opts.depthWrite ?? true;
+    this.toneMapped = opts.toneMapped ?? true;
+  }
+  dispose() {}
+}
+
+class Sprite {
+  constructor(material) {
+    this.material = material;
+    this.position = new Vector3();
+    this.scale = new Vector3(1, 1, 1);
+    this.children = [];
+    this.parent = null;
+    this.visible = true;
+    this.renderOrder = 0;
+    this.layers = new Layers();
+  }
+  add(obj) { this.children.push(obj); if (obj) obj.parent = this; }
+  removeFromParent() {
+    if (this.parent && this.parent.children) {
+      const i = this.parent.children.indexOf(this);
+      if (i >= 0) this.parent.children.splice(i, 1);
+    }
+    this.parent = null;
+  }
+}
+
+class CanvasTexture {
+  constructor() { this.needsUpdate = false; }
+  dispose() {}
 }
 
 class MeshStandardMaterial {
@@ -264,9 +378,7 @@ class SpotLight {
 
 class SphereGeometry {
   constructor(radius, widthSegments, heightSegments) {
-    this.radius = radius;
-    this.widthSegments = widthSegments;
-    this.heightSegments = heightSegments;
+    this.parameters = { radius, widthSegments, heightSegments };
   }
   dispose() {}
 }
@@ -297,9 +409,11 @@ class AxesHelper {
 }
 
 module.exports = {
+  Layers,
   Scene,
   Group,
   Object3D,
+  Vector2,
   Vector3,
   Color,
   PerspectiveCamera,
@@ -321,7 +435,16 @@ module.exports = {
     DOLLY: 1,
     PAN: 2,
   },
+  ShaderMaterial,
+  MeshBasicMaterial,
+  SpriteMaterial,
+  Sprite,
+  CanvasTexture,
   SRGBColorSpace: 'srgb',
+  LinearSRGBColorSpace: 'srgb-linear',
   ACESFilmicToneMapping: 1,
+  NoToneMapping: 0,
+  PCFShadowMap: 1,
   PCFSoftShadowMap: 2,
+  AdditiveBlending: 2,
 };

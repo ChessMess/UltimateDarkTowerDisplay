@@ -99,6 +99,7 @@ export class TowerSideView implements ITowerDisplay {
     this.build();
   }
 
+  /** Update the SVG display with a new decoded tower state. Auto-selects the active side on seal-reveal sequences. */
   applyState(state: TowerState): void {
     this.latestState = state;
     if (state.led_sequence === TOWER_LIGHT_SEQUENCES.sealReveal) {
@@ -109,15 +110,18 @@ export class TowerSideView implements ITowerDisplay {
     if (this.wrapper) this.wrapper.style.display = '';
   }
 
+  /** Update seal visibility — pass the current list of broken seals. */
   applySeals(brokenSeals: SealIdentifier[]): void {
     this.latestBrokenSeals = brokenSeals;
     this.updateSealVisibility();
   }
 
+  /** Hide the side view wrapper (no state to display). */
   showIdle(): void {
     if (this.wrapper) this.wrapper.style.display = 'none';
   }
 
+  /** Remove the rendered SVG from the DOM and reset internal state. */
   dispose(): void {
     if (this.wrapper) {
       this.wrapper.remove();
@@ -269,6 +273,7 @@ export class TowerSideView implements ITowerDisplay {
     }
   }
 
+  /** Switch the displayed tower face, re-mapping LEDs and seal overlays to the new side. No-op if already on that side. */
   selectSide(side: TowerSide): void {
     if (side === this.currentSide) return;
     this.currentSide = side;

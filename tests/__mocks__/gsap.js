@@ -6,17 +6,28 @@ function makeTween(target, vars) {
     target,
     vars,
     killed: false,
-    kill() { this.killed = true; },
+    kill() {
+      this.killed = true;
+    },
   };
   tweens.push(tween);
   return tween;
 }
 
-function makeTimeline() {
+function makeTimeline(opts) {
   const tl = {
     killed: false,
-    to() { return tl; },
-    kill() { tl.killed = true; },
+    calls: [],
+    to(target, vars, position) {
+      tl.calls.push({ target, vars, position });
+      return tl;
+    },
+    kill() {
+      tl.killed = true;
+    },
+    __fireComplete() {
+      if (opts && typeof opts.onComplete === 'function') opts.onComplete();
+    },
   };
   timelines.push(tl);
   return tl;
@@ -30,7 +41,14 @@ const gsap = {
 module.exports = {
   default: gsap,
   ...gsap,
-  __getTweens() { return tweens; },
-  __getTimelines() { return timelines; },
-  __reset() { tweens.length = 0; timelines.length = 0; },
+  __getTweens() {
+    return tweens;
+  },
+  __getTimelines() {
+    return timelines;
+  },
+  __reset() {
+    tweens.length = 0;
+    timelines.length = 0;
+  },
 };

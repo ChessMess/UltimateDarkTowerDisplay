@@ -38,6 +38,26 @@
         <button id="btn-reset-seals">Reset Seals</button>
       </div>
     </div>
+    <div class="toolbar-group">
+      <span class="toolbar-group-label">Drum Rotate</span>
+      <div id="drum-rotate-grid" class="drum-rotate-grid">
+        <span class="drum-rotate-row-label">Top</span>
+        <button data-drum-level="top" data-drum-side="0">N</button>
+        <button data-drum-level="top" data-drum-side="1">E</button>
+        <button data-drum-level="top" data-drum-side="2">S</button>
+        <button data-drum-level="top" data-drum-side="3">W</button>
+        <span class="drum-rotate-row-label">Middle</span>
+        <button data-drum-level="middle" data-drum-side="0">N</button>
+        <button data-drum-level="middle" data-drum-side="1">E</button>
+        <button data-drum-level="middle" data-drum-side="2">S</button>
+        <button data-drum-level="middle" data-drum-side="3">W</button>
+        <span class="drum-rotate-row-label">Bottom</span>
+        <button data-drum-level="bottom" data-drum-side="0">N</button>
+        <button data-drum-level="bottom" data-drum-side="1">E</button>
+        <button data-drum-level="bottom" data-drum-side="2">S</button>
+        <button data-drum-level="bottom" data-drum-side="3">W</button>
+      </div>
+    </div>
   </div>
 
   <details class="three-d-options" id="three-d-options">
@@ -46,6 +66,10 @@
       <label class="toolbar-label"><input type="checkbox" id="chk-debug3d" /> Debug</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-ground-disc" checked /> Ground Disc</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-board-disc" checked /> Board Disc</label>
+      <label class="toolbar-label"><input type="checkbox" id="chk-drum-sound" /> Drum Sound</label>
+      <label class="toolbar-label"><input type="checkbox" id="chk-zoom-to-cursor" checked /> Zoom to Cursor</label>
+      <label class="toolbar-label"><input type="checkbox" id="chk-preserve-view-on-side-select" /> Preserve View On
+        Direction Select</label>
       <label class="toolbar-label">Skybox URL: <input type="text" id="inp-skybox-url"
           placeholder="equirectangular .jpg / .png / .hdr" style="width:min(280px, 100%)" /></label>
       <button id="btn-entrance">Play Entrance</button>
@@ -88,6 +112,24 @@
         <span id="lbl-key-z">-1.0</span>
       </label>
     </div>
+    <h3 class="three-d-subhead">Bloom</h3>
+    <div class="sliders-grid">
+      <label class="slider-label">
+        Strength
+        <input type="range" id="rng-bloom-strength" min="0" max="3" step="0.05" value="1.5" />
+        <span id="lbl-bloom-strength">1.50</span>
+      </label>
+      <label class="slider-label">
+        Radius
+        <input type="range" id="rng-bloom-radius" min="0" max="1" step="0.05" value="0.5" />
+        <span id="lbl-bloom-radius">0.50</span>
+      </label>
+      <label class="slider-label">
+        Threshold
+        <input type="range" id="rng-bloom-threshold" min="0" max="1" step="0.01" value="0" />
+        <span id="lbl-bloom-threshold">0.00</span>
+      </label>
+    </div>
   </details>
 
   <div class="layout">
@@ -95,8 +137,8 @@
       <div class="panel-row-header">
         <h2>Rendered Output</h2>
         <div class="toolbar-group-btns">
-          <button id="btn-view-2d" class="active">2D</button>
-          <button id="btn-view-3d">3D</button>
+          <button id="btn-view-2d">2D</button>
+          <button id="btn-view-3d" class="active">3D</button>
           <button id="btn-view-2d3d">2D + 3D</button>
         </div>
       </div>
@@ -108,26 +150,18 @@
         <div id="readout-container"></div>
       </div>
       <div id="editor-panel" class="panel panel-editors">
-        <div class="editor-section editor-section-state" id="state-section">
-          <div class="panel-header">
-            <h2>Applied State</h2>
-            <div class="panel-header-actions">
-              <button id="btn-copy">Copy JSON</button>
-              <button id="btn-apply" disabled>Apply</button>
-            </div>
+        <div class="config-editor-header">
+          <select id="sel-config-type" aria-label="Config type">
+            <option value="state">Tower State</option>
+            <option value="lighting" id="opt-lighting" disabled>3D Lighting Config</option>
+            <option value="camera" id="opt-camera" disabled>3D Camera Config</option>
+          </select>
+          <div class="panel-header-actions">
+            <button id="btn-copy-config">Copy JSON</button>
+            <button id="btn-apply-config" disabled>Apply</button>
           </div>
-          <textarea id="state-preview" spellcheck="false" wrap="off"></textarea>
         </div>
-        <div class="editor-section editor-section-lighting" id="lighting-section" hidden>
-          <div class="panel-header">
-            <h2>3D Lighting Config</h2>
-            <div class="panel-header-actions">
-              <button id="btn-copy-lighting">Copy JSON</button>
-              <button id="btn-apply-lighting" disabled>Apply</button>
-            </div>
-          </div>
-          <textarea id="lighting-preview" spellcheck="false" wrap="off"></textarea>
-        </div>
+        <textarea id="config-preview" spellcheck="false" wrap="off"></textarea>
       </div>
     </div><!-- /.editor-column -->
   </div>

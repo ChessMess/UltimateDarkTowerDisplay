@@ -1,13 +1,9 @@
 export interface DomElements {
   banner: HTMLElement | null;
-  editorPanel: HTMLElement | null;
-  lightingSection: HTMLElement | null;
-  statePreview: HTMLTextAreaElement | null;
-  btnApply: HTMLButtonElement | null;
-  btnCopy: HTMLButtonElement | null;
-  lightingPreview: HTMLTextAreaElement | null;
-  btnApplyLighting: HTMLButtonElement | null;
-  btnCopyLighting: HTMLButtonElement | null;
+  selConfigType: HTMLSelectElement | null;
+  configPreview: HTMLTextAreaElement | null;
+  btnApplyConfig: HTMLButtonElement | null;
+  btnCopyConfig: HTMLButtonElement | null;
   towerContainer: HTMLElement;
   readoutContainer: HTMLElement;
   stateBadge: HTMLElement | null;
@@ -30,12 +26,22 @@ export interface DomElements {
   chkGroundDisc: HTMLInputElement | null;
   chkBoardDisc: HTMLInputElement | null;
   inpSkyboxUrl: HTMLInputElement | null;
+  chkDrumSound: HTMLInputElement | null;
+  chkZoomToCursor: HTMLInputElement | null;
+  chkPreserveViewOnSideSelect: HTMLInputElement | null;
+  rngBloomStrength: HTMLInputElement | null;
+  rngBloomRadius: HTMLInputElement | null;
+  rngBloomThreshold: HTMLInputElement | null;
+  lblBloomStrength: HTMLElement | null;
+  lblBloomRadius: HTMLElement | null;
+  lblBloomThreshold: HTMLElement | null;
   btnEntrance: HTMLElement | null;
   btnReadme: HTMLElement | null;
   btnRandom: HTMLElement | null;
   btnAllOn: HTMLElement | null;
   btnIdle: HTMLElement | null;
   btnResetSeals: HTMLElement | null;
+  drumRotateGrid: HTMLElement | null;
   renderedPanel: HTMLElement | null;
   toolbarEl: Element | null;
 }
@@ -53,14 +59,10 @@ export function queryDom(): DomElements {
 
   return {
     banner: document.getElementById('error-banner'),
-    editorPanel: document.getElementById('editor-panel'),
-    lightingSection: document.getElementById('lighting-section'),
-    statePreview: document.getElementById('state-preview') as HTMLTextAreaElement | null,
-    btnApply: document.getElementById('btn-apply') as HTMLButtonElement | null,
-    btnCopy: document.getElementById('btn-copy') as HTMLButtonElement | null,
-    lightingPreview: document.getElementById('lighting-preview') as HTMLTextAreaElement | null,
-    btnApplyLighting: document.getElementById('btn-apply-lighting') as HTMLButtonElement | null,
-    btnCopyLighting: document.getElementById('btn-copy-lighting') as HTMLButtonElement | null,
+    selConfigType: document.getElementById('sel-config-type') as HTMLSelectElement | null,
+    configPreview: document.getElementById('config-preview') as HTMLTextAreaElement | null,
+    btnApplyConfig: document.getElementById('btn-apply-config') as HTMLButtonElement | null,
+    btnCopyConfig: document.getElementById('btn-copy-config') as HTMLButtonElement | null,
     towerContainer,
     readoutContainer,
     stateBadge: document.getElementById('state-badge'),
@@ -83,12 +85,22 @@ export function queryDom(): DomElements {
     chkGroundDisc: document.getElementById('chk-ground-disc') as HTMLInputElement | null,
     chkBoardDisc: document.getElementById('chk-board-disc') as HTMLInputElement | null,
     inpSkyboxUrl: document.getElementById('inp-skybox-url') as HTMLInputElement | null,
+    chkDrumSound: document.getElementById('chk-drum-sound') as HTMLInputElement | null,
+    chkZoomToCursor: document.getElementById('chk-zoom-to-cursor') as HTMLInputElement | null,
+    chkPreserveViewOnSideSelect: document.getElementById('chk-preserve-view-on-side-select') as HTMLInputElement | null,
+    rngBloomStrength: document.getElementById('rng-bloom-strength') as HTMLInputElement | null,
+    rngBloomRadius: document.getElementById('rng-bloom-radius') as HTMLInputElement | null,
+    rngBloomThreshold: document.getElementById('rng-bloom-threshold') as HTMLInputElement | null,
+    lblBloomStrength: document.getElementById('lbl-bloom-strength'),
+    lblBloomRadius: document.getElementById('lbl-bloom-radius'),
+    lblBloomThreshold: document.getElementById('lbl-bloom-threshold'),
     btnEntrance: document.getElementById('btn-entrance'),
     btnReadme: document.getElementById('btn-readme'),
     btnRandom: document.getElementById('btn-random'),
     btnAllOn: document.getElementById('btn-allon'),
     btnIdle: document.getElementById('btn-idle'),
     btnResetSeals: document.getElementById('btn-reset-seals'),
+    drumRotateGrid: document.getElementById('drum-rotate-grid'),
     renderedPanel: document.getElementById('rendered-panel'),
     toolbarEl: document.querySelector('.toolbar'),
   };
