@@ -5,35 +5,68 @@ import { LIGHT_EFFECTS } from 'ultimatedarktower';
 import type { TowerState, SealIdentifier, TowerSide } from 'ultimatedarktower';
 
 import type { ITowerDisplay } from '../types';
-import type { LightingConfig, ResolvedLightingConfig } from './types';
+import { injectStyles } from '../styles';
+import { SideButtons } from '../shared/SideButtons';
+import { DrumRotationAudio } from '../audio/DrumRotationAudio';
+
+import type { LightingConfig, ResolvedLightingConfig, CameraConfig } from './types';
 import {
   TOWER_LAYER_COUNT, LIGHTS_PER_LAYER,
   RING_AZIMUTH, CORNER_AZIMUTH,
-  LED_LAYOUT, RED_LIGHT_LAYOUT,
+  LED_LAYOUT, RED_LIGHT_LAYOUT, LEDGE_LED_LAYOUT, BASE1_LED_LAYOUT, BASE2_LED_LAYOUT,
+  BLOOM_LAYER,
 } from './constants';
-import { injectStyles } from '../styles';
+import { computeRedLightPosition, computeSealLedPose, disposeObject } from './utils';
 import { DEFAULT_LIGHTING, resolveLighting } from './LightingResolver';
-export { DEFAULT_LIGHTING, resolveLighting };
 import { LedEffectAnimator } from './LedEffectAnimator';
 import type { LedRef } from './LedEffectAnimator';
 import { CameraController } from './CameraController';
-import { SideButtons } from '../shared/SideButtons';
 import { SceneLighting } from './SceneLighting';
-import { computeRedLightPosition, computeSealBacklightPose, disposeObject } from './utils';
+import { BloomManager } from './BloomManager';
 import { EntranceAnimator } from './EntranceAnimator';
 import { GroundDiscManager } from './GroundDiscManager';
 import { SkyboxManager } from './SkyboxManager';
 import { SealManager } from './SealManager';
 import type { SealBacklightRef } from './SealManager';
-export type { SealBacklightRef };
+import { DrumManager } from './DrumManager';
 import { loadTowerModel } from './ModelLoader';
 
+// Re-exported for consumers that import directly from Tower3DView rather than the package root.
+export { DEFAULT_LIGHTING, resolveLighting };
+export type { SealBacklightRef };
+
 const DEFAULT_DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
+
+type Logger = { log(label: string, data?: Record<string, unknown>): void };
+
+const NULL_LOGGER: Logger = { log: () => { } };
+const CONSOLE_LOGGER: Logger = {
+  log(label, data) {
+    // eslint-disable-next-line no-console
+    console.log(`[Tower3DView] ${label}`, data);
+  },
+};
+
+type Tower3DViewInternals = {
+  ledRefs: Map<string, LedRef>;
+  sealManager: SealManager;
+};
+const internals = (view: Tower3DView): Tower3DViewInternals =>
+  view as unknown as Tower3DViewInternals;
 
 /** @internal — exported for unit tests only. */
 export const __testables = {
   get LED_LAYOUT(): typeof LED_LAYOUT {
     return LED_LAYOUT;
+  },
+  get LEDGE_LED_LAYOUT(): typeof LEDGE_LED_LAYOUT {
+    return LEDGE_LED_LAYOUT;
+  },
+  get BASE1_LED_LAYOUT(): typeof BASE1_LED_LAYOUT {
+    return BASE1_LED_LAYOUT;
+  },
+  get BASE2_LED_LAYOUT(): typeof BASE2_LED_LAYOUT {
+    return BASE2_LED_LAYOUT;
   },
   get RING_AZIMUTH(): readonly number[] {
     return RING_AZIMUTH;
@@ -46,22 +79,20 @@ export const __testables = {
   },
   computeRedLightPosition: (layer: number, light: number, radius: number) =>
     computeRedLightPosition(layer, light, radius),
-  computeSealBacklightPose: (
-    layer: number,
-    light: number,
-    radius: number,
-    radiusFactor: number,
-  ) => computeSealBacklightPose(layer, light, radius, radiusFactor),
+  computeSealLedPose: (layer: number, light: number, radius: number, radiusFactor: number) =>
+    computeSealLedPose(layer, light, radius, radiusFactor),
+  computeSealBacklightPose: (layer: number, light: number, radius: number, radiusFactor: number) =>
+    computeSealLedPose(layer, light, radius, radiusFactor),
   getLedRef: (view: Tower3DView, layer: number, light: number): LedRef | undefined =>
-    (view as unknown as { ledRefs: Map<string, LedRef> }).ledRefs.get(`${layer}:${light}`),
+    internals(view).ledRefs.get(`${layer}:${light}`),
   getSealNode: (view: Tower3DView, side: string, level: string): THREE.Object3D | undefined =>
-    (view as unknown as { sealManager: SealManager }).sealManager.sealNodes.get(`${side}:${level}`),
+    internals(view).sealManager.sealNodes.get(`${side}:${level}`),
   getSealNodeCount: (view: Tower3DView): number =>
-    (view as unknown as { sealManager: SealManager }).sealManager.sealNodes.size,
+    internals(view).sealManager.sealNodes.size,
   getSealBacklight: (view: Tower3DView, side: string, level: string): SealBacklightRef | undefined =>
-    (view as unknown as { sealManager: SealManager }).sealManager.sealBacklights.get(`${side}:${level}`),
+    internals(view).sealManager.sealBacklights.get(`${side}:${level}`),
   getSealBacklightCount: (view: Tower3DView): number =>
-    (view as unknown as { sealManager: SealManager }).sealManager.sealBacklights.size,
+    internals(view).sealManager.sealBacklights.size,
 };
 
 export interface Tower3DViewOptions {
@@ -80,6 +111,8 @@ export interface Tower3DViewOptions {
   showGroundDisc?: boolean;
   /** Light intensities for the three-point rig. */
   lighting?: LightingConfig;
+  /** Initial camera eye and look-target defaults. */
+  camera?: CameraConfig;
 }
 
 /**
@@ -96,14 +129,18 @@ export class Tower3DView implements ITowerDisplay {
   private readonly modelUrl: string;
   private readonly dracoDecoderPath: string;
   private readonly debug3D: boolean;
+  private readonly logger: Logger;
   private lighting: ResolvedLightingConfig;
   private readonly showGroundDisc: boolean;
+  private readonly cameraConfig: CameraConfig;
 
   private sceneLighting: SceneLighting | null = null;
   private entranceAnimator: EntranceAnimator = new EntranceAnimator();
   private groundDiscManager: GroundDiscManager | null = null;
   private skyboxManager: SkyboxManager | null = null;
   private sealManager: SealManager = new SealManager();
+  private drumAudio: DrumRotationAudio = new DrumRotationAudio();
+  private drumManager: DrumManager;
 
   private wrapper: HTMLDivElement | null = null;
   private canvasContainer: HTMLDivElement | null = null;
@@ -111,6 +148,7 @@ export class Tower3DView implements ITowerDisplay {
   private scene: THREE.Scene | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
   private renderer: THREE.WebGLRenderer | null = null;
+  private bloomManager: BloomManager | null = null;
   private controls: OrbitControls | null = null;
   private model: THREE.Group | null = null;
   private axesHelper: THREE.AxesHelper | null = null;
@@ -126,6 +164,7 @@ export class Tower3DView implements ITowerDisplay {
   private latestState: TowerState | null = null;
   private latestBrokenSeals: SealIdentifier[] = [];
   private pendingSide: TowerSide | null = null;
+  private _loadState: 'pending' | 'ready' | 'error' = 'pending';
 
   private ledRefs: Map<string, LedRef> = new Map();
   private ledAnimator: LedEffectAnimator | null = null;
@@ -133,13 +172,24 @@ export class Tower3DView implements ITowerDisplay {
   /** Optional callback fired when the selected side changes (user click or programmatic). */
   onSideChange?: (side: TowerSide) => void;
 
+  /** Optional callback fired when the GLB model fails to load. */
+  onLoadError?: (details: unknown) => void;
+
+  /** Current load state of the GLB model. */
+  get loadState(): 'pending' | 'ready' | 'error' {
+    return this._loadState;
+  }
+
   constructor(container: HTMLElement, options: Tower3DViewOptions) {
     this.container = container;
     this.modelUrl = options.modelUrl;
     this.dracoDecoderPath = options.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH;
     this.debug3D = options.debug3D ?? false;
+    this.logger = this.debug3D ? CONSOLE_LOGGER : NULL_LOGGER;
     this.lighting = resolveLighting(options.lighting);
     this.showGroundDisc = options.showGroundDisc ?? true;
+    this.cameraConfig = options.camera ?? {};
+    this.drumManager = new DrumManager(this.drumAudio);
     injectStyles();
     this.build();
     this.initScene();
@@ -147,19 +197,28 @@ export class Tower3DView implements ITowerDisplay {
     this.startRenderLoop();
   }
 
+  /** Update the 3D view with a new decoded tower state, replaying all LED effects and drum positions. */
   applyState(state: TowerState): void {
     this.latestState = state;
     if (this.wrapper) this.wrapper.style.display = '';
     this.ledAnimator?.replayAll(state);
+    this.drumManager.applyDrums(state.drum);
   }
 
+  /** Update seal backlight visibility — pass the current list of broken seals. */
   applySeals(brokenSeals: SealIdentifier[]): void {
     this.latestBrokenSeals = brokenSeals;
     this.sealManager.applySeals(brokenSeals, this.lighting);
   }
 
+  /** Tween the camera to face the given tower side. No-op if the camera is already on that side. */
   selectSide(side: TowerSide): void {
     if (this.cameraController?.getCurrentSide() === side) return;
+    this.snapSide(side);
+  }
+
+  /** Always snaps the camera to `side`, even if already on that side. Used by side buttons. */
+  private snapSide(side: TowerSide): void {
     this.cameraController?.snapToSide(side);
     // Stash the pending side so loadModel can replay the tween once the camera
     // is ready (snapToSide skips the tween before the model loads).
@@ -167,6 +226,7 @@ export class Tower3DView implements ITowerDisplay {
     this.onSideChange?.(side);
   }
 
+  /** Turn all LEDs off, stop drum audio, and hide the canvas wrapper until the next `applyState` call. */
   showIdle(): void {
     if (this.ledAnimator) {
       for (let layer = 0; layer < TOWER_LAYER_COUNT; layer++) {
@@ -175,9 +235,36 @@ export class Tower3DView implements ITowerDisplay {
         }
       }
     }
+    this.drumManager.stopAll();
     if (this.wrapper) this.wrapper.style.display = 'none';
   }
 
+  /**
+   * Set the URL of the audio asset played while drums rotate.
+   * Pass null to fall back to the procedural placeholder tone. Decode runs in
+   * the background; rotations that fire mid-decode use the placeholder.
+   */
+  setDrumRotationSoundUrl(url: string | null): void {
+    this.drumAudio.setUrl(url);
+  }
+
+  /**
+   * Enable or disable drum rotation audio. Disabled by default — consumers
+   * must opt in (which also satisfies browser autoplay-policy gestures).
+   */
+  setDrumRotationSoundEnabled(enabled: boolean): void {
+    this.drumAudio.setEnabled(enabled);
+  }
+
+  /** When enabled, preserve the current camera orbit instead of resetting to the default fit on side selection. */
+  setPreserveViewOnSideSelect(enabled: boolean): void {
+    this.cameraController?.setPreserveViewOnSideSelect(enabled);
+  }
+
+  /**
+   * Live-update individual scene light intensities and key-light position.
+   * Stops any active entrance or breathing animation so manual values take precedence.
+   */
   setSceneLights(opts: {
     hemi?: number;
     key?: number;
@@ -198,7 +285,9 @@ export class Tower3DView implements ITowerDisplay {
         if (sl.isBreathing) sl.startBreathing(opts.key, this.lighting);
       }
       if (opts.fill !== undefined) sl.fill.intensity = opts.fill;
-      if (opts.exposure !== undefined) this.renderer!.toneMappingExposure = opts.exposure;
+      if (opts.exposure !== undefined && this.renderer) {
+        this.renderer.toneMappingExposure = opts.exposure;
+      }
       if (opts.keyX !== undefined) sl.key.position.x = opts.keyX;
       if (opts.keyY !== undefined) sl.key.position.y = opts.keyY;
       if (opts.keyZ !== undefined) sl.key.position.z = opts.keyZ;
@@ -215,16 +304,41 @@ export class Tower3DView implements ITowerDisplay {
     ];
   }
 
-  /** Return a JSON-safe snapshot of the full resolved lighting configuration. */
+  /** Return a deep-cloned snapshot of the full resolved lighting configuration. */
   getLightingConfig(): ResolvedLightingConfig {
-    return JSON.parse(JSON.stringify(this.lighting)) as ResolvedLightingConfig;
+    return structuredClone(this.lighting);
   }
 
   /** Resolve and apply a new lighting configuration at runtime. */
   applyLightingConfig(config: LightingConfig): void {
-    this.lighting = resolveLighting(config);
+    this.lighting = resolveLighting(config, this.lighting);
     this.applyLightingToScene();
     if (this.latestState) this.ledAnimator?.replayAll(this.latestState);
+  }
+
+  /**
+   * Return the current camera config (elevation + target-height factors).
+   * @remarks After `dispose()`, `cameraController` is null and this returns synthetic
+   * defaults derived from the construction-time `camera` option. Behavior post-dispose
+   * is undefined — do not rely on these values.
+   */
+  getCameraConfig(): Required<CameraConfig> {
+    return this.cameraController?.getCameraConfig() ?? {
+      elevationFactor: this.cameraConfig.elevationFactor ?? -0.5,
+      targetHeightFactor: this.cameraConfig.targetHeightFactor ?? -0.15,
+      zoomToCursor: this.cameraConfig.zoomToCursor ?? true,
+      preserveViewOnSideSelect: false,
+    };
+  }
+
+  /** Update the camera elevation and/or look-target height and refit immediately. */
+  applyCameraConfig(config: CameraConfig): void {
+    this.cameraController?.applyCameraConfig(config);
+  }
+
+  /** Enable or disable zoom-toward-cursor on scroll-wheel zoom-in. */
+  setZoomToCursor(enabled: boolean): void {
+    this.cameraController?.setZoomToCursor(enabled);
   }
 
   /**
@@ -256,6 +370,7 @@ export class Tower3DView implements ITowerDisplay {
     this.skyboxManager?.apply(url ?? '', this.lighting.scene.background);
   }
 
+  /** Cancel the render loop, release all three.js resources, and remove the canvas from the DOM. */
   dispose(): void {
     this.cameraController?.dispose();
     this.cameraController = null;
@@ -285,6 +400,8 @@ export class Tower3DView implements ITowerDisplay {
     }
     this.ledRefs.clear();
     this.sealManager.dispose();
+    this.drumManager.dispose();
+    this.drumAudio.dispose();
     if (this.model) {
       disposeObject(this.model);
       this.model = null;
@@ -293,6 +410,8 @@ export class Tower3DView implements ITowerDisplay {
       this.axesHelper.removeFromParent();
       this.axesHelper = null;
     }
+    this.bloomManager?.dispose();
+    this.bloomManager = null;
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer.forceContextLoss();
@@ -312,8 +431,6 @@ export class Tower3DView implements ITowerDisplay {
     this.pendingSide = null;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-
   private build(): void {
     this.wrapper = document.createElement('div');
     this.wrapper.className = 't3v-wrapper';
@@ -321,7 +438,7 @@ export class Tower3DView implements ITowerDisplay {
     const controls = document.createElement('div');
     controls.className = 't3v-controls';
 
-    this.sideButtons = new SideButtons((side) => this.selectSide(side));
+    this.sideButtons = new SideButtons((side) => this.snapSide(side));
     // Reflect the post-load default camera side ('north') up front so the N button
     // is highlighted before the GLB finishes loading, matching the 2D view.
     this.sideButtons.setActive('north');
@@ -366,6 +483,17 @@ export class Tower3DView implements ITowerDisplay {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.canvasContainer.appendChild(this.renderer.domElement);
 
+    if (lighting.scene.bloom.enabled) {
+      this.bloomManager = new BloomManager(
+        this.scene,
+        this.camera,
+        this.renderer,
+        lighting,
+        width,
+        height,
+      );
+    }
+
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
@@ -381,7 +509,7 @@ export class Tower3DView implements ITowerDisplay {
       this.scene.add(this.axesHelper);
     }
 
-    this.debugLog('initScene', {
+    this.logger.log('initScene', {
       width,
       height,
       camera: {
@@ -395,7 +523,9 @@ export class Tower3DView implements ITowerDisplay {
     this.resizeObserver = new ResizeObserver(() => this.handleResize());
     this.resizeObserver.observe(this.canvasContainer);
 
-    this.cameraController = new CameraController(this.camera, this.controls, this.sideButtons!);
+    this.cameraController = new CameraController(this.camera, this.controls, this.sideButtons!, this.cameraConfig);
+    this.cameraController.onSideChange = (side) => this.onSideChange?.(side);
+    this.cameraController.bindZoomTowardCursor(this.renderer.domElement);
 
     if (this.lighting.scene.skyboxUrl) {
       this.skyboxManager.apply(this.lighting.scene.skyboxUrl, this.lighting.scene.background);
@@ -412,7 +542,7 @@ export class Tower3DView implements ITowerDisplay {
         this.modelRadius = modelRadius;
         this.modelBottomY = modelBottomY;
 
-        this.debugLog('modelLoaded', {
+        this.logger.log('modelLoaded', {
           url,
           radius: modelRadius,
           rootPosition: root.position.toArray(),
@@ -424,6 +554,7 @@ export class Tower3DView implements ITowerDisplay {
         }
 
         this.sealManager.buildSealNodes(root);
+        this.drumManager.buildDrumNodes(root);
         this.scene.add(root);
         this.model = root;
 
@@ -431,9 +562,12 @@ export class Tower3DView implements ITowerDisplay {
         if (this.showGroundDisc) this.groundDiscManager?.build(modelRadius, modelBottomY, this.lighting);
         this.buildLeds();
         this.sealManager.buildSealBacklights(root, modelRadius, this.lighting);
+        this.sealManager.setDebug(this.debug3D, root);
         this.sealManager.warnOnMissing();
+        this.drumManager.warnOnMissing();
         if (this.latestBrokenSeals.length > 0) this.applySeals(this.latestBrokenSeals);
-        this.cameraController?.fitToModel(modelRadius, (l, d) => this.debugLog(l, d));
+        if (this.latestState) this.drumManager.applyDrums(this.latestState.drum, { animate: false });
+        this.cameraController?.fitToModel(modelRadius, (l, d) => this.logger.log(l, d));
         if (this.pendingSide !== null) {
           const pending = this.pendingSide;
           this.pendingSide = null;
@@ -441,11 +575,14 @@ export class Tower3DView implements ITowerDisplay {
         }
 
         // Replay state AFTER all visuals are built (seals + LEDs)
+        this._loadState = 'ready';
         if (this.latestState) this.applyState(this.latestState);
       },
       (details) => {
         // eslint-disable-next-line no-console
         console.error('[Tower3DView] Failed to load GLB model:', details);
+        this._loadState = 'error';
+        this.onLoadError?.(details);
       },
     );
   }
@@ -459,14 +596,28 @@ export class Tower3DView implements ITowerDisplay {
     this.groundDiscManager?.updateLighting(lighting, this.modelRadius, this.modelBottomY);
 
     const redHaloDistance = this.modelRadius * lighting.leds.red.haloDistanceFraction;
-    for (const ref of this.ledRefs.values()) {
+    const ledgeColor = new THREE.Color(lighting.leds.ledgeLeds.color);
+    const baseColor = new THREE.Color(lighting.leds.baseLeds.color);
+    for (const [key, ref] of this.ledRefs.entries()) {
+      const layer = parseInt(key.split(':')[0], 10);
       ref.redLight.color.setHex(lighting.leds.red.color);
       ref.redLight.distance = redHaloDistance;
       ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
       ref.redLight.visible = ref.driver.v > 0.001;
+
+      if (ref.proxyMesh) {
+        const col = layer >= 4 ? baseColor : ledgeColor;
+        (ref.proxyMesh.material as THREE.MeshBasicMaterial).color.copy(col);
+      }
+      if (ref.haloSprite) {
+        const col = layer >= 4 ? baseColor : ledgeColor;
+        (ref.haloSprite.material as THREE.SpriteMaterial).color.copy(col);
+      }
     }
 
     this.sealManager.updateLighting(lighting, this.modelRadius);
+
+    this.bloomManager?.applyConfig(lighting);
   }
 
   /**
@@ -476,8 +627,11 @@ export class Tower3DView implements ITowerDisplay {
   private buildLeds(): void {
     if (!this.model) return;
 
-    const { red } = this.lighting.leds;
+    const { red, ledgeLeds, baseLeds } = this.lighting.leds;
     const redHaloDistance = this.modelRadius * red.haloDistanceFraction;
+
+    // Radial gradient texture shared by ledge and base halo sprites.
+    const gradTex = this.createLedgeGradientTexture();
 
     for (let layer = 0; layer < TOWER_LAYER_COUNT; layer++) {
       for (let light = 0; light < LIGHTS_PER_LAYER; light++) {
@@ -487,32 +641,138 @@ export class Tower3DView implements ITowerDisplay {
         redLight.position.set(redPos.x, redPos.y, redPos.z);
         this.model.add(redLight);
 
-        this.ledRefs.set(`${layer}:${light}`, {
-          redLight,
-          driver: { v: 0 },
-          tween: null,
-        });
+        const ref: LedRef = { redLight, driver: { v: 0 }, tween: null };
+
+        // Layer 3 = LEDGE — add ball-type LED visuals (proxy sphere + halo sprite).
+        if (layer === 3) {
+          const { x, y, z } = redPos;
+
+          const proxyRadius = this.modelRadius * ledgeLeds.proxy.sizeFactor;
+          const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
+          const proxyMat = new THREE.MeshBasicMaterial({
+            color: ledgeLeds.color,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            toneMapped: false,
+          });
+          const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
+          proxyMesh.position.set(x, y, z);
+          proxyMesh.layers.enable(BLOOM_LAYER);
+          proxyMesh.renderOrder = 2;
+          proxyMesh.castShadow = false;
+          proxyMesh.receiveShadow = false;
+          proxyMesh.visible = false;
+          this.model.add(proxyMesh);
+          ref.proxyMesh = proxyMesh;
+
+          const haloMat = new THREE.SpriteMaterial({
+            color: ledgeLeds.color,
+            map: gradTex,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            toneMapped: false,
+          });
+          const haloSprite = new THREE.Sprite(haloMat);
+          const haloScale = this.modelRadius * ledgeLeds.halo.sizeFactor;
+          haloSprite.scale.setScalar(haloScale);
+          haloSprite.position.set(x, y, z);
+          haloSprite.layers.enable(BLOOM_LAYER);
+          haloSprite.renderOrder = 3;
+          haloSprite.visible = false;
+          this.model.add(haloSprite);
+          ref.haloSprite = haloSprite;
+        }
+
+        // Layers 4–5 = BASE1/BASE2 — same ball-type LED visuals.
+        if (layer >= 4) {
+          const { x, y, z } = redPos;
+
+          const proxyRadius = this.modelRadius * baseLeds.proxy.sizeFactor;
+          const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
+          const proxyMat = new THREE.MeshBasicMaterial({
+            color: baseLeds.color,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            toneMapped: false,
+          });
+          const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
+          proxyMesh.position.set(x, y, z);
+          proxyMesh.layers.enable(BLOOM_LAYER);
+          proxyMesh.renderOrder = 2;
+          proxyMesh.castShadow = false;
+          proxyMesh.receiveShadow = false;
+          proxyMesh.visible = false;
+          this.model.add(proxyMesh);
+          ref.proxyMesh = proxyMesh;
+
+          const haloMat = new THREE.SpriteMaterial({
+            color: baseLeds.color,
+            map: gradTex,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            toneMapped: false,
+          });
+          const haloSprite = new THREE.Sprite(haloMat);
+          const haloScale = this.modelRadius * baseLeds.halo.sizeFactor;
+          haloSprite.scale.setScalar(haloScale);
+          haloSprite.position.set(x, y, z);
+          haloSprite.layers.enable(BLOOM_LAYER);
+          haloSprite.renderOrder = 3;
+          haloSprite.visible = false;
+          this.model.add(haloSprite);
+          ref.haloSprite = haloSprite;
+        }
+
+        this.ledRefs.set(`${layer}:${light}`, ref);
       }
     }
 
-    this.debugLog('buildLeds', { count: this.ledRefs.size, radius: this.modelRadius });
+    this.logger.log('buildLeds', { count: this.ledRefs.size, radius: this.modelRadius });
 
-    this.ledAnimator = new LedEffectAnimator(this.ledRefs, () => this.lighting, this.sealManager.sealBacklights);
+    this.ledAnimator = new LedEffectAnimator(this.ledRefs, () => this.lighting, this.sealManager);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  /** Create a radial-gradient canvas texture for ledge LED halo sprites. */
+  private createLedgeGradientTexture(): THREE.CanvasTexture {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const center = size / 2;
+      const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+    }
+    return new THREE.CanvasTexture(canvas);
+  }
 
   private startRenderLoop(): void {
     const tick = () => {
       this.rafId = requestAnimationFrame(tick);
       this.controls?.update();
-      this.sceneLighting?.fill.lookAt(0, 0, 0);
+      this.cameraController?.tickDerivedSide();
+      this.sceneLighting?.tick();
       if (this.renderer && this.scene && this.camera) {
-        this.renderer.render(this.scene, this.camera);
+        if (this.bloomManager) {
+          this.bloomManager.render();
+        } else {
+          this.renderer.render(this.scene, this.camera);
+        }
         if (this.debug3D) {
           this.frameCount += 1;
           if (this.frameCount % 120 === 0) {
-            this.debugLog('renderHeartbeat', {
+            this.logger.log('renderHeartbeat', {
               frame: this.frameCount,
               camera: this.camera.position.toArray(),
               target: this.controls?.target.toArray() ?? null,
@@ -528,9 +788,10 @@ export class Tower3DView implements ITowerDisplay {
     if (!this.renderer || !this.camera) return;
     const { width, height } = this.getCanvasSize();
     this.renderer.setSize(width, height, false);
+    this.bloomManager?.setSize(width, height);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.debugLog('resize', {
+    this.logger.log('resize', {
       width,
       height,
       aspect: this.camera.aspect,
@@ -546,12 +807,6 @@ export class Tower3DView implements ITowerDisplay {
       width: Math.max(1, Math.floor(rect.width)),
       height: Math.max(1, Math.floor(rect.height)),
     };
-  }
-
-  private debugLog(label: string, data: Record<string, unknown>): void {
-    if (!this.debug3D) return;
-    // eslint-disable-next-line no-console
-    console.log(`[Tower3DView] ${label}`, data);
   }
 
 }

@@ -1,16 +1,16 @@
 import type { TowerState, SealIdentifier, TowerSide } from 'ultimatedarktower';
-import type { LightingConfig, ResolvedLightingConfig } from './3d/types';
+import type { LightingConfig, ResolvedLightingConfig, CameraConfig } from './3d/types';
 import type { TowerDisplayOptions, ITowerDisplay, RendererType } from './types';
 import { TowerStateReadout } from './TowerStateReadout';
 import { TowerSideView } from './2d/TowerSideView';
 import { Tower3DView } from './3d/Tower3DView';
+import { TowerStateController } from './state/TowerStateController';
+import { injectStyles, suppressStyleInjection } from './styles';
 
 function normalizeRenderers(input?: RendererType | RendererType[]): RendererType[] {
   if (!input) return ['readout', 'side-view'];
   return Array.isArray(input) ? input : [input];
 }
-
-const sealKey = (seal: SealIdentifier): string => `${seal.side}:${seal.level}`;
 
 function createRenderer(type: RendererType, container: HTMLElement, options: TowerDisplayOptions): ITowerDisplay {
   switch (type) {
@@ -32,6 +32,7 @@ function createRenderer(type: RendererType, container: HTMLElement, options: Tow
         debug3D: options.debug3D,
         showGroundDisc: options.showGroundDisc,
         lighting: options.lighting,
+        camera: options.camera,
       });
     default:
       throw new Error(`Unknown renderer type: ${type}`);
@@ -57,14 +58,20 @@ export class TowerDisplay implements ITowerDisplay {
 
   private readonly onSealClickCallback?: (seal: SealIdentifier) => void;
   private readonly onSideChangeCallback?: (side: TowerSide) => void;
-  private readonly togglesEnabled: boolean;
-  private userToggledSeals: Map<string, SealIdentifier> = new Map();
-  private externalBrokenSeals: SealIdentifier[] = [];
+  private readonly state: TowerStateController;
 
   constructor(options: TowerDisplayOptions) {
     this.onSealClickCallback = options.onSealClick;
     this.onSideChangeCallback = options.onSideChange;
-    this.togglesEnabled = options.clickToToggleSeals !== false;
+    this.state = new TowerStateController({
+      togglesEnabled: options.clickToToggleSeals !== false,
+    });
+
+    if (options.injectStyles === false) {
+      suppressStyleInjection();
+    } else {
+      injectStyles();
+    }
 
     const types = normalizeRenderers(options.renderers);
 
@@ -87,6 +94,7 @@ export class TowerDisplay implements ITowerDisplay {
       }
       if (r instanceof Tower3DView) {
         r.onSideChange = (side) => this.handleSideChange(side);
+        if (options.onLoadError) r.onLoadError = options.onLoadError;
       }
       if (r instanceof TowerStateReadout) {
         // Enable clickable seal buttons in the readout grid; route clicks
@@ -94,42 +102,47 @@ export class TowerDisplay implements ITowerDisplay {
         // path as 2D seal clicks.
         r.clickToToggleSeals = true;
         r.onSealClick = (seal) => this.handleSealClick(seal);
+        // Enable clickable LED circles; route changes through TowerDisplay so
+        // all renderers (3D + 2D) receive the overridden state.
+        r.clickToToggleLeds = true;
+        r.onLedClick = (layer, light, effect) => this.handleLedClick(layer, light, effect);
       }
     }
   }
 
   /** Update the display with a new decoded tower state. */
   applyState(state: TowerState): void {
-    for (const r of this.renderers) r.applyState(state);
+    const resolved = this.state.applyState(state);
+    for (const r of this.renderers) r.applyState(resolved);
+  }
+
+  /**
+   * Programmatically override a single LED effect on all active renderers.
+   * Useful when the readout is used standalone (outside `TowerDisplay`) and
+   * LED-click callbacks need to propagate to the 3D / 2D views owned by this
+   * instance.  Equivalent to the user clicking the LED in the readout.
+   */
+  setLedOverride(layer: number, light: number, effect: number): void {
+    this.handleLedClick(layer, light, effect);
   }
 
   /** Update seal visibility — pass the current list of broken seals. */
   applySeals(brokenSeals: SealIdentifier[]): void {
-    this.externalBrokenSeals = brokenSeals;
-    this.fanOutSeals();
+    const list = this.state.applySeals(brokenSeals);
+    for (const r of this.renderers) r.applySeals(list);
+  }
+
+  private handleLedClick(layer: number, light: number, newEffect: number): void {
+    const resolved = this.state.setLedOverride(layer, light, newEffect);
+    if (resolved) {
+      for (const r of this.renderers) r.applyState(resolved);
+    }
   }
 
   private handleSealClick(seal: SealIdentifier): void {
-    if (this.togglesEnabled) {
-      const key = sealKey(seal);
-      if (this.userToggledSeals.has(key)) {
-        this.userToggledSeals.delete(key);
-      } else {
-        this.userToggledSeals.set(key, seal);
-      }
-      this.fanOutSeals();
-    }
-    this.onSealClickCallback?.(seal);
-  }
-
-  private fanOutSeals(): void {
-    const merged = new Map<string, SealIdentifier>();
-    for (const s of this.externalBrokenSeals) merged.set(sealKey(s), s);
-    for (const [key, seal] of this.userToggledSeals) {
-      if (!merged.has(key)) merged.set(key, seal);
-    }
-    const list = Array.from(merged.values());
+    const list = this.state.toggleSeal(seal);
     for (const r of this.renderers) r.applySeals(list);
+    this.onSealClickCallback?.(seal);
   }
 
   /** Select the facing side on every side-aware renderer (2D SVG + 3D camera). */
@@ -148,6 +161,11 @@ export class TowerDisplay implements ITowerDisplay {
   /** Reset the display to its idle/waiting state. */
   showIdle(): void {
     for (const r of this.renderers) r.showIdle();
+  }
+
+  /** Current GLB load state. Returns undefined when no 3D view is active. */
+  get loadState(): 'pending' | 'ready' | 'error' | undefined {
+    return this.view3d?.loadState;
   }
 
   /** Live-update scene light intensities. Only affects the 3D view; no-op otherwise. */
@@ -193,12 +211,50 @@ export class TowerDisplay implements ITowerDisplay {
     this.view3d?.playEntrance();
   }
 
+  /** Get the current camera config for the 3D view. Returns undefined when no 3D view is active. */
+  getCameraConfig(): Required<CameraConfig> | undefined {
+    return this.view3d?.getCameraConfig();
+  }
+
+  /** Apply a new camera config to the 3D view. No-op when no 3D view is active. */
+  applyCameraConfig(config: CameraConfig): void {
+    this.view3d?.applyCameraConfig(config);
+  }
+
+  /** Enable or disable zoom-toward-cursor on scroll-wheel zoom-in. No-op when no 3D view is active. */
+  setZoomToCursor(enabled: boolean): void {
+    this.view3d?.setZoomToCursor(enabled);
+  }
+
+  /** Preserve the current 3D view when selecting a side instead of resetting to the default fit. */
+  setPreserveViewOnSideSelect(enabled: boolean): void {
+    this.view3d?.setPreserveViewOnSideSelect(enabled);
+  }
+
+  /**
+   * Set the URL of the audio asset played while drums rotate in the 3D view.
+   * Pass null to fall back to the procedural placeholder tone. Decode runs in
+   * the background; rotations that fire mid-decode use the placeholder.
+   * No-op when no 3D renderer is active.
+   */
+  setDrumRotationSoundUrl(url: string | null): void {
+    this.view3d?.setDrumRotationSoundUrl(url);
+  }
+
+  /**
+   * Enable or disable drum rotation audio. Disabled by default — consumers
+   * must opt in (which also satisfies browser autoplay-policy gestures).
+   * No-op when no 3D renderer is active.
+   */
+  setDrumRotationSoundEnabled(enabled: boolean): void {
+    this.view3d?.setDrumRotationSoundEnabled(enabled);
+  }
+
   /** Remove all rendered DOM content and reset internal state. */
   dispose(): void {
     for (const r of this.renderers) r.dispose();
     this.renderers.length = 0;
-    this.userToggledSeals.clear();
-    this.externalBrokenSeals = [];
+    this.state.reset();
     this.root.remove();
   }
 }

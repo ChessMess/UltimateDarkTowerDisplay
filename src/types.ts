@@ -1,8 +1,9 @@
 import type { TowerState, TowerSide, SealIdentifier } from 'ultimatedarktower';
-import type { LightingConfig } from './3d/types';
+import type { LightingConfig, CameraConfig } from './3d/types';
 
 export type { TowerSide, SealIdentifier };
 export type { LightingConfig };
+export type { CameraConfig };
 
 /** Identifies which renderer implementation to use. */
 export type RendererType = 'readout' | 'side-view' | '3d-view';
@@ -23,6 +24,8 @@ export interface TowerDisplayOptions {
   clickToToggleSeals?: boolean;
   /** Called when any side-aware renderer changes its selected side. */
   onSideChange?: (side: TowerSide) => void;
+  /** Called if the 3D GLB model fails to load. Only fires when `renderers` includes `'3d-view'`. */
+  onLoadError?: (details: unknown) => void;
   /**
    * URL of the GLB model for the 3D view. **Required** when `renderers` includes `'3d-view'`.
    * The package ships the model at `dist/3d/assets/tower.glb` — reference it through your
@@ -38,6 +41,16 @@ export interface TowerDisplayOptions {
   showGroundDisc?: boolean;
   /** Light intensities for the 3D view. Forwarded to Tower3DView. */
   lighting?: LightingConfig;
+  /** Initial camera eye and look-target defaults for the 3D view. Forwarded to Tower3DView. */
+  camera?: CameraConfig;
+  /**
+   * When false, skips injecting the built-in `<style>` tag into `document.head`.
+   * Use this in environments with a strict Content Security Policy (e.g. Electron)
+   * where `'unsafe-inline'` is not allowed for `style-src`. You must then include
+   * the exported {@link TOWER_DISPLAY_CSS} string via your own bundler or stylesheet.
+   * Defaults to true.
+   */
+  injectStyles?: boolean;
 }
 
 /** Public interface for all display implementations. */

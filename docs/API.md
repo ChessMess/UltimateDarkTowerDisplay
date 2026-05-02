@@ -14,6 +14,7 @@ import {
 import type {
   TowerDisplayOptions,
   Tower3DViewOptions,
+  CameraConfig,
   ITowerDisplay,
   RendererType,
   TowerSide,
@@ -41,18 +42,20 @@ const display = new TowerDisplay({
 new TowerDisplay(options: TowerDisplayOptions)
 ```
 
-| Parameter                    | Type                             | Default                    | Description                                                                                                                                                                  |
-| ---------------------------- | -------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `options.container`          | `HTMLElement`                    | —                          | DOM element to render into                                                                                                                                                   |
-| `options.renderers`          | `RendererType \| RendererType[]` | `['readout', 'side-view']` | Which renderer(s) to show                                                                                                                                                    |
-| `options.onSealClick`        | `(seal: SealIdentifier) => void` | —                          | Callback fired whenever the user clicks a seal in the side view or the readout seal grid                                                                                     |
-| `options.clickToToggleSeals` | `boolean`                        | `true`                     | When `true`, clicking a seal toggles its visibility across every active renderer (2D hides in 3D, and vice-versa). Set to `false` to disable click-driven toggling entirely. |
-| `options.onSideChange`       | `(side: TowerSide) => void`      | —                          | Callback fired whenever the user or an external `selectSide` call moves the active side on any side-aware renderer                                                           |
-| `options.modelUrl`           | `string`                         | bundled GLB                | Forwarded to `Tower3DView` — override the default bundled model URL                                                                                                          |
-| `options.dracoDecoderPath`   | `string`                         | gstatic CDN                | Forwarded to `Tower3DView` — override where Draco decoder wasm/js files are loaded from                                                                                      |
-| `options.debug3D`            | `boolean`                        | `false`                    | Forwarded to `Tower3DView` — enables diagnostic logs, render heartbeats, and axes helpers                                                                                    |
-| `options.showGroundDisc`     | `boolean`                        | `true`                     | Forwarded to `Tower3DView` — shows the noir ground disc that catches the key-light shadow                                                                                    |
-| `options.lighting`           | `LightingConfig`                 | `DEFAULT_LIGHTING`         | Forwarded to `Tower3DView` — see [`LightingConfig`](#lightingconfig)                                                                                                         |
+| Parameter                    | Type                             | Default                             | Description                                                                                                                                                                                                       |
+| ---------------------------- | -------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `options.container`          | `HTMLElement`                    | —                                   | DOM element to render into                                                                                                                                                                                        |
+| `options.renderers`          | `RendererType \| RendererType[]` | `['readout', 'side-view']`          | Which renderer(s) to show                                                                                                                                                                                         |
+| `options.onSealClick`        | `(seal: SealIdentifier) => void` | —                                   | Callback fired whenever the user clicks a seal in the side view or the readout seal grid                                                                                                                          |
+| `options.clickToToggleSeals` | `boolean`                        | `true`                              | When `true`, clicking a seal toggles its visibility across every active renderer (2D hides in 3D, and vice-versa). Set to `false` to disable click-driven toggling entirely.                                      |
+| `options.onSideChange`       | `(side: TowerSide) => void`      | —                                   | Callback fired whenever the active side changes on any side-aware renderer — via an explicit `selectSide` call, a side-button click, or (for the 3D view) the user orbiting the camera into a new cardinal facing |
+| `options.onLoadError`        | `(details: unknown) => void`     | —                                   | Callback fired if the 3D GLB model fails to load. Only fires when `renderers` includes `'3d-view'`. Check `display.loadState` to poll load status without a callback.                                            |
+| `options.modelUrl`           | `string`                         | bundled GLB                         | Forwarded to `Tower3DView` — override the default bundled model URL                                                                                                                                               |
+| `options.dracoDecoderPath`   | `string`                         | gstatic CDN                         | Forwarded to `Tower3DView` — override where Draco decoder wasm/js files are loaded from                                                                                                                           |
+| `options.debug3D`            | `boolean`                        | `false`                             | Forwarded to `Tower3DView` — enables diagnostic logs, render heartbeats, and axes helpers                                                                                                                         |
+| `options.showGroundDisc`     | `boolean`                        | `true`                              | Forwarded to `Tower3DView` — shows the noir ground disc that catches the key-light shadow                                                                                                                         |
+| `options.lighting`           | `LightingConfig`                 | `DEFAULT_LIGHTING`                  | Forwarded to `Tower3DView` — see [`LightingConfig`](#lightingconfig)                                                                                                                                              |
+| `options.camera`             | `CameraConfig`                   | see [`CameraConfig`](#cameraconfig) | Forwarded to `Tower3DView` — initial camera framing defaults and runtime behavior flags                                                                                                                           |
 
 #### Methods
 
@@ -127,6 +130,18 @@ Show or hide the noir ground disc that catches the key-light shadow. No-op when 
 ##### `playEntrance(): void`
 
 Trigger the cinematic entrance sequence on the 3D view: the tower silhouette fades up from black, the key light sweeps in and overshoots, then settles while the idle breathing pulse starts. Safe to call repeatedly — any in-flight entrance tween is cancelled before the new one begins. No-op when no 3D view is active.
+
+##### `setDrumRotationSoundUrl(url: string | null): void`
+
+Set the URL of the audio asset played in the 3D view while drums rotate. Pass `null` to fall back to a procedural placeholder tone. Decode happens in the background; rotations that fire mid-decode use the placeholder. No-op when no 3D view is active.
+
+##### `setDrumRotationSoundEnabled(enabled: boolean): void`
+
+Enable or disable drum rotation audio in the 3D view. Disabled by default — consumers must opt in (which also satisfies browser autoplay-policy gestures, since the toggle is typically wired to a click). No-op when no 3D view is active.
+
+##### `setPreserveViewOnSideSelect(enabled: boolean): void`
+
+Toggle the `preserveViewOnSideSelect` flag on the active 3D camera. When `true`, clicking a side button (or calling `selectSide`) rotates the camera azimuth to the new cardinal while preserving the current orbit target, tilt, pan offset, and zoom distance. When `false` (the default), the camera snaps back to the fitted default framing each time. No-op when no 3D view is active.
 
 ---
 
@@ -229,8 +244,11 @@ new Tower3DView(container: HTMLElement, options?: Tower3DViewOptions)
 | `debug3D`          | `boolean`        | `false`                                                   | Enables diagnostic console logs, render heartbeats, and an origin axes helper |
 | `showGroundDisc`   | `boolean`        | `true`                                                    | Show the noir ground disc that catches the key-light shadow                   |
 | `lighting`         | `LightingConfig` | `DEFAULT_LIGHTING`                                        | Deep-merged nested config for every lighting-tunable value — see below        |
+| `camera`           | `CameraConfig`   | see [`CameraConfig`](#cameraconfig)                       | Initial camera framing defaults and runtime behavior flags — see below        |
 
 ##### `LightingConfig`
+
+> See [LIGHTING.md](LIGHTING.md) for the complete lighting reference — every subsystem (scene rig, bloom, red ring LEDs, seal backlights, ground disc, skybox, animations) with defaults, source links, and tuning recipes.
 
 Every lighting-tunable value consumed by the 3D view lives under a single nested config. All fields are optional — unset fields fall back to the exported `DEFAULT_LIGHTING` constant. User-supplied values are deep-merged over the defaults at construction time.
 
@@ -259,6 +277,12 @@ interface LightingConfig {
       position?: [number, number, number]; // [-4, 1.5, -8] — camera-local
     };
     exposure?: number; // 0.7 (renderer tone-mapping)
+    bloom?: {
+      enabled?: boolean;     // true — enable post-process bloom (UnrealBloomPass)
+      strength?: number;     // 1.5 — glow intensity (0–3)
+      radius?: number;       // 0.5 — bloom spread (0–1)
+      threshold?: number;    // 0.0 — luminance threshold (0 = all bright pixels)
+    };
   };
   leds?: {
     red?: { color?: number; maxHalo?: number; haloDistanceFraction?: number };
@@ -290,6 +314,14 @@ new Tower3DView(el, { lighting: { leds: { red: { color: 0x00ff00 } } } }); // gr
 new Tower3DView(el, { lighting: { animation: { breatheS: 3 } } }); // slower breathe
 ````
 
+#### Public Properties
+
+| Property       | Type                             | Default     | Description                                                                                                                                                                                                    |
+| -------------- | -------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onSideChange` | `(side: TowerSide) => void`      | —           | Callback fired when the active side changes — either via `selectSide`, a side-button click, or the user orbiting the camera into a new cardinal facing (per-frame detection, fires once per quadrant crossing) |
+| `onLoadError`  | `(details: unknown) => void`     | —           | Callback fired if the GLB model fails to load. Assign before or immediately after construction.                                                                                                                |
+| `loadState`    | `'pending' \| 'ready' \| 'error'` | `'pending'` | Read-only getter reflecting the current GLB load state. Transitions to `'ready'` on success or `'error'` on failure.                                                                                           |
+
 #### Methods
 
 Core display methods: `applyState(state)`, `applySeals(brokenSeals)`, `showIdle()`, `dispose()`.
@@ -313,6 +345,33 @@ Show or hide the noir ground disc.
 ##### `playEntrance(): void`
 
 Trigger the cinematic entrance sequence. See [`TowerDisplay#playEntrance`](#playentrance-void).
+
+##### `setDrumRotationSoundUrl(url: string | null): void` / `setDrumRotationSoundEnabled(enabled: boolean): void`
+
+Same signatures as the matching [`TowerDisplay`](#setdrumrotationsoundurlurl-string--null-void) methods. See [Drum rotation](#drum-rotation) below.
+
+##### `setPreserveViewOnSideSelect(enabled: boolean): void`
+
+Toggle whether side-button snaps preserve the current orbit state. See [`TowerDisplay#setPreserveViewOnSideSelect`](#setpreserveviewonsideselectenabled-boolean-void).
+
+##### `getCameraConfig(): Required<CameraConfig>`
+
+Return a snapshot of the current resolved camera configuration (all four fields guaranteed present). Reflects values that were last applied via the constructor `camera` option or `applyCameraConfig`. Returns synthesized defaults post-`dispose()`.
+
+##### `applyCameraConfig(config: CameraConfig): void`
+
+Apply a partial camera configuration at runtime. Any fields provided overwrite the corresponding current values; omitted fields are unchanged. If the model is loaded, `elevationFactor` / `targetHeightFactor` changes immediately refit the camera.
+
+```ts
+view3d.applyCameraConfig({ preserveViewOnSideSelect: true });
+view3d.applyCameraConfig({ zoomToCursor: false, elevationFactor: -0.3 });
+```
+
+##### Drum rotation
+
+`applyState()` rotates the three named drum meshes (`drum_top`, `drum_middle`, `drum_bottom`) around the Y axis to match `state.drum[i].position`. Rotations take the shortest arc and use a short tweened animation; the first state applied after the model loads snaps without animating. `calibrated` and `jammed` are intentionally not used to gate the rotation — the visual mirrors whatever the firmware reports.
+
+Rotation audio is opt-in via `setDrumRotationSoundEnabled(true)`. While enabled, a sound plays whenever any drum is rotating. Provide an asset URL with `setDrumRotationSoundUrl(url)`; without one, a procedural sawtooth placeholder tone is used so the wiring is testable.
 
 ##### LED visualization
 
@@ -352,6 +411,10 @@ interface TowerDisplayOptions {
    * independently of game state. Set to false to disable.
    */
   clickToToggleSeals?: boolean;
+  /** Called when any side-aware renderer changes its selected side. */
+  onSideChange?: (side: TowerSide) => void;
+  /** Called if the 3D GLB model fails to load. Only fires when renderers includes '3d-view'. */
+  onLoadError?: (details: unknown) => void;
   /** Optional override for the 3D view's GLB model URL. */
   modelUrl?: string;
   /** Optional override for where Draco decoder wasm/js files are loaded from. */
@@ -364,6 +427,8 @@ interface TowerDisplayOptions {
   showGroundDisc?: boolean;
   /** Nested lighting configuration forwarded to Tower3DView. See `LightingConfig`. */
   lighting?: LightingConfig;
+  /** Initial camera framing defaults forwarded to Tower3DView. See `CameraConfig`. */
+  camera?: CameraConfig;
 }
 ```
 
@@ -396,10 +461,31 @@ interface Tower3DViewOptions {
   showLedProxies?: boolean;
   showGroundDisc?: boolean;
   lighting?: LightingConfig;
+  camera?: CameraConfig;
 }
 ```
 
 See the [`LightingConfig`](#lightingconfig) section above for the full shape.
+
+### `CameraConfig`
+
+Camera framing and behavior options. All fields are optional — unset fields fall back to their defaults.
+
+```ts
+interface CameraConfig {
+  elevationFactor?: number; // default: -0.5
+  targetHeightFactor?: number; // default: -0.15
+  zoomToCursor?: boolean; // default: true
+  preserveViewOnSideSelect?: boolean; // default: false
+}
+```
+
+| Field                      | Default | Description                                                                                                                                                                       |
+| -------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `elevationFactor`          | `-0.5`  | Camera eye height as a fraction of `modelRadius`. Negative values place the eye below the model's geometric centre.                                                               |
+| `targetHeightFactor`       | `-0.15` | Vertical position of the orbit target (look-at point) as a fraction of `modelRadius`. Negative values aim the camera lower.                                                       |
+| `zoomToCursor`             | `true`  | When `true`, scroll-wheel zoom-in moves the camera toward the cursor rather than the orbit target. Zoom-out always uses standard OrbitControls behavior.                          |
+| `preserveViewOnSideSelect` | `false` | When `true`, selecting a cardinal side via the side buttons or `selectSide` rotates only the azimuth while keeping the current orbit target, tilt, pan, and zoom distance intact. |
 
 ### `TowerSide`
 
