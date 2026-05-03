@@ -11,6 +11,16 @@ function ensureRectAreaLightUniforms(): void {
   rectAreaInited = true;
 }
 
+export type SceneLightsPartial = {
+  hemi?: number;
+  key?: number;
+  fill?: number;
+  exposure?: number;
+  keyX?: number;
+  keyY?: number;
+  keyZ?: number;
+};
+
 export class SceneLighting {
   readonly hemi: THREE.HemisphereLight;
   readonly key: THREE.DirectionalLight;
@@ -90,6 +100,20 @@ export class SceneLighting {
    */
   tick(): void {
     this.fill.lookAt(0, 0, 0);
+  }
+
+  /** Mutate the live scene from a partial set of light values. */
+  applyPartial(opts: SceneLightsPartial, lighting: ResolvedLightingConfig): void {
+    if (opts.hemi !== undefined) this.hemi.intensity = opts.hemi;
+    if (opts.key !== undefined) {
+      this.key.intensity = opts.key;
+      if (this.isBreathing) this.startBreathing(opts.key, lighting);
+    }
+    if (opts.fill !== undefined) this.fill.intensity = opts.fill;
+    if (opts.exposure !== undefined) this.renderer.toneMappingExposure = opts.exposure;
+    if (opts.keyX !== undefined) this.key.position.x = opts.keyX;
+    if (opts.keyY !== undefined) this.key.position.y = opts.keyY;
+    if (opts.keyZ !== undefined) this.key.position.z = opts.keyZ;
   }
 
   startBreathing(keyTarget: number, config: ResolvedLightingConfig): void {

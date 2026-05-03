@@ -22,6 +22,7 @@ import { LedEffectAnimator } from './LedEffectAnimator';
 import type { LedRef } from './LedEffectAnimator';
 import { CameraController } from './CameraController';
 import { SceneLighting } from './SceneLighting';
+import type { SceneLightsPartial } from './SceneLighting';
 import { BloomManager } from './BloomManager';
 import { EntranceAnimator } from './EntranceAnimator';
 import { GroundDiscManager } from './GroundDiscManager';
@@ -262,43 +263,23 @@ export class Tower3DView implements ITowerDisplay {
    * Live-update individual scene light intensities and key-light position.
    * Stops any active entrance or breathing animation so manual values take precedence.
    */
-  setSceneLights(opts: {
-    hemi?: number;
-    key?: number;
-    fill?: number;
-    exposure?: number;
-    keyX?: number;
-    keyY?: number;
-    keyZ?: number;
-  }): void {
+  setSceneLights(opts: SceneLightsPartial): void {
     // Manual lighting edits should always win over the cinematic timeline.
     this.entranceAnimator.stop();
+    this.sceneLighting?.applyPartial(opts, this.lighting);
+    this.absorbSceneLights(opts);
+  }
 
-    const sl = this.sceneLighting;
-    if (sl) {
-      if (opts.hemi !== undefined) sl.hemi.intensity = opts.hemi;
-      if (opts.key !== undefined) {
-        sl.key.intensity = opts.key;
-        if (sl.isBreathing) sl.startBreathing(opts.key, this.lighting);
-      }
-      if (opts.fill !== undefined) sl.fill.intensity = opts.fill;
-      if (opts.exposure !== undefined && this.renderer) {
-        this.renderer.toneMappingExposure = opts.exposure;
-      }
-      if (opts.keyX !== undefined) sl.key.position.x = opts.keyX;
-      if (opts.keyY !== undefined) sl.key.position.y = opts.keyY;
-      if (opts.keyZ !== undefined) sl.key.position.z = opts.keyZ;
+  private absorbSceneLights(opts: SceneLightsPartial): void {
+    const scene = this.lighting.scene;
+    if (opts.hemi !== undefined) scene.hemisphere.intensity = opts.hemi;
+    if (opts.key !== undefined) scene.key.intensity = opts.key;
+    if (opts.fill !== undefined) scene.fill.intensity = opts.fill;
+    if (opts.exposure !== undefined) scene.exposure = opts.exposure;
+    if (opts.keyX !== undefined || opts.keyY !== undefined || opts.keyZ !== undefined) {
+      const [x, y, z] = scene.key.position;
+      scene.key.position = [opts.keyX ?? x, opts.keyY ?? y, opts.keyZ ?? z];
     }
-    if (opts.hemi !== undefined) this.lighting.scene.hemisphere.intensity = opts.hemi;
-    if (opts.key !== undefined) this.lighting.scene.key.intensity = opts.key;
-    if (opts.fill !== undefined) this.lighting.scene.fill.intensity = opts.fill;
-    if (opts.exposure !== undefined) this.lighting.scene.exposure = opts.exposure;
-    const [currentX, currentY, currentZ] = this.lighting.scene.key.position;
-    this.lighting.scene.key.position = [
-      opts.keyX ?? currentX,
-      opts.keyY ?? currentY,
-      opts.keyZ ?? currentZ,
-    ];
   }
 
   /** Return a deep-cloned snapshot of the full resolved lighting configuration. */
