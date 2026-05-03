@@ -1,6 +1,7 @@
 import type { TowerSide } from '../types';
 import { SIDES, SIDE_LABELS } from '../3d/constants';
 
+/** Builds a row of N/E/S/W buttons (one per side) and tracks which side is currently active. */
 export class SideButtons {
   readonly buttons: HTMLButtonElement[] = [];
 
@@ -16,6 +17,7 @@ export class SideButtons {
     }
   }
 
+  /** Mark the matching side button active (via `data-active`) and clear the others. Pass null to clear all. */
   setActive(side: TowerSide | null): void {
     for (const btn of this.buttons) {
       btn.dataset.active = String(btn.dataset.side === side);

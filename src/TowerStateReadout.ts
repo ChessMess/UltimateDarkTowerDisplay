@@ -78,7 +78,6 @@ export class TowerStateReadout implements ITowerDisplay {
   set clickToToggleSeals(value: boolean) {
     if (this._clickToToggleSeals === value) return;
     this._clickToToggleSeals = value;
-    // Re-render so the seal buttons pick up the new disabled state.
     if (this.latestState) this.render(false);
     else this.renderIdle();
   }
@@ -91,7 +90,6 @@ export class TowerStateReadout implements ITowerDisplay {
   set clickToToggleLeds(value: boolean) {
     if (this._clickToToggleLeds === value) return;
     this._clickToToggleLeds = value;
-    // Re-render so the LED buttons pick up the new disabled state.
     if (this.latestState) this.render(false);
     else this.renderIdle();
   }
@@ -138,7 +136,6 @@ export class TowerStateReadout implements ITowerDisplay {
   private onContainerClick(evt: Event): void {
     const target = evt.target as HTMLElement | null;
 
-    // ── LED click ──────────────────────────────────────────────────────────
     if (this.clickToToggleLeds) {
       const ledBtn = target?.closest<HTMLElement>('[data-tdr-led]');
       if (ledBtn) {
@@ -159,7 +156,6 @@ export class TowerStateReadout implements ITowerDisplay {
       }
     }
 
-    // ── Seal click ─────────────────────────────────────────────────────────
     if (!this.clickToToggleSeals) return;
     const btn = target?.closest<HTMLElement>('[data-tdr-seal]');
     if (!btn) return;
@@ -182,7 +178,6 @@ export class TowerStateReadout implements ITowerDisplay {
     const state = this.latestState;
     if (!state) { this.renderIdle(); return; }
 
-    // --- LEDs: 6 layers × 4 lights ---
     const ledRows = state.layer.map((layer, li) => {
       const layerName = LAYER_TO_POSITION[li as keyof typeof LAYER_TO_POSITION] ?? `L${li}`;
       const lights = layer.light.map((light, ji) => {

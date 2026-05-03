@@ -66,14 +66,17 @@ export class TowerStateController {
     return this.latestState ? this.resolveState(this.latestState) : null;
   }
 
+  /** Get the latest applied state with LED overrides merged in. Returns null when no state has been applied yet. */
   getResolvedState(): TowerState | null {
     return this.latestState ? this.resolveState(this.latestState) : null;
   }
 
+  /** Get the deduplicated union of externally-broken seals and user-toggled seals. */
   getResolvedSeals(): SealIdentifier[] {
     return this.resolveSeals();
   }
 
+  /** Clear the stored state, all user toggles, and all LED overrides. */
   reset(): void {
     this.latestState = null;
     this.userToggledSeals.clear();

@@ -8,7 +8,7 @@ const {
   LED_LAYOUT, LEDGE_LED_LAYOUT, RING_AZIMUTH, CORNER_AZIMUTH,
   computeRedLightPosition, RED_LIGHT_LAYOUT, getLedRef,
   getSealNode, getSealNodeCount,
-  computeSealBacklightPose, getSealBacklight, getSealBacklightCount,
+  computeSealLedPose, getSealBacklight, getSealBacklightCount,
 } = __testables;
 
 const EPS = 1e-9;
@@ -391,34 +391,34 @@ describe('Tower3DView instance', () => {
     });
   });
 
-  describe('computeSealBacklightPose', () => {
+  describe('computeSealLedPose', () => {
     const R = 1.0;
     const RF = 0.88;
 
     it('positions just behind north top seal: +Z at radiusFactor depth', () => {
-      const pose = computeSealBacklightPose(0, 0, R, RF);
+      const pose = computeSealLedPose(0, 0, R, RF);
       expect(pose.position.x).toBeCloseTo(0, 10);
       expect(pose.position.y).toBeCloseTo(LED_LAYOUT.topY, 10);
       expect(pose.position.z).toBeCloseTo(RF, 10);
     });
 
     it('east middle: +X axis at middleY', () => {
-      const pose = computeSealBacklightPose(1, 1, R, RF);
+      const pose = computeSealLedPose(1, 1, R, RF);
       expect(pose.position.x).toBeCloseTo(RF, 10);
       expect(pose.position.y).toBeCloseTo(LED_LAYOUT.middleY, 10);
       expect(pose.position.z).toBeCloseTo(0, 10);
     });
 
     it('south bottom: -Z axis at bottomY', () => {
-      const pose = computeSealBacklightPose(2, 2, R, RF);
+      const pose = computeSealLedPose(2, 2, R, RF);
       expect(pose.position.x).toBeCloseTo(0, 10);
       expect(pose.position.y).toBeCloseTo(LED_LAYOUT.bottomY, 10);
       expect(pose.position.z).toBeCloseTo(-RF, 10);
     });
 
     it('scales linearly with radius', () => {
-      const a = computeSealBacklightPose(0, 0, 1.0, RF);
-      const b = computeSealBacklightPose(0, 0, 4.0, RF);
+      const a = computeSealLedPose(0, 0, 1.0, RF);
+      const b = computeSealLedPose(0, 0, 4.0, RF);
       expect(b.position.z).toBeCloseTo(a.position.z * 4, 10);
     });
   });

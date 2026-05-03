@@ -81,8 +81,6 @@ export const __testables = {
     computeRedLightPosition(layer, light, radius),
   computeSealLedPose: (layer: number, light: number, radius: number, radiusFactor: number) =>
     computeSealLedPose(layer, light, radius, radiusFactor),
-  computeSealBacklightPose: (layer: number, light: number, radius: number, radiusFactor: number) =>
-    computeSealLedPose(layer, light, radius, radiusFactor),
   getLedRef: (view: Tower3DView, layer: number, light: number): LedRef | undefined =>
     internals(view).ledRefs.get(`${layer}:${light}`),
   getSealNode: (view: Tower3DView, side: string, level: string): THREE.Object3D | undefined =>
@@ -118,11 +116,10 @@ export interface Tower3DViewOptions {
 /**
  * A three.js-based 3D renderer for the Dark Tower model.
  *
- * V1: loads a GLB model, lets the user orbit / zoom / pan with mouse, and
- * provides N/E/S/W side-snap buttons plus a Reset button. `applyState` and
- * `applySeals` store the latest inputs but do not yet drive any visuals —
- * LED / drum / seal animation will come in a later pass once the model is
- * split into named sub-meshes.
+ * Loads a GLB model, lets the user orbit / zoom / pan with mouse, and provides
+ * N/E/S/W side-snap buttons. `applyState` drives the 24 LED proxies (per-light
+ * effect animation) and rotates the three named drum meshes to match the state.
+ * `applySeals` hides/shows seal meshes by name (`seal_<side>_<level>`).
  */
 export class Tower3DView implements ITowerDisplay {
   private readonly container: HTMLElement;

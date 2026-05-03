@@ -10,10 +10,12 @@ import {
   TowerStateReadout,
   TowerSideView,
   Tower3DView,
+  TowerStateController,
 } from 'ultimatedarktowerdisplay';
 import type {
   TowerDisplayOptions,
   Tower3DViewOptions,
+  TowerStateControllerOptions,
   CameraConfig,
   ITowerDisplay,
   RendererType,
@@ -143,6 +145,34 @@ Enable or disable drum rotation audio in the 3D view. Disabled by default — co
 
 Toggle the `preserveViewOnSideSelect` flag on the active 3D camera. When `true`, clicking a side button (or calling `selectSide`) rotates the camera azimuth to the new cardinal while preserving the current orbit target, tilt, pan offset, and zoom distance. When `false` (the default), the camera snaps back to the fitted default framing each time. No-op when no 3D view is active.
 
+##### `setZoomToCursor(enabled: boolean): void`
+
+Toggle whether scroll-wheel zoom-in moves the camera toward the cursor (`true`) or toward the orbit target (`false`). Zoom-out always uses the standard OrbitControls behavior. No-op when no 3D view is active.
+
+##### `getCameraConfig(): Required<CameraConfig> | undefined`
+
+Return a snapshot of the current resolved camera configuration (all four fields guaranteed present) on the 3D view. Returns `undefined` when no 3D renderer is active.
+
+##### `applyCameraConfig(config: CameraConfig): void`
+
+Apply a partial camera configuration at runtime. Any fields provided overwrite the corresponding current values; omitted fields are unchanged. No-op when no 3D view is active.
+
+##### `setBoardDiscEnabled(enabled: boolean): void`
+
+Show or hide the canvas-generated game board texture on the ground disc. No-op when no 3D view is active.
+
+##### `setSkyboxUrl(url: string | null): void`
+
+Set an equirectangular skybox image (or `.hdr`) URL on the 3D view. Pass `null` to clear the skybox. No-op when no 3D view is active.
+
+##### `setLedOverride(layer: number, light: number, effect: number): void`
+
+Programmatically override a single LED's effect on every active renderer. Equivalent to the user clicking the LED in the readout grid — the override is stored in the internal state controller, then re-applied on every subsequent `applyState`. Useful for driving LED state from a custom UI without going through a click event.
+
+##### `loadState` (getter)
+
+Read-only getter returning `'pending' | 'ready' | 'error' | undefined`. Reflects the current GLB load state of the 3D view. Returns `undefined` when no 3D renderer is active.
+
 ---
 
 ### `TowerSideView`
@@ -206,16 +236,54 @@ new TowerStateReadout(container: HTMLElement)
 
 #### Public Properties
 
-| Property             | Type                             | Default | Description                                                                   |
-| -------------------- | -------------------------------- | ------- | ----------------------------------------------------------------------------- |
-| `onSealClick`        | `(seal: SealIdentifier) => void` | —       | Callback fired when a seal button in the grid is clicked                      |
-| `clickToToggleSeals` | `boolean`                        | `false` | When `true`, enables click interaction on the seal grid. Default is read-only |
+| Property             | Type                                                       | Default | Description                                                                                                              |
+| -------------------- | ---------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `onSealClick`        | `(seal: SealIdentifier) => void`                           | —       | Callback fired when a seal button in the grid is clicked                                                                 |
+| `clickToToggleSeals` | `boolean`                                                  | `false` | When `true`, enables click interaction on the seal grid. Default is read-only                                            |
+| `onLedClick`         | `(layer: number, light: number, effect: number) => void`   | —       | Callback fired when an LED indicator is clicked. Receives the new (cycled) effect value                                  |
+| `clickToToggleLeds`  | `boolean`                                                  | `false` | When `true`, clicking an LED indicator cycles it through all `LIGHT_EFFECTS` values (off → on → breathe → ...) and fires `onLedClick` |
 
 The seal grid renders 12 buttons (4 sides × 3 levels); filled = present, hollow = broken. `applySeals` updates the grid. When `clickToToggleSeals` is `false` (the default for the readout), the buttons render as disabled — they still reflect state but don't emit events.
+
+When `TowerStateReadout` is composed via `TowerDisplay`, both `clickToToggleSeals` and `clickToToggleLeds` are auto-enabled and the parent fans out the resulting state to every renderer (so a readout LED click also updates the 2D and 3D views).
 
 #### Methods
 
 Same as `TowerDisplay`: `applyState(state)`, `applySeals(brokenSeals)`, `showIdle()`, `dispose()`.
+
+---
+
+### `TowerStateController`
+
+Pure (non-DOM) state controller — holds the latest `TowerState`, a user-toggle set of seal overrides, and a per-LED effect override map. Returns resolved (merged) state and seal lists for renderers. `TowerDisplay` instantiates one internally to fan out clicks; expose it directly when you need the same merge behavior outside the DOM (e.g. driving a custom renderer or running headless).
+
+```ts
+import { TowerStateController } from 'ultimatedarktowerdisplay';
+const ctrl = new TowerStateController({ togglesEnabled: true });
+const resolved = ctrl.applyState(state);
+```
+
+#### Constructor
+
+```ts
+new TowerStateController(options?: TowerStateControllerOptions)
+```
+
+| Option           | Type      | Default | Description                                                                  |
+| ---------------- | --------- | ------- | ---------------------------------------------------------------------------- |
+| `togglesEnabled` | `boolean` | `true`  | When `false`, `toggleSeal` is a no-op. Mirrors `TowerDisplay.clickToToggleSeals` |
+
+#### Methods
+
+| Method                                                      | Returns                  | Description                                                                                              |
+| ----------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `applyState(state: TowerState)`                             | `TowerState`             | Store `state`, merge in any active LED overrides, and return the resolved state for renderers           |
+| `applySeals(brokenSeals: SealIdentifier[])`                 | `SealIdentifier[]`       | Store the external broken-seal list and return the deduplicated union with user toggles                  |
+| `toggleSeal(seal: SealIdentifier)`                          | `SealIdentifier[]`       | Flip `seal`'s user-toggle state (when enabled) and return the resolved seal list                         |
+| `setLedOverride(layer, light, effect)`                      | `TowerState \| null`     | Record a per-LED override; returns the resolved state, or `null` when no state has been applied yet      |
+| `getResolvedState()`                                        | `TowerState \| null`     | Get the latest applied state with LED overrides merged in                                                |
+| `getResolvedSeals()`                                        | `SealIdentifier[]`       | Get the deduplicated union of externally-broken seals and user-toggled seals                             |
+| `reset()`                                                   | `void`                   | Clear stored state, all user toggles, and all LED overrides                                              |
 
 ---
 
@@ -421,8 +489,6 @@ interface TowerDisplayOptions {
   dracoDecoderPath?: string;
   /** Enable verbose 3D diagnostics (logs, render heartbeats, axes helpers). Forwarded to Tower3DView. */
   debug3D?: boolean;
-  /** Show the amber LED proxy spheres. Defaults to false. */
-  showLedProxies?: boolean;
   /** Show the noir ground disc that catches the key-light shadow. Defaults to true. */
   showGroundDisc?: boolean;
   /** Nested lighting configuration forwarded to Tower3DView. See `LightingConfig`. */
@@ -455,10 +521,9 @@ type RendererType = 'readout' | 'side-view' | '3d-view';
 
 ```ts
 interface Tower3DViewOptions {
-  modelUrl?: string;
+  modelUrl: string;
   dracoDecoderPath?: string;
   debug3D?: boolean;
-  showLedProxies?: boolean;
   showGroundDisc?: boolean;
   lighting?: LightingConfig;
   camera?: CameraConfig;

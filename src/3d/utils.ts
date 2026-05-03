@@ -76,16 +76,6 @@ export function computeSealLedPose(
   };
 }
 
-/** @deprecated Use computeSealLedPose — kept for any callers that haven't updated yet. */
-export function computeSealBacklightPose(
-  layer: number,
-  light: number,
-  radius: number,
-  radiusFactor: number,
-): { position: { x: number; y: number; z: number } } {
-  return computeSealLedPose(layer, light, radius, radiusFactor);
-}
-
 export function disposeObject(obj: THREE.Object3D): void {
   obj.traverse((child) => {
     const mesh = child as THREE.Mesh;

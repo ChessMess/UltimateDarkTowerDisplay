@@ -1,5 +1,6 @@
 import { LIGHT_EFFECTS } from 'ultimatedarktower';
 
+/** Short slug labels for each LIGHT_EFFECTS value, used as the inline LED text in the readout. */
 export const EFFECT_LABELS: Record<number, string> = {
   [LIGHT_EFFECTS.off]: 'off',
   [LIGHT_EFFECTS.on]: 'on',

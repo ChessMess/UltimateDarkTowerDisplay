@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Documentation
+
+- Documentation sweep: `docs/API.md` is now the canonical API reference — added missing `TowerDisplay` method docs (`setLedOverride`, `setBoardDiscEnabled`, `setSkyboxUrl`, `getCameraConfig`, `applyCameraConfig`, `setZoomToCursor`, `loadState` getter), a new `TowerStateController` section, and the `clickToToggleLeds`/`onLedClick` properties on `TowerStateReadout`. README now points at `docs/API.md` for the full reference. Removed stale `showLedProxies` references from `README.md`, `docs/API.md`, and the contradictory "Added" entry in this changelog. Fixed outdated "V1" JSDoc on `Tower3DView` that claimed `applyState`/`applySeals` didn't drive visuals. Added missing JSDoc to `SideButtons`, `EFFECT_LABELS`, and three `TowerStateController` getters/methods.
+
+### Removed
+
+- Deprecated `computeSealBacklightPose` utility (an alias for `computeSealLedPose`) and its `__testables` re-export removed; the only callers were tests of the alias itself, which now exercise `computeSealLedPose` directly. Also removed unused `__setSealsAsMeshes` / `__setDrumNames` mock hooks from the GLTFLoader test mock.
+
 ### Added
 
 - Ledge LEDs (layer 3) and base LEDs (layers 4–5) now render as ball-type visuals — a `MeshBasicMaterial` sphere proxy plus an additive halo `Sprite` — matching the seal backlight style. Previously ledge/base layers had only a `PointLight` with no visible mesh.
@@ -45,7 +53,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - `Tower3DView.applySeals(brokenSeals)` is now a real implementation — hides/shows the corresponding seal meshes on the 3D model by name. The unified `TowerDisplay.applySeals` call already fanned out to the 3D renderer, but this was previously a no-op; it now drives both the 2D and 3D views identically. Naming contract for custom models via `modelUrl`: seal meshes must be named `seal_<side>_<level>` (e.g. `seal_north_top`, `seal_west_bottom`). Missing names are logged as a single `console.warn` at model-load time. The default bundled GLB ships with all 12 named seal nodes. Seal registry is lazily populated during GLB load; pre-load `applySeals` calls are stored and applied once the model resolves. See [docs/API.md](docs/API.md) for consumer-facing docs.
 - `Tower3DView` now visualizes per-LED effects on the 3D model. 24 emissive LED proxies (amber, `#f0c040`) are placed at the tower's ring, ledge, and base positions, each with a short-range PointLight halo that spills onto nearby geometry. All six `LIGHT_EFFECTS` are supported: `off`, `on`, `breathe`, `breatheFast`, `breathe50percent`, `flicker`. Animation timings match the 2D side view (2.0s / 0.8s / 0.3s).
 - Added red light layer to the 3D view (`#ff2020`) matching the physical tower's LED color. Red lights are positioned independently from the amber proxies: inset inside the drum for ring layers (0–2) so light shines through doors/seals, and near the outer corner surface for ledge/base layers (3–5) so light shines onto the faces. Red lights animate in lockstep with the amber driver — no additional GSAP tweens per LED.
-- New `showLedProxies` option on `TowerDisplayOptions` and `Tower3DViewOptions` (default `false`) — toggles the amber LED proxy spheres on/off. The amber proxies are now hidden by default; enable them as a layout/debugging aid.
 - `debug3D` option on `TowerDisplayOptions` — forwarded to `Tower3DView` for diagnostic logging, render heartbeats, origin axes helper, and per-LED position axes helpers for layout tuning.
 
 ## [0.2.0] - 2026-04-15

@@ -1,9 +1,4 @@
-// Example pattern: persistent seal state backed by a software-only
-// UltimateDarkTower instance. The display is recreated on view switches,
-// but this module is not — so the broken-seal set survives.
-//
-// Copy this pattern into your own app if you need seal state to persist
-// across renderer changes or view toggles.
+// Example pattern: a module-scoped UltimateDarkTower instance owns broken-seal state so it survives display recreation on view switches.
 
 import { UltimateDarkTower } from 'ultimatedarktower';
 import type { SealIdentifier } from 'ultimatedarktower';

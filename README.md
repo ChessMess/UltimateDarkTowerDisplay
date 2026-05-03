@@ -166,7 +166,6 @@ new TowerDisplay(options: TowerDisplayOptions)
 | `renderers`          | `RendererType \| RendererType[]` | `['readout', 'side-view']` | Which renderer(s) to show: `'readout'`, `'side-view'`, `'3d-view'`, or any combination                  |
 | `onSealClick`        | `(seal: SealIdentifier) => void` | —                          | Called whenever the user clicks a seal overlay in the side view                                         |
 | `clickToToggleSeals` | `boolean`                        | `true`                     | When true, clicking a seal toggles its visibility independent of game state. Set to `false` to disable. |
-| `showLedProxies`     | `boolean`                        | `false`                    | (3D view) Show amber LED proxy spheres at LED positions. Hidden by default; useful for layout tuning.   |
 
 Methods:
 
@@ -218,6 +217,8 @@ new TowerStateReadout(container: HTMLElement)
 ```
 
 Exposes the same methods as `TowerDisplay` (`applyState`, `applySeals`, `showIdle`, `dispose`).
+
+**Full API reference:** see [docs/API.md](docs/API.md) for every method, option, type, and the lighting/camera config shapes.
 
 ### Exported Types
 
