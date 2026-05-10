@@ -2,7 +2,7 @@ import type { TowerDisplay } from '../src/index';
 import type { LightingConfig, CameraConfig } from '../src/3d/types';
 import type { TowerState } from 'ultimatedarktower';
 import type { DomElements } from './dom';
-import { is3DViewVisible, getLastState } from './rendererController';
+import { armTowerAudioFromUserGesture, is3DViewVisible, getLastState } from './rendererController';
 import { showBannerError, bindCopyButton } from './utils';
 
 type ConfigType = 'state' | 'lighting' | 'camera';
@@ -98,6 +98,7 @@ export function initConfigEditor(
           refreshConfigPreview(getDisplay, els);
         } else {
           const parsed = JSON.parse(els.configPreview.value) as TowerState;
+          armTowerAudioFromUserGesture(els);
           getDisplay().applyState(parsed);
           setLastState(parsed);
           cleanConfigJson = els.configPreview.value;

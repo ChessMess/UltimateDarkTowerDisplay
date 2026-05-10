@@ -3,9 +3,10 @@ import type { TowerState } from 'ultimatedarktower';
 import type { DomElements } from './dom';
 import { refreshConfigPreview, setConfigPreviewMessage, syncConfigSelectorVisibility } from './configEditor';
 import { refreshLightingConfigBox } from './lightingController';
-import { is3DViewVisible, getLastState } from './rendererController';
-import { createReadmeExampleState, createRandomState, createAllOnState } from './presets';
+import { armTowerAudioFromUserGesture, is3DViewVisible, getLastState } from './rendererController';
+import { createReadmeExampleState, createRandomState, createAllOnState, createSequenceState, createEmptyState, SEQUENCE_AUDIO_MAP } from './presets';
 import { resetSeals } from './sealController';
+import { SEQUENCE_METADATA } from '../src/sequences/sequenceMetadata';
 
 const DRUM_INDEX_BY_LEVEL: Record<string, number> = { top: 0, middle: 1, bottom: 2 };
 
@@ -18,9 +19,13 @@ function applyAndShow(
   getDisplay: () => TowerDisplay,
   getReadout: () => TowerStateReadout,
   setLastState: (s: TowerState) => void,
-  els: DomElements
+  els: DomElements,
+  fromUserGesture = true
 ): void {
   setLastState(state);
+  if (fromUserGesture) {
+    armTowerAudioFromUserGesture(els);
+  }
   getDisplay().applyState(state);
   getReadout().applyState(state);
   refreshConfigPreview(getDisplay, els);
@@ -72,6 +77,29 @@ export function initStateEditor(
     });
   }
 
+  if (els.btnEmpty) {
+    els.btnEmpty.addEventListener('click', () => {
+      setStateName('empty state', els);
+      applyAndShow(createEmptyState(), getDisplay, getReadout, setLastState, els);
+    });
+  }
+
+  populateSequenceSelect(els);
+  if (els.btnTriggerSequence && els.selSequence) {
+    els.btnTriggerSequence.addEventListener('click', () => {
+      const sel = els.selSequence;
+      if (!sel) return;
+      const sequenceId = Number(sel.value);
+      if (!Number.isFinite(sequenceId) || sequenceId === 0) return;
+      const meta = SEQUENCE_METADATA[sel.options[sel.selectedIndex].dataset.name as keyof typeof SEQUENCE_METADATA];
+      const label = meta ? formatSequenceName(meta.name) : `sequence 0x${sequenceId.toString(16)}`;
+      setStateName(label, els);
+      getDisplay().showIdle();
+      getReadout().showIdle();
+      applyAndShow(createSequenceState(sequenceId), getDisplay, getReadout, setLastState, els);
+    });
+  }
+
   if (els.drumRotateGrid) {
     els.drumRotateGrid.addEventListener('click', (event) => {
       const target = event.target;
@@ -97,6 +125,29 @@ export function initStateEditor(
   }
 }
 
+function formatSequenceName(name: string): string {
+  // Split camelCase and insert spaces before uppercase letters or digit runs
+  return name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Za-z])(\d)/g, '$1 $2')
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+function populateSequenceSelect(els: DomElements): void {
+  const sel = els.selSequence;
+  if (!sel || sel.options.length > 0) return;
+  const entries = Object.values(SEQUENCE_METADATA).sort((a, b) => a.id - b.id);
+  for (const meta of entries) {
+    const opt = document.createElement('option');
+    opt.value = String(meta.id);
+    opt.dataset.name = meta.name;
+    const hasAudio = meta.id in SEQUENCE_AUDIO_MAP;
+    opt.textContent = (hasAudio ? '🔊 ' : '') + formatSequenceName(meta.name);
+    if (meta.name === 'sealReveal') opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 export function refreshDrumRotateActive(state: TowerState, els: DomElements): void {
   if (!els.drumRotateGrid) return;
   const buttons = els.drumRotateGrid.querySelectorAll<HTMLButtonElement>('button[data-drum-level]');
@@ -117,5 +168,5 @@ export function initInitialState(
 ): void {
   syncConfigSelectorVisibility(getDisplay, els);
   if (els.stateBadge) els.stateBadge.textContent = 'readme example';
-  applyAndShow(createReadmeExampleState(), getDisplay, getReadout, setLastState, els);
+  applyAndShow(createReadmeExampleState(), getDisplay, getReadout, setLastState, els, false);
 }

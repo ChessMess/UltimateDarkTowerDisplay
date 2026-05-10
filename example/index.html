@@ -36,6 +36,14 @@
         <button id="btn-allon">All LEDs On</button>
         <button id="btn-idle">Show Idle</button>
         <button id="btn-reset-seals">Reset Seals</button>
+        <button id="btn-empty">Empty State</button>
+      </div>
+    </div>
+    <div class="toolbar-group">
+      <span class="toolbar-group-label">Light Effects</span>
+      <div class="toolbar-group-btns">
+        <select id="sel-sequence"></select>
+        <button id="btn-trigger-sequence">Trigger</button>
       </div>
     </div>
     <div class="toolbar-group">
@@ -67,6 +75,7 @@
       <label class="toolbar-label"><input type="checkbox" id="chk-ground-disc" checked /> Ground Disc</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-board-disc" checked /> Board Disc</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-drum-sound" /> Drum Sound</label>
+      <label class="toolbar-label"><input type="checkbox" id="chk-tower-audio" checked /> Tower Audio</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-zoom-to-cursor" checked /> Zoom to Cursor</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-preserve-view-on-side-select" /> Preserve View On
         Direction Select</label>
@@ -144,6 +153,7 @@
       </div>
       <div id="tower"></div>
     </div>
+
     <div class="editor-column">
       <div id="readout-panel" class="panel">
         <h2>Tower State Readout <span style="font-size:0.9em;font-weight:normal;float:right;">(click to change)</span>

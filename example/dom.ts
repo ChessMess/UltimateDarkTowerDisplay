@@ -27,6 +27,7 @@ export interface DomElements {
   chkBoardDisc: HTMLInputElement | null;
   inpSkyboxUrl: HTMLInputElement | null;
   chkDrumSound: HTMLInputElement | null;
+  chkTowerAudio: HTMLInputElement | null;
   chkZoomToCursor: HTMLInputElement | null;
   chkPreserveViewOnSideSelect: HTMLInputElement | null;
   rngBloomStrength: HTMLInputElement | null;
@@ -41,6 +42,9 @@ export interface DomElements {
   btnAllOn: HTMLElement | null;
   btnIdle: HTMLElement | null;
   btnResetSeals: HTMLElement | null;
+  btnEmpty: HTMLElement | null;
+  selSequence: HTMLSelectElement | null;
+  btnTriggerSequence: HTMLButtonElement | null;
   drumRotateGrid: HTMLElement | null;
   renderedPanel: HTMLElement | null;
   toolbarEl: Element | null;
@@ -86,6 +90,7 @@ export function queryDom(): DomElements {
     chkBoardDisc: document.getElementById('chk-board-disc') as HTMLInputElement | null,
     inpSkyboxUrl: document.getElementById('inp-skybox-url') as HTMLInputElement | null,
     chkDrumSound: document.getElementById('chk-drum-sound') as HTMLInputElement | null,
+    chkTowerAudio: document.getElementById('chk-tower-audio') as HTMLInputElement | null,
     chkZoomToCursor: document.getElementById('chk-zoom-to-cursor') as HTMLInputElement | null,
     chkPreserveViewOnSideSelect: document.getElementById('chk-preserve-view-on-side-select') as HTMLInputElement | null,
     rngBloomStrength: document.getElementById('rng-bloom-strength') as HTMLInputElement | null,
@@ -100,6 +105,9 @@ export function queryDom(): DomElements {
     btnAllOn: document.getElementById('btn-allon'),
     btnIdle: document.getElementById('btn-idle'),
     btnResetSeals: document.getElementById('btn-reset-seals'),
+    btnEmpty: document.getElementById('btn-empty'),
+    selSequence: document.getElementById('sel-sequence') as HTMLSelectElement | null,
+    btnTriggerSequence: document.getElementById('btn-trigger-sequence') as HTMLButtonElement | null,
     drumRotateGrid: document.getElementById('drum-rotate-grid'),
     renderedPanel: document.getElementById('rendered-panel'),
     toolbarEl: document.querySelector('.toolbar'),

@@ -250,6 +250,24 @@ export class TowerDisplay implements ITowerDisplay {
     this.view3d?.setDrumRotationSoundEnabled(enabled);
   }
 
+  /**
+   * Provide the sample-id → URL map used to play decoded tower audio
+   * (`state.audio.sample`). Sparse maps are fine — unmapped ids warn-once
+   * and skip playback. No-op when no 3D renderer is active.
+   */
+  setTowerAudioLibrary(library: Record<number, string>): void {
+    this.view3d?.setTowerAudioLibrary(library);
+  }
+
+  /**
+   * Enable or disable tower-sample audio. Disabled by default — consumers
+   * must opt in (which also satisfies browser autoplay-policy gestures).
+   * No-op when no 3D renderer is active.
+   */
+  setTowerAudioEnabled(enabled: boolean): void {
+    this.view3d?.setTowerAudioEnabled(enabled);
+  }
+
   /** Remove all rendered DOM content and reset internal state. */
   dispose(): void {
     for (const r of this.renderers) r.dispose();

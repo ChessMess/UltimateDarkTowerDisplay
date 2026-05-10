@@ -90,10 +90,6 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
     },
   },
   animation: {
-    fadeS: 0.15,
-    breatheS: 2.0,
-    breatheFastS: 0.8,
-    flickerS: 0.3,
     idleBreathe: { peakFactor: 1.08, durationS: 4 },
   },
   entrance: {
@@ -269,10 +265,6 @@ export function resolveLighting(
       },
     },
     animation: {
-      fadeS: user?.animation?.fadeS ?? base.animation.fadeS,
-      breatheS: user?.animation?.breatheS ?? base.animation.breatheS,
-      breatheFastS: user?.animation?.breatheFastS ?? base.animation.breatheFastS,
-      flickerS: user?.animation?.flickerS ?? base.animation.flickerS,
       idleBreathe: {
         peakFactor:
           user?.animation?.idleBreathe?.peakFactor ?? base.animation.idleBreathe.peakFactor,

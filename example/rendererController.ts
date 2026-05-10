@@ -4,6 +4,7 @@ import type { TowerState, TowerSide } from 'ultimatedarktower';
 import type { DomElements } from './dom';
 import { toggleSeal, refreshSeals } from './sealController';
 import towerModelUrl from '../src/3d/assets/tower.glb?url';
+import { buildTowerAudioLibrary, hasTowerAudioAsset } from './towerAudioLibrary';
 
 export type ViewButtonId = 'btn-view-2d' | 'btn-view-3d' | 'btn-view-2d3d';
 
@@ -98,6 +99,21 @@ function syncToolbar3DState(els: DomElements): void {
   }
 }
 
+function applyAudioConfig(els: DomElements, enableNow = false): void {
+  display.setTowerAudioLibrary(buildTowerAudioLibrary());
+  // Only enable from a user gesture. Initial page load is not a valid
+  // autoplay-policy gesture, so defer until the user applies state or toggles
+  // a 3D control.
+  if (enableNow && els.chkTowerAudio?.checked) {
+    display.setTowerAudioEnabled(true);
+  }
+}
+
+export function armTowerAudioFromUserGesture(els: DomElements): void {
+  if (!is3DViewVisible() || !els.chkTowerAudio?.checked) return;
+  display.setTowerAudioEnabled(true);
+}
+
 function recreateDisplay(renderers: RendererType | RendererType[], activeId: ViewButtonId, els: DomElements): void {
   display.dispose();
   currentRenderers = renderers;
@@ -105,6 +121,7 @@ function recreateDisplay(renderers: RendererType | RendererType[], activeId: Vie
   display = new TowerDisplay(buildDisplayOptions(renderers, els));
   publishDisplay();
   setActiveViewButton(activeId);
+  applyAudioConfig(els, true);
   if (lastState) display.applyState(lastState);
   refreshSeals(display, readout);
   if (lastSide) display.selectSide(lastSide);
@@ -120,6 +137,7 @@ export function initRendererController(els: DomElements): void {
   readout.onLedClick = (layer, light, effect) => display.setLedOverride(layer, light, effect);
   display = new TowerDisplay(buildDisplayOptions('3d-view', els));
   publishDisplay();
+  applyAudioConfig(els);
 
   for (const [id, renderers] of Object.entries(viewButtons) as [ViewButtonId, RendererType | RendererType[]][]) {
     const btn = document.getElementById(id);

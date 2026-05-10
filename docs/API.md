@@ -51,7 +51,7 @@ new TowerDisplay(options: TowerDisplayOptions)
 | `options.onSealClick`        | `(seal: SealIdentifier) => void` | —                                   | Callback fired whenever the user clicks a seal in the side view or the readout seal grid                                                                                                                          |
 | `options.clickToToggleSeals` | `boolean`                        | `true`                              | When `true`, clicking a seal toggles its visibility across every active renderer (2D hides in 3D, and vice-versa). Set to `false` to disable click-driven toggling entirely.                                      |
 | `options.onSideChange`       | `(side: TowerSide) => void`      | —                                   | Callback fired whenever the active side changes on any side-aware renderer — via an explicit `selectSide` call, a side-button click, or (for the 3D view) the user orbiting the camera into a new cardinal facing |
-| `options.onLoadError`        | `(details: unknown) => void`     | —                                   | Callback fired if the 3D GLB model fails to load. Only fires when `renderers` includes `'3d-view'`. Check `display.loadState` to poll load status without a callback.                                            |
+| `options.onLoadError`        | `(details: unknown) => void`     | —                                   | Callback fired if the 3D GLB model fails to load. Only fires when `renderers` includes `'3d-view'`. Check `display.loadState` to poll load status without a callback.                                             |
 | `options.modelUrl`           | `string`                         | bundled GLB                         | Forwarded to `Tower3DView` — override the default bundled model URL                                                                                                                                               |
 | `options.dracoDecoderPath`   | `string`                         | gstatic CDN                         | Forwarded to `Tower3DView` — override where Draco decoder wasm/js files are loaded from                                                                                                                           |
 | `options.debug3D`            | `boolean`                        | `false`                             | Forwarded to `Tower3DView` — enables diagnostic logs, render heartbeats, and axes helpers                                                                                                                         |
@@ -236,12 +236,12 @@ new TowerStateReadout(container: HTMLElement)
 
 #### Public Properties
 
-| Property             | Type                                                       | Default | Description                                                                                                              |
-| -------------------- | ---------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `onSealClick`        | `(seal: SealIdentifier) => void`                           | —       | Callback fired when a seal button in the grid is clicked                                                                 |
-| `clickToToggleSeals` | `boolean`                                                  | `false` | When `true`, enables click interaction on the seal grid. Default is read-only                                            |
-| `onLedClick`         | `(layer: number, light: number, effect: number) => void`   | —       | Callback fired when an LED indicator is clicked. Receives the new (cycled) effect value                                  |
-| `clickToToggleLeds`  | `boolean`                                                  | `false` | When `true`, clicking an LED indicator cycles it through all `LIGHT_EFFECTS` values (off → on → breathe → ...) and fires `onLedClick` |
+| Property             | Type                                                     | Default | Description                                                                                                                           |
+| -------------------- | -------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `onSealClick`        | `(seal: SealIdentifier) => void`                         | —       | Callback fired when a seal button in the grid is clicked                                                                              |
+| `clickToToggleSeals` | `boolean`                                                | `false` | When `true`, enables click interaction on the seal grid. Default is read-only                                                         |
+| `onLedClick`         | `(layer: number, light: number, effect: number) => void` | —       | Callback fired when an LED indicator is clicked. Receives the new (cycled) effect value                                               |
+| `clickToToggleLeds`  | `boolean`                                                | `false` | When `true`, clicking an LED indicator cycles it through all `LIGHT_EFFECTS` values (off → on → breathe → ...) and fires `onLedClick` |
 
 The seal grid renders 12 buttons (4 sides × 3 levels); filled = present, hollow = broken. `applySeals` updates the grid. When `clickToToggleSeals` is `false` (the default for the readout), the buttons render as disabled — they still reflect state but don't emit events.
 
@@ -269,21 +269,21 @@ const resolved = ctrl.applyState(state);
 new TowerStateController(options?: TowerStateControllerOptions)
 ```
 
-| Option           | Type      | Default | Description                                                                  |
-| ---------------- | --------- | ------- | ---------------------------------------------------------------------------- |
+| Option           | Type      | Default | Description                                                                      |
+| ---------------- | --------- | ------- | -------------------------------------------------------------------------------- |
 | `togglesEnabled` | `boolean` | `true`  | When `false`, `toggleSeal` is a no-op. Mirrors `TowerDisplay.clickToToggleSeals` |
 
 #### Methods
 
-| Method                                                      | Returns                  | Description                                                                                              |
-| ----------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `applyState(state: TowerState)`                             | `TowerState`             | Store `state`, merge in any active LED overrides, and return the resolved state for renderers           |
-| `applySeals(brokenSeals: SealIdentifier[])`                 | `SealIdentifier[]`       | Store the external broken-seal list and return the deduplicated union with user toggles                  |
-| `toggleSeal(seal: SealIdentifier)`                          | `SealIdentifier[]`       | Flip `seal`'s user-toggle state (when enabled) and return the resolved seal list                         |
-| `setLedOverride(layer, light, effect)`                      | `TowerState \| null`     | Record a per-LED override; returns the resolved state, or `null` when no state has been applied yet      |
-| `getResolvedState()`                                        | `TowerState \| null`     | Get the latest applied state with LED overrides merged in                                                |
-| `getResolvedSeals()`                                        | `SealIdentifier[]`       | Get the deduplicated union of externally-broken seals and user-toggled seals                             |
-| `reset()`                                                   | `void`                   | Clear stored state, all user toggles, and all LED overrides                                              |
+| Method                                      | Returns              | Description                                                                                         |
+| ------------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------- |
+| `applyState(state: TowerState)`             | `TowerState`         | Store `state`, merge in any active LED overrides, and return the resolved state for renderers       |
+| `applySeals(brokenSeals: SealIdentifier[])` | `SealIdentifier[]`   | Store the external broken-seal list and return the deduplicated union with user toggles             |
+| `toggleSeal(seal: SealIdentifier)`          | `SealIdentifier[]`   | Flip `seal`'s user-toggle state (when enabled) and return the resolved seal list                    |
+| `setLedOverride(layer, light, effect)`      | `TowerState \| null` | Record a per-LED override; returns the resolved state, or `null` when no state has been applied yet |
+| `getResolvedState()`                        | `TowerState \| null` | Get the latest applied state with LED overrides merged in                                           |
+| `getResolvedSeals()`                        | `SealIdentifier[]`   | Get the deduplicated union of externally-broken seals and user-toggled seals                        |
+| `reset()`                                   | `void`               | Clear stored state, all user toggles, and all LED overrides                                         |
 
 ---
 
@@ -384,10 +384,10 @@ new Tower3DView(el, { lighting: { animation: { breatheS: 3 } } }); // slower bre
 
 #### Public Properties
 
-| Property       | Type                             | Default     | Description                                                                                                                                                                                                    |
-| -------------- | -------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onSideChange` | `(side: TowerSide) => void`      | —           | Callback fired when the active side changes — either via `selectSide`, a side-button click, or the user orbiting the camera into a new cardinal facing (per-frame detection, fires once per quadrant crossing) |
-| `onLoadError`  | `(details: unknown) => void`     | —           | Callback fired if the GLB model fails to load. Assign before or immediately after construction.                                                                                                                |
+| Property       | Type                              | Default     | Description                                                                                                                                                                                                    |
+| -------------- | --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onSideChange` | `(side: TowerSide) => void`       | —           | Callback fired when the active side changes — either via `selectSide`, a side-button click, or the user orbiting the camera into a new cardinal facing (per-frame detection, fires once per quadrant crossing) |
+| `onLoadError`  | `(details: unknown) => void`      | —           | Callback fired if the GLB model fails to load. Assign before or immediately after construction.                                                                                                                |
 | `loadState`    | `'pending' \| 'ready' \| 'error'` | `'pending'` | Read-only getter reflecting the current GLB load state. Transitions to `'ready'` on success or `'error'` on failure.                                                                                           |
 
 #### Methods
@@ -440,6 +440,12 @@ view3d.applyCameraConfig({ zoomToCursor: false, elevationFactor: -0.3 });
 `applyState()` rotates the three named drum meshes (`drum_top`, `drum_middle`, `drum_bottom`) around the Y axis to match `state.drum[i].position`. Rotations take the shortest arc and use a short tweened animation; the first state applied after the model loads snaps without animating. `calibrated` and `jammed` are intentionally not used to gate the rotation — the visual mirrors whatever the firmware reports.
 
 Rotation audio is opt-in via `setDrumRotationSoundEnabled(true)`. While enabled, a sound plays whenever any drum is rotating. Provide an asset URL with `setDrumRotationSoundUrl(url)`; without one, a procedural sawtooth placeholder tone is used so the wiring is testable.
+
+##### Tower sample audio
+
+`applyState()` also drives sample playback from `state.audio` (sample id, loop flag, volume). Sample audio is opt-in — call `setSampleAudioEnabled(true)` (or the equivalent on `Tower3DView` directly) to activate it.
+
+Volume is treated as binary: `state.audio.volume === 3` (the firmware's mute value) silences playback; all other volume values play at full gain. No intermediate gain levels are applied.
 
 ##### LED visualization
 

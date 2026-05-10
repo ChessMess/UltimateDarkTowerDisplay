@@ -167,12 +167,9 @@ export interface LightingConfigCore {
     };
   };
 
-  /** Per-LED effect tween durations + idle breathing pulse on the key light. */
+  /** Idle breathing pulse on the key light. Per-LED effect timings are
+   *  firmware-fixed (see LedEffectAnimator) and not user-configurable. */
   animation?: {
-    fadeS?: number;
-    breatheS?: number;
-    breatheFastS?: number;
-    flickerS?: number;
     idleBreathe?: { peakFactor?: number; durationS?: number };
   };
 

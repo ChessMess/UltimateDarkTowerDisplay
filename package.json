@@ -25,9 +25,10 @@
     "build:example": "vite build --config vite.config.example.ts",
     "dev": "vite",
     "dev:example": "vite --open /example/index.html",
-    "test": "jest --config jest.config.cjs",
+    "test": "jest --config jest.config.cjs && jest --config jest.config.snapshots.cjs",
     "test:watch": "jest --config jest.config.cjs --watch",
     "test:coverage": "jest --config jest.config.cjs --coverage",
+    "test:sequence-snapshots": "jest --config jest.config.snapshots.cjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.example.json",
     "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts' 'example/**/*.ts'",
     "lint:fix": "eslint 'src/**/*.ts' 'tests/**/*.ts' 'example/**/*.ts' --fix",
@@ -36,9 +37,9 @@
     "ci": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "peerDependencies": {
-    "ultimatedarktower": "^2.5.0",
+    "gsap": "^3.12.0",
     "three": "^0.170.0",
-    "gsap": "^3.12.0"
+    "ultimatedarktower": "^2.5.0"
   },
   "peerDependenciesMeta": {
     "three": {
@@ -88,5 +89,8 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=7.0.0"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }

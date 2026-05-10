@@ -18,15 +18,31 @@ function makeTimeline(opts) {
   const tl = {
     killed: false,
     calls: [],
+    tweens: [],
+    children: [],
+    opts: opts || {},
     to(target, vars, position) {
-      tl.calls.push({ target, vars, position });
+      const child = { kind: 'to', target, vars, position };
+      tl.calls.push(child);
+      tl.tweens.push(child);
+      tl.children.push(child);
+      return tl;
+    },
+    call(fn, params, position) {
+      const child = { kind: 'call', fn, params, position };
+      tl.calls.push(child);
+      tl.children.push(child);
+      return tl;
+    },
+    add(child, position) {
+      tl.children.push({ kind: 'add', child, position });
       return tl;
     },
     kill() {
       tl.killed = true;
     },
     __fireComplete() {
-      if (opts && typeof opts.onComplete === 'function') opts.onComplete();
+      if (tl.opts && typeof tl.opts.onComplete === 'function') tl.opts.onComplete();
     },
   };
   timelines.push(tl);

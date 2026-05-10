@@ -128,6 +128,15 @@ export function initLightingController(getDisplay: () => TowerDisplay, els: DomE
     });
   }
 
+  // Toggling this is the user gesture that lets the AudioContext leave the
+  // suspended state — autoplay policy means we cannot enable audio until the
+  // user opts in by clicking something.
+  if (els.chkTowerAudio) {
+    els.chkTowerAudio.addEventListener('change', () => {
+      getDisplay().setTowerAudioEnabled(els.chkTowerAudio!.checked);
+    });
+  }
+
   if (els.chkZoomToCursor) {
     els.chkZoomToCursor.addEventListener('change', () => {
       getDisplay().setZoomToCursor(els.chkZoomToCursor!.checked);

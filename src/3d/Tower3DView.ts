@@ -8,6 +8,7 @@ import type { ITowerDisplay } from '../types';
 import { injectStyles } from '../styles';
 import { SideButtons } from '../shared/SideButtons';
 import { DrumRotationAudio } from '../audio/DrumRotationAudio';
+import { TowerSampleAudio } from '../audio/TowerSampleAudio';
 
 import type { LightingConfig, ResolvedLightingConfig, CameraConfig } from './types';
 import {
@@ -20,6 +21,7 @@ import { computeRedLightPosition, computeSealLedPose, disposeObject } from './ut
 import { DEFAULT_LIGHTING, resolveLighting } from './LightingResolver';
 import { LedEffectAnimator } from './LedEffectAnimator';
 import type { LedRef } from './LedEffectAnimator';
+import { SequenceAnimator } from '../sequences/SequenceAnimator';
 import { CameraController } from './CameraController';
 import { SceneLighting } from './SceneLighting';
 import type { SceneLightsPartial } from './SceneLighting';
@@ -138,6 +140,7 @@ export class Tower3DView implements ITowerDisplay {
   private skyboxManager: SkyboxManager | null = null;
   private sealManager: SealManager = new SealManager();
   private drumAudio: DrumRotationAudio = new DrumRotationAudio();
+  private towerSampleAudio: TowerSampleAudio = new TowerSampleAudio();
   private drumManager: DrumManager;
 
   private wrapper: HTMLDivElement | null = null;
@@ -166,6 +169,7 @@ export class Tower3DView implements ITowerDisplay {
 
   private ledRefs: Map<string, LedRef> = new Map();
   private ledAnimator: LedEffectAnimator | null = null;
+  private sequenceAnimator: SequenceAnimator | null = null;
 
   /** Optional callback fired when the selected side changes (user click or programmatic). */
   onSideChange?: (side: TowerSide) => void;
@@ -199,8 +203,24 @@ export class Tower3DView implements ITowerDisplay {
   applyState(state: TowerState): void {
     this.latestState = state;
     if (this.wrapper) this.wrapper.style.display = '';
-    this.ledAnimator?.replayAll(state);
+
+    // When a sequence completes naturally, leave the LEDs at whatever value
+    // the timeline last wrote. On the real tower, the firmware ends the
+    // sequence body (defeat saturated; victory cut to black at phase 8) and
+    // the app delivers a fresh state in response to the completion
+    // notification. We don't simulate that follow-up state here, so a
+    // post-completion replay of the base state would falsely restore
+    // user-set "on" effects that the real tower would never show.
+    const sequenceActive = this.sequenceAnimator?.apply(state.led_sequence, () => {
+      // intentionally empty — see comment above
+    });
+
+    if (!sequenceActive) {
+      this.ledAnimator?.replayAll(state);
+    }
+
     this.drumManager.applyDrums(state.drum);
+    this.towerSampleAudio.sync(state.audio.sample, state.audio.loop, state.audio.volume);
   }
 
   /** Update seal backlight visibility — pass the current list of broken seals. */
@@ -234,6 +254,7 @@ export class Tower3DView implements ITowerDisplay {
       }
     }
     this.drumManager.stopAll();
+    this.towerSampleAudio.stop();
     if (this.wrapper) this.wrapper.style.display = 'none';
   }
 
@@ -252,6 +273,25 @@ export class Tower3DView implements ITowerDisplay {
    */
   setDrumRotationSoundEnabled(enabled: boolean): void {
     this.drumAudio.setEnabled(enabled);
+  }
+
+  /**
+   * Provide the sample-id → URL map used to play decoded tower audio
+   * (`state.audio.sample`). Sparse maps are fine — unmapped ids warn-once
+   * and skip playback. Sample id 0 always means silence.
+   */
+  setTowerAudioLibrary(library: Record<number, string>): void {
+    this.towerSampleAudio.setLibrary(library);
+  }
+
+  /**
+   * Enable or disable tower-sample audio. Disabled by default — consumers
+   * must opt in (which also satisfies browser autoplay-policy gestures).
+   * If a non-silent sample was the most recent state, enabling re-triggers
+   * playback so users hear active loops without waiting for the next state.
+   */
+  setTowerAudioEnabled(enabled: boolean): void {
+    this.towerSampleAudio.setEnabled(enabled);
   }
 
   /** When enabled, preserve the current camera orbit instead of resetting to the default fit on side selection. */
@@ -371,6 +411,8 @@ export class Tower3DView implements ITowerDisplay {
       this.controls.dispose();
       this.controls = null;
     }
+    this.sequenceAnimator?.dispose();
+    this.sequenceAnimator = null;
     this.ledAnimator?.dispose();
     this.ledAnimator = null;
     for (const ref of this.ledRefs.values()) {
@@ -380,6 +422,7 @@ export class Tower3DView implements ITowerDisplay {
     this.sealManager.dispose();
     this.drumManager.dispose();
     this.drumAudio.dispose();
+    this.towerSampleAudio.dispose();
     if (this.model) {
       disposeObject(this.model);
       this.model = null;
@@ -714,6 +757,7 @@ export class Tower3DView implements ITowerDisplay {
     this.logger.log('buildLeds', { count: this.ledRefs.size, radius: this.modelRadius });
 
     this.ledAnimator = new LedEffectAnimator(this.ledRefs, () => this.lighting, this.sealManager);
+    this.sequenceAnimator = new SequenceAnimator({ ledAnimator: this.ledAnimator });
   }
 
   /** Create a radial-gradient canvas texture for ledge LED halo sprites. */

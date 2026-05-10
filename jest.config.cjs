@@ -3,6 +3,7 @@ module.exports = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/tests'],
   testMatch: ['**/*.(test|spec).+(ts|tsx|js)'],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/tests/sequenceSnapshots/'],
   setupFiles: ['<rootDir>/tests/setup.js'],
   transform: {
     '^.+\\.tsx?$': [

@@ -3,13 +3,10 @@ import {
   createDefaultTowerState,
   LIGHT_EFFECTS,
   TOWER_AUDIO_LIBRARY,
-  TOWER_LIGHT_SEQUENCES,
 } from 'ultimatedarktower';
+import { buildSequenceAudioMap } from './sequenceAudioConfig';
 
 const lightEffects = Object.values(LIGHT_EFFECTS).filter(
-  (value): value is number => typeof value === 'number'
-);
-const lightSequences = Object.values(TOWER_LIGHT_SEQUENCES).filter(
   (value): value is number => typeof value === 'number'
 );
 const audioSamples = Object.values(TOWER_AUDIO_LIBRARY).map((entry) => entry.value);
@@ -21,8 +18,8 @@ export function createReadmeExampleState(): TowerState {
   state.layer[0].light[1].effect = LIGHT_EFFECTS.breathe;
   state.drum[0].position = 1;
   state.drum[0].calibrated = true;
-  state.audio.sample = TOWER_AUDIO_LIBRARY.Ashstrider.value;
-  state.audio.loop = true;
+  state.audio.sample = TOWER_AUDIO_LIBRARY.BattleStart.value;
+  state.audio.loop = false;
   state.beam.count = 2;
 
   return state;
@@ -50,9 +47,8 @@ export function createRandomState(): TowerState {
   state.beam.count = Math.floor(Math.random() * 6);
   state.beam.fault = Math.random() > 0.8;
 
-  if (Math.random() > 0.7) {
-    state.led_sequence = lightSequences[Math.floor(Math.random() * lightSequences.length)];
-  }
+  // Keep LED sequence override empty/off when randomizing.
+  state.led_sequence = 0;
 
   return state;
 }
@@ -65,4 +61,22 @@ export function createAllOnState(): TowerState {
     }
   }
   return state;
+}
+
+export const SEQUENCE_AUDIO_MAP: Partial<Record<number, number>> = buildSequenceAudioMap();
+
+export function createSequenceState(sequenceId: number): TowerState {
+  const state = createDefaultTowerState();
+  state.led_sequence = sequenceId;
+  const sample = SEQUENCE_AUDIO_MAP[sequenceId];
+  if (sample !== undefined) {
+    state.audio.sample = sample;
+    state.audio.loop = false;
+    state.audio.volume = 0;
+  }
+  return state;
+}
+
+export function createEmptyState(): TowerState {
+  return createDefaultTowerState();
 }

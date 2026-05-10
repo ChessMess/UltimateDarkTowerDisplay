@@ -99,7 +99,10 @@ describe('Tower3DView instance', () => {
   });
 
   describe('applyState', () => {
-    it('after load, dispatches one tween per LED (24 total)', () => {
+    it('after load, drives every LED to its effect outcome', () => {
+      // Per-LED effects are now firmware-accurate: on/off write instantly
+      // (no GSAP tween), breathe/breatheFast/breathe50 use a single tween,
+      // flicker uses a timeline. So we assert per-LED state, not tween count.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
@@ -110,7 +113,15 @@ describe('Tower3DView instance', () => {
 
       view.applyState(state);
 
-      expect(gsapMock.__getTweens().length).toBe(24);
+      // Instant-write effects land directly on the redLight without a tween.
+      expect(getLedRef(view, 0, 0)!.redLight.intensity).toBeCloseTo(1.0, 10);
+      // Default-off LEDs end up dark.
+      expect(getLedRef(view, 2, 1)!.redLight.intensity).toBeCloseTo(0, 10);
+      // Breathe creates exactly one yoyo tween for that LED.
+      const breatheRef = getLedRef(view, 1, 2)!;
+      expect(breatheRef.tween).not.toBeNull();
+      // Flicker uses a timeline (no plain `gsap.to` for that LED).
+      expect(getLedRef(view, 5, 3)!.tween).not.toBeNull();
       view.dispose();
     });
 
@@ -121,42 +132,47 @@ describe('Tower3DView instance', () => {
       const state = makeState();
       state.layer[0].light[0].effect = LIGHT_EFFECTS.on;
 
-      const tweensBefore = gsapMock.__getTweens().length;
       view.applyState(state);
-      // No LEDs built yet — no new tweens.
-      expect(gsapMock.__getTweens().length).toBe(tweensBefore);
+      // No LEDs built yet, so no per-LED state has been applied.
+      expect(getLedRef(view, 0, 0)).toBeUndefined();
 
       const loader = gltfLoaderMock.__getLastInstance();
       loader.fireLoad();
 
-      // 24 dispatches happen from replay at end of buildLeds.
-      expect(gsapMock.__getTweens().length - tweensBefore).toBe(24);
+      // After buildLeds finishes, replayAll wrote the `on` effect to (0,0).
+      expect(getLedRef(view, 0, 0)!.redLight.intensity).toBeCloseTo(1.0, 10);
       view.dispose();
     });
   });
 
   describe('showIdle', () => {
-    it('dispatches 24 off effects', () => {
+    it('drives every LED off (instant write, no tween)', () => {
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
       view.showIdle();
 
-      const tweens = gsapMock.__getTweens();
-      expect(tweens.length).toBe(24);
-      // Every tween should target `v: 0` (off fades driver to 0).
-      expect(tweens.every((t: { vars: { v: number } }) => t.vars.v === 0)).toBe(true);
+      // Off is now a firmware-accurate instant write — no GSAP tweens.
+      expect(gsapMock.__getTweens().length).toBe(0);
+      for (let layer = 0; layer < 6; layer++) {
+        for (let light = 0; light < 4; light++) {
+          const ref = getLedRef(view, layer, light)!;
+          expect(ref.redLight.intensity).toBeCloseTo(0, 10);
+          expect(ref.redLight.visible).toBe(false);
+        }
+      }
       view.dispose();
     });
   });
 
   describe('dispose', () => {
-    it('kills every LED tween and clears the ledRefs map', () => {
+    it('kills every active LED animation and clears the ledRefs map', () => {
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
+      // Use breathe so every LED gets a live tween we can verify is killed.
       const state = makeState();
       for (const layer of state.layer) {
-        for (const light of layer.light) light.effect = LIGHT_EFFECTS.on;
+        for (const light of layer.light) light.effect = LIGHT_EFFECTS.breathe;
       }
       view.applyState(state);
 
@@ -238,11 +254,14 @@ describe('Tower3DView instance', () => {
 
   describe('lockstep animation', () => {
     it('write() drives redLight intensity and visibility from driver.v', () => {
+      // Use `breathe` so we have a live tween whose onUpdate we can fire to
+      // exercise the writeLed() pipeline. (`on` is now an instant write —
+      // no tween, no onUpdate.)
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
       const state = makeState();
-      state.layer[0].light[0].effect = LIGHT_EFFECTS.on;
+      state.layer[0].light[0].effect = LIGHT_EFFECTS.breathe;
       view.applyState(state);
 
       const ref = getLedRef(view, 0, 0)!;
@@ -261,7 +280,7 @@ describe('Tower3DView instance', () => {
       gsapMock.__reset();
 
       const state = makeState();
-      state.layer[0].light[0].effect = LIGHT_EFFECTS.on;
+      state.layer[0].light[0].effect = LIGHT_EFFECTS.breathe;
       view.applyState(state);
 
       const ref = getLedRef(view, 0, 0)!;
@@ -776,11 +795,7 @@ describe('DEFAULT_LIGHTING', () => {
     });
   });
 
-  it('animation values match historical literals', () => {
-    expect(DEFAULT_LIGHTING.animation.fadeS).toBe(0.15);
-    expect(DEFAULT_LIGHTING.animation.breatheS).toBe(2.0);
-    expect(DEFAULT_LIGHTING.animation.breatheFastS).toBe(0.8);
-    expect(DEFAULT_LIGHTING.animation.flickerS).toBe(0.3);
+  it('idle breathe values match historical literals', () => {
     expect(DEFAULT_LIGHTING.animation.idleBreathe).toEqual({ peakFactor: 1.08, durationS: 4 });
   });
 
