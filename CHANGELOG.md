@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- Game-board image texture for the ground disc. The 3D view now loads `src/3d/assets/board.png` (real Return to Dark Tower board art) via `THREE.TextureLoader`, configured with sRGB color space, max anisotropy, and a calibrated rotation. New module: [`src/3d/GameBoardImageTexture.ts`](src/3d/GameBoardImageTexture.ts). Loading is async with a procedural-texture stand-in until the image resolves; the manager swaps `material.map` live when it lands. On failure (missing asset or fetch error) it logs a warning and falls back to procedural permanently for the session.
+- `lighting.boardDisc.source: 'image' | 'procedural'` — picks which texture renders on the disc. Defaults to `'image'`; the existing procedural board ([`GameBoardTexture.ts`](src/3d/GameBoardTexture.ts)) is kept as the fallback.
+- `lighting.boardDisc.northKingdom: 0 | 1 | 2 | 3` — rotates the image texture in 90° steps so any kingdom can face +Z. Live-updates without reloading the texture. No effect on `'procedural'` source.
+- `lighting.boardDisc.brightness: number` — per-board diffuse multiplier (range 0–2, default 1). Stacks with `scene.exposure` and key/hemi intensity, so the board can be dimmed/brightened independently of the rest of the scene.
+- Example app: new "Board" section under "3D Options" with **Board Size** and **Brightness** sliders. Board Size live-resizes the disc geometry via `groundDisc.radiusFactor`; Brightness drives `boardDisc.brightness`.
+
+### Changed
+
+- `GroundDiscManager` constructor now accepts an optional `maxAnisotropy` argument (forwarded by `Tower3DView` from `renderer.capabilities.getMaxAnisotropy()`). Required so the image texture is sharp at glancing camera angles.
+
+### Fixed
+
+- Expanding the "3D Options" panel in the example app no longer shrinks the rendered output. Previously, a `ResizeObserver` on the `<details>` element triggered a recomputation of the rendered panel's pixel height every time the panel opened/closed; the rendered area now keeps its initial height (still recomputes on window resize and toolbar layout changes).
+- `boardDisc.enabled` JSDoc/runtime mismatch resolved. The JSDoc on [`types.ts`](src/3d/types.ts) used to say "Defaults to false" while the runtime default is `true`. JSDoc now matches runtime. The corresponding "Known gaps" entry has been removed from [`docs/LIGHTING.md`](docs/LIGHTING.md).
+- Re-triggering the same audio sample (e.g. clicking the example app's "Trigger Sequence" button twice on the same sequence) now replays audio. Added an optional `force` parameter to `TowerDisplay.applyState`, `Tower3DView.applyState`, and `TowerSampleAudio.sync` — default `false` preserves dedup for BLE state-mirror callers; pass `true` for user-initiated retriggers. The `ITowerDisplay.applyState` interface now accepts an optional `force?: boolean` (non-breaking for library consumers; `TowerStateReadout` and `TowerSideView` accept and ignore it).
+
 ### Documentation
 
 - Documentation sweep: `docs/API.md` is now the canonical API reference — added missing `TowerDisplay` method docs (`setLedOverride`, `setBoardDiscEnabled`, `setSkyboxUrl`, `getCameraConfig`, `applyCameraConfig`, `setZoomToCursor`, `loadState` getter), a new `TowerStateController` section, and the `clickToToggleLeds`/`onLedClick` properties on `TowerStateReadout`. README now points at `docs/API.md` for the full reference. Removed stale `showLedProxies` references from `README.md`, `docs/API.md`, and the contradictory "Added" entry in this changelog. Fixed outdated "V1" JSDoc on `Tower3DView` that claimed `applyState`/`applySeals` didn't drive visuals. Added missing JSDoc to `SideButtons`, `EFFECT_LABELS`, and three `TowerStateController` getters/methods.

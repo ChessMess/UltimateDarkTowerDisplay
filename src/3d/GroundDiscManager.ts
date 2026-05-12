@@ -1,17 +1,29 @@
 import * as THREE from 'three';
 import type { ResolvedLightingConfig } from './types';
 import { buildBoardTexture } from './GameBoardTexture';
+import { buildBoardTextureFromImage, getBoardTextureRotation } from './GameBoardImageTexture';
 
 /**
- * Manages the noir shadow-catching ground disc and the optional canvas-drawn
- * game board texture that sits on top of it. Owns the Three.js Mesh and
- * CanvasTexture so their lifecycle is isolated from Tower3DView.
+ * Manages the noir shadow-catching ground disc and the optional game board
+ * texture that sits on top of it. The board texture can be either the real
+ * board art (`board.png`) or the procedural canvas fallback, selected via
+ * `lighting.boardDisc.source`. Owns the Three.js Mesh and textures so their
+ * lifecycle is isolated from Tower3DView.
  */
 export class GroundDiscManager {
   private disc: THREE.Mesh | null = null;
-  private boardTexture: THREE.CanvasTexture | null = null;
+  private proceduralTexture: THREE.CanvasTexture | null = null;
+  private imageTexture: THREE.Texture | null = null;
+  private imageLoad: Promise<THREE.Texture | null> | null = null;
+  private imageLoadFailed = false;
+  private readonly maxAnisotropy: number;
 
-  constructor(private readonly scene: THREE.Scene) { }
+  constructor(
+    private readonly scene: THREE.Scene,
+    maxAnisotropy = 1,
+  ) {
+    this.maxAnisotropy = maxAnisotropy;
+  }
 
   /**
    * Create the disc and add it to the scene. Idempotent — subsequent calls
@@ -28,13 +40,12 @@ export class GroundDiscManager {
     const { roughness, metalness, radiusFactor } = lighting.groundDisc;
     const geom = new THREE.CircleGeometry(modelRadius * radiusFactor, 64);
 
-    if (lighting.boardDisc.enabled && !this.boardTexture) {
-      this.boardTexture = buildBoardTexture();
-    }
-    const useBoardTex = lighting.boardDisc.enabled && this.boardTexture;
-    const mat = useBoardTex
+    const boardTex = lighting.boardDisc.enabled
+      ? this.ensureBoardTexture(lighting)
+      : null;
+    const mat = boardTex
       ? new THREE.MeshStandardMaterial({
-        map: this.boardTexture!,
+        map: boardTex,
         roughness: 0.95,
         metalness: 0,
         opacity: lighting.boardDisc.opacity,
@@ -67,7 +78,7 @@ export class GroundDiscManager {
     if (this.disc) this.disc.visible = visible;
   }
 
-  /** Toggle the canvas-generated game board texture on the disc. */
+  /** Toggle the board texture on the disc. */
   setBoardDiscEnabled(
     enabled: boolean,
     lighting: ResolvedLightingConfig,
@@ -77,13 +88,10 @@ export class GroundDiscManager {
     if (!(mat instanceof THREE.MeshStandardMaterial)) return;
 
     if (enabled) {
-      if (!this.boardTexture) this.boardTexture = buildBoardTexture();
-      mat.map = this.boardTexture;
-      mat.color.set(0xffffff);
-      mat.roughness = 0.95;
-      mat.metalness = 0;
-      mat.opacity = lighting.boardDisc.opacity;
-      mat.transparent = lighting.boardDisc.opacity < 1;
+      const tex = this.ensureBoardTexture(lighting);
+      if (tex) {
+        this.applyBoardMaterial(mat, tex, lighting);
+      }
     } else {
       mat.map = null;
       mat.color.setHex(lighting.groundDisc.color);
@@ -91,10 +99,8 @@ export class GroundDiscManager {
       mat.metalness = lighting.groundDisc.metalness;
       mat.opacity = 1;
       mat.transparent = false;
-      this.boardTexture?.dispose();
-      this.boardTexture = null;
+      mat.needsUpdate = true;
     }
-    mat.needsUpdate = true;
   }
 
   /** Reapply the full lighting config to the disc material and geometry. */
@@ -108,26 +114,17 @@ export class GroundDiscManager {
 
     if (mat instanceof THREE.MeshStandardMaterial) {
       if (lighting.boardDisc.enabled) {
-        if (!this.boardTexture) this.boardTexture = buildBoardTexture();
-        mat.map = this.boardTexture;
-        mat.color.set(0xffffff);
-        mat.roughness = 0.95;
-        mat.metalness = 0;
-        mat.opacity = lighting.boardDisc.opacity;
-        mat.transparent = lighting.boardDisc.opacity < 1;
+        const tex = this.ensureBoardTexture(lighting);
+        if (tex) this.applyBoardMaterial(mat, tex, lighting);
       } else {
-        if (this.boardTexture) {
-          this.boardTexture.dispose();
-          this.boardTexture = null;
-        }
         mat.map = null;
         mat.color.setHex(lighting.groundDisc.color);
         mat.roughness = lighting.groundDisc.roughness;
         mat.metalness = lighting.groundDisc.metalness;
         mat.opacity = 1;
         mat.transparent = false;
+        mat.needsUpdate = true;
       }
-      mat.needsUpdate = true;
     }
 
     this.disc.geometry.dispose();
@@ -150,9 +147,85 @@ export class GroundDiscManager {
       this.disc.removeFromParent();
       this.disc = null;
     }
-    if (this.boardTexture) {
-      this.boardTexture.dispose();
-      this.boardTexture = null;
+    if (this.proceduralTexture) {
+      this.proceduralTexture.dispose();
+      this.proceduralTexture = null;
     }
+    if (this.imageTexture) {
+      this.imageTexture.dispose();
+      this.imageTexture = null;
+    }
+    this.imageLoad = null;
+  }
+
+  /**
+   * Pick the correct cached texture for the current `boardDisc.source`.
+   * For `'image'`: returns the loaded image if ready, otherwise kicks off the
+   * async load and returns the procedural texture as a temporary stand-in. When
+   * the image resolves, the material's map is swapped live.
+   * For `'procedural'`: always returns the procedural canvas texture.
+   */
+  private ensureBoardTexture(
+    lighting: ResolvedLightingConfig,
+  ): THREE.Texture | null {
+    const source = lighting.boardDisc.source;
+
+    if (source === 'image' && !this.imageLoadFailed) {
+      if (this.imageTexture) {
+        this.imageTexture.rotation = getBoardTextureRotation(lighting.boardDisc.northKingdom);
+        return this.imageTexture;
+      }
+      this.startImageLoad(lighting);
+      return this.ensureProceduralTexture();
+    }
+
+    return this.ensureProceduralTexture();
+  }
+
+  private ensureProceduralTexture(): THREE.CanvasTexture | null {
+    if (!this.proceduralTexture) this.proceduralTexture = buildBoardTexture();
+    return this.proceduralTexture;
+  }
+
+  private startImageLoad(lighting: ResolvedLightingConfig): void {
+    if (this.imageLoad) return;
+    this.imageLoad = buildBoardTextureFromImage(
+      this.maxAnisotropy,
+      lighting.boardDisc.northKingdom,
+    ).then((tex) => {
+      if (!tex) {
+        this.imageLoadFailed = true;
+        return null;
+      }
+      this.imageTexture = tex;
+      this.swapMaterialMap(tex, lighting);
+      return tex;
+    });
+  }
+
+  private swapMaterialMap(
+    tex: THREE.Texture,
+    lighting: ResolvedLightingConfig,
+  ): void {
+    if (!this.disc) return;
+    const mat = this.disc.material;
+    if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+    if (!lighting.boardDisc.enabled) return;
+    if (lighting.boardDisc.source !== 'image') return;
+    this.applyBoardMaterial(mat, tex, lighting);
+  }
+
+  private applyBoardMaterial(
+    mat: THREE.MeshStandardMaterial,
+    tex: THREE.Texture,
+    lighting: ResolvedLightingConfig,
+  ): void {
+    mat.map = tex;
+    mat.color.setScalar(lighting.boardDisc.brightness);
+    mat.roughness = 0.95;
+    mat.metalness = 0;
+    mat.opacity = lighting.boardDisc.opacity;
+    mat.transparent = lighting.boardDisc.opacity < 1;
+    mat.needsUpdate = true;
   }
 }

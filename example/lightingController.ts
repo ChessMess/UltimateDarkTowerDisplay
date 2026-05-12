@@ -19,6 +19,8 @@ function syncSceneLightControls(lighting: ResolvedLightingConfig, els: DomElemen
   sceneLights.fillIntensity = fill;
 
   const bloom = lighting.scene.bloom;
+  const boardSize = lighting.groundDisc.radiusFactor;
+  const boardBrightness = lighting.boardDisc.brightness;
   const syncTargets: [HTMLInputElement | null, HTMLElement | null, number, number][] = [
     [els.rngHemi, els.lblHemi, hemi, 2], [els.rngKey, els.lblKey, key, 2],
     [els.rngFill, els.lblFill, fill, 2], [els.rngExposure, els.lblExposure, exposure, 2],
@@ -27,6 +29,8 @@ function syncSceneLightControls(lighting: ResolvedLightingConfig, els: DomElemen
     [els.rngBloomStrength, els.lblBloomStrength, bloom.strength, 2],
     [els.rngBloomRadius, els.lblBloomRadius, bloom.radius, 2],
     [els.rngBloomThreshold, els.lblBloomThreshold, bloom.threshold, 2],
+    [els.rngBoardSize, els.lblBoardSize, boardSize, 1],
+    [els.rngBoardBrightness, els.lblBoardBrightness, boardBrightness, 2],
   ];
   for (const [rng, lbl, val, dec] of syncTargets) {
     if (rng) rng.value = String(val);
@@ -101,6 +105,14 @@ export function initLightingController(getDisplay: () => TowerDisplay, els: DomE
 
   bindLightSlider(els.rngBloomThreshold, els.lblBloomThreshold, v => {
     getDisplay().applyLightingConfig({ scene: { bloom: { threshold: v } } });
+  }, getDisplay, els);
+
+  bindLightSlider(els.rngBoardSize, els.lblBoardSize, v => {
+    getDisplay().applyLightingConfig({ groundDisc: { radiusFactor: v } });
+  }, getDisplay, els, 1);
+
+  bindLightSlider(els.rngBoardBrightness, els.lblBoardBrightness, v => {
+    getDisplay().applyLightingConfig({ boardDisc: { brightness: v } });
   }, getDisplay, els);
 
   if (els.chkGroundDisc) {

@@ -15,7 +15,6 @@ export function initLayoutManager(els: DomElements): void {
 
   const observer = new ResizeObserver(() => constrainRenderedPanelHeight(els));
   if (els.toolbarEl) observer.observe(els.toolbarEl);
-  if (els.threeDOptionsEl) observer.observe(els.threeDOptionsEl);
 
   constrainRenderedPanelHeight(els);
 }

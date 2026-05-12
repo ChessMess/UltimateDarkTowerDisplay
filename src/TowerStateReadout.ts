@@ -102,8 +102,12 @@ export class TowerStateReadout implements ITowerDisplay {
     this.renderIdle();
   }
 
-  /** Update the display with a new decoded tower state. */
-  applyState(state: TowerState): void {
+  /**
+   * Update the display with a new decoded tower state. The `_force`
+   * parameter exists for `ITowerDisplay` compatibility; this renderer has
+   * no audio path and ignores it.
+   */
+  applyState(state: TowerState, _force?: boolean): void {
     const skullDrop = this.prevBeamCount !== null && state.beam.count > this.prevBeamCount;
     this.prevBeamCount = state.beam.count;
     this.latestState = state;
@@ -121,6 +125,13 @@ export class TowerStateReadout implements ITowerDisplay {
   showIdle(): void {
     this.latestState = null;
     this.renderIdle();
+  }
+
+  /** Clear all user-applied LED effect overrides and re-render. */
+  clearLedOverrides(): void {
+    if (this.userOverriddenLeds.size === 0) return;
+    this.userOverriddenLeds.clear();
+    if (this.latestState) this.render(false);
   }
 
   /** Remove all rendered DOM content and reset internal state. */

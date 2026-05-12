@@ -1,8 +1,9 @@
-import type { TowerDisplay } from '../src/index';
+import type { TowerDisplay, TowerStateReadout } from '../src/index';
 import type { LightingConfig, CameraConfig } from '../src/3d/types';
 import type { TowerState } from 'ultimatedarktower';
 import type { DomElements } from './dom';
 import { armTowerAudioFromUserGesture, is3DViewVisible, getLastState } from './rendererController';
+import { clearLedOverrides } from './ledOverrideController';
 import { showBannerError, bindCopyButton } from './utils';
 
 type ConfigType = 'state' | 'lighting' | 'camera';
@@ -63,7 +64,8 @@ export function syncConfigSelectorVisibility(getDisplay: () => TowerDisplay, els
 
 export function initConfigEditor(
   getDisplay: () => TowerDisplay,
-  setLastState: (s: TowerState) => void,
+  getReadout: () => TowerStateReadout,
+  setLastState: (s: TowerState | null) => void,
   onStateApplied: (state: TowerState) => void,
   els: DomElements,
 ): void {
@@ -99,7 +101,9 @@ export function initConfigEditor(
         } else {
           const parsed = JSON.parse(els.configPreview.value) as TowerState;
           armTowerAudioFromUserGesture(els);
-          getDisplay().applyState(parsed);
+          clearLedOverrides(getDisplay(), getReadout());
+          getDisplay().applyState(parsed, true);
+          getReadout().applyState(parsed);
           setLastState(parsed);
           cleanConfigJson = els.configPreview.value;
           if (els.btnApplyConfig) els.btnApplyConfig.disabled = true;

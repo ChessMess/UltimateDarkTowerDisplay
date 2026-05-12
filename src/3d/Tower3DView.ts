@@ -199,8 +199,13 @@ export class Tower3DView implements ITowerDisplay {
     this.startRenderLoop();
   }
 
-  /** Update the 3D view with a new decoded tower state, replaying all LED effects and drum positions. */
-  applyState(state: TowerState): void {
+  /**
+   * Update the 3D view with a new decoded tower state, replaying all LED
+   * effects and drum positions. Pass `force = true` to replay tower-sample
+   * audio even when `state.audio.sample`/`loop` match the previous state
+   * (e.g. the example app's "Trigger Sequence" button needs this).
+   */
+  applyState(state: TowerState, force = false): void {
     this.latestState = state;
     if (this.wrapper) this.wrapper.style.display = '';
 
@@ -220,7 +225,7 @@ export class Tower3DView implements ITowerDisplay {
     }
 
     this.drumManager.applyDrums(state.drum);
-    this.towerSampleAudio.sync(state.audio.sample, state.audio.loop, state.audio.volume);
+    this.towerSampleAudio.sync(state.audio.sample, state.audio.loop, state.audio.volume, force);
   }
 
   /** Update seal backlight visibility — pass the current list of broken seals. */
@@ -522,7 +527,10 @@ export class Tower3DView implements ITowerDisplay {
     this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
 
     this.sceneLighting = new SceneLighting(this.scene, this.camera, this.renderer, lighting);
-    this.groundDiscManager = new GroundDiscManager(this.scene);
+    this.groundDiscManager = new GroundDiscManager(
+      this.scene,
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
     this.skyboxManager = new SkyboxManager(this.scene);
 
     if (this.debug3D) {

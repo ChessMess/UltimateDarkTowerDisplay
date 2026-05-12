@@ -66,6 +66,11 @@ export class TowerStateController {
     return this.latestState ? this.resolveState(this.latestState) : null;
   }
 
+  /** Clear all stored LED overrides. The stored state and seal toggles are untouched. */
+  clearLedOverrides(): void {
+    this.userOverriddenLeds.clear();
+  }
+
   /** Get the latest applied state with LED overrides merged in. Returns null when no state has been applied yet. */
   getResolvedState(): TowerState | null {
     return this.latestState ? this.resolveState(this.latestState) : null;

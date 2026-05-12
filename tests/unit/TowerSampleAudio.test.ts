@@ -133,6 +133,28 @@ describe('TowerSampleAudio', () => {
     expect(createdBufferSources[1].loop).toBe(true);
   });
 
+  it('sync with force=true replays the same sample', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+
+    audio.sync(0x25, false, 0);
+    await flush();
+    expect(createdBufferSources).toHaveLength(1);
+
+    // Same sample, no force → dedup keeps the source count at 1.
+    audio.sync(0x25, false, 0);
+    await flush();
+    expect(createdBufferSources).toHaveLength(1);
+
+    // Same sample, force=true → fresh source created and old one stopped.
+    audio.sync(0x25, false, 0, true);
+    await flush();
+    expect(createdBufferSources).toHaveLength(2);
+    expect(createdBufferSources[0].stopCalls).toBe(1);
+    expect(createdBufferSources[1].startCalls).toBe(1);
+  });
+
   it('volume-only change adjusts gain without restarting the source', async () => {
     const audio = new TowerSampleAudio();
     audio.setLibrary(LIB);

@@ -110,10 +110,15 @@ export class TowerDisplay implements ITowerDisplay {
     }
   }
 
-  /** Update the display with a new decoded tower state. */
-  applyState(state: TowerState): void {
+  /**
+   * Update the display with a new decoded tower state. Pass `force = true`
+   * to replay tower-sample audio even when the sample/loop match the
+   * previous state — useful for explicit user triggers. The default
+   * `false` preserves dedup for BLE state-mirror callers.
+   */
+  applyState(state: TowerState, force = false): void {
     const resolved = this.state.applyState(state);
-    for (const r of this.renderers) r.applyState(resolved);
+    for (const r of this.renderers) r.applyState(resolved, force);
   }
 
   /**
@@ -124,6 +129,22 @@ export class TowerDisplay implements ITowerDisplay {
    */
   setLedOverride(layer: number, light: number, effect: number): void {
     this.handleLedClick(layer, light, effect);
+  }
+
+  /**
+   * Clear every per-LED effect override and re-render with the raw last state.
+   * Forwards to any internally-owned `TowerStateReadout` renderers so their
+   * own override map clears in sync.
+   */
+  clearLedOverrides(): void {
+    this.state.clearLedOverrides();
+    for (const r of this.renderers) {
+      if (r instanceof TowerStateReadout) r.clearLedOverrides();
+    }
+    const resolved = this.state.getResolvedState();
+    if (resolved) {
+      for (const r of this.renderers) r.applyState(resolved);
+    }
   }
 
   /** Update seal visibility — pass the current list of broken seals. */

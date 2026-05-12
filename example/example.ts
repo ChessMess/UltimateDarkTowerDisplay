@@ -9,7 +9,7 @@ const els = queryDom();
 
 initRendererController(els);
 
-initConfigEditor(getDisplay, setLastState, (state) => refreshDrumRotateActive(state, els), els);
+initConfigEditor(getDisplay, getReadout, setLastState, (state) => refreshDrumRotateActive(state, els), els);
 
 initLightingController(getDisplay, els);
 

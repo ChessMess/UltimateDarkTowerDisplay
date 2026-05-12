@@ -128,6 +128,25 @@ describe('TowerStateController', () => {
     });
   });
 
+  describe('clearLedOverrides', () => {
+    it('removes overrides so applyState restores the fast path', () => {
+      const ctrl = new TowerStateController();
+      ctrl.setLedOverride(0, 0, LIGHT_EFFECTS.on);
+      ctrl.clearLedOverrides();
+      const state = makeState();
+      expect(ctrl.applyState(state)).toBe(state);
+    });
+
+    it('leaves seal toggles untouched', () => {
+      const ctrl = new TowerStateController();
+      ctrl.applySeals([]);
+      ctrl.toggleSeal(seal('N', 1));
+      ctrl.setLedOverride(0, 0, LIGHT_EFFECTS.on);
+      ctrl.clearLedOverrides();
+      expect(ctrl.getResolvedSeals()).toHaveLength(1);
+    });
+  });
+
   describe('reset', () => {
     it('clears state, overrides, toggles, and external seals', () => {
       const ctrl = new TowerStateController();

@@ -5,7 +5,8 @@ import { refreshConfigPreview, setConfigPreviewMessage, syncConfigSelectorVisibi
 import { refreshLightingConfigBox } from './lightingController';
 import { armTowerAudioFromUserGesture, is3DViewVisible, getLastState } from './rendererController';
 import { createReadmeExampleState, createRandomState, createAllOnState, createSequenceState, createEmptyState, SEQUENCE_AUDIO_MAP } from './presets';
-import { resetSeals } from './sealController';
+import { resetSeals, toggleSeal, getTower } from './sealController';
+import { clearLedOverrides } from './ledOverrideController';
 import { SEQUENCE_METADATA } from '../src/sequences/sequenceMetadata';
 
 const DRUM_INDEX_BY_LEVEL: Record<string, number> = { top: 0, middle: 1, bottom: 2 };
@@ -18,7 +19,7 @@ function applyAndShow(
   state: TowerState,
   getDisplay: () => TowerDisplay,
   getReadout: () => TowerStateReadout,
-  setLastState: (s: TowerState) => void,
+  setLastState: (s: TowerState | null) => void,
   els: DomElements,
   fromUserGesture = true
 ): void {
@@ -26,7 +27,8 @@ function applyAndShow(
   if (fromUserGesture) {
     armTowerAudioFromUserGesture(els);
   }
-  getDisplay().applyState(state);
+  clearLedOverrides(getDisplay(), getReadout());
+  getDisplay().applyState(state, fromUserGesture);
   getReadout().applyState(state);
   refreshConfigPreview(getDisplay, els);
   refreshDrumRotateActive(state, els);
@@ -38,7 +40,7 @@ function applyAndShow(
 export function initStateEditor(
   getDisplay: () => TowerDisplay,
   getReadout: () => TowerStateReadout,
-  setLastState: (s: TowerState) => void,
+  setLastState: (s: TowerState | null) => void,
   els: DomElements
 ): void {
   if (els.btnReadme) {
@@ -65,6 +67,8 @@ export function initStateEditor(
   if (els.btnIdle) {
     els.btnIdle.addEventListener('click', () => {
       setStateName('idle', els);
+      setLastState(null);
+      clearLedOverrides(getDisplay(), getReadout());
       getDisplay().showIdle();
       getReadout().showIdle();
       setConfigPreviewMessage('Idle view: no state currently rendered.', els);
@@ -74,6 +78,19 @@ export function initStateEditor(
   if (els.btnResetSeals) {
     els.btnResetSeals.addEventListener('click', () => {
       resetSeals(getDisplay(), getReadout());
+      refreshSealToggleActive(els);
+    });
+  }
+
+  if (els.sealToggleGrid) {
+    els.sealToggleGrid.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const level = target.dataset.sealLevel;
+      const side = target.dataset.sealSide;
+      if (!level || !side) return;
+      toggleSeal({ side: side as 'north' | 'east' | 'south' | 'west', level: level as 'top' | 'middle' | 'bottom' }, getDisplay(), getReadout());
+      refreshSealToggleActive(els);
     });
   }
 
@@ -96,7 +113,7 @@ export function initStateEditor(
       setStateName(label, els);
       getDisplay().showIdle();
       getReadout().showIdle();
-      applyAndShow(createSequenceState(sequenceId), getDisplay, getReadout, setLastState, els);
+      applyAndShow(createSequenceState(sequenceId, getLastState() ?? undefined), getDisplay, getReadout, setLastState, els);
     });
   }
 
@@ -148,6 +165,19 @@ function populateSequenceSelect(els: DomElements): void {
   }
 }
 
+export function refreshSealToggleActive(els: DomElements): void {
+  if (!els.sealToggleGrid) return;
+  const broken = getTower().getBrokenSeals();
+  const brokenKeys = new Set(broken.map((s) => `${s.side}:${s.level}`));
+  const buttons = els.sealToggleGrid.querySelectorAll<HTMLButtonElement>('button[data-seal-level]');
+  buttons.forEach((btn) => {
+    const level = btn.dataset.sealLevel;
+    const side = btn.dataset.sealSide;
+    if (!level || !side) return;
+    btn.classList.toggle('active', brokenKeys.has(`${side}:${level}`));
+  });
+}
+
 export function refreshDrumRotateActive(state: TowerState, els: DomElements): void {
   if (!els.drumRotateGrid) return;
   const buttons = els.drumRotateGrid.querySelectorAll<HTMLButtonElement>('button[data-drum-level]');
@@ -163,7 +193,7 @@ export function refreshDrumRotateActive(state: TowerState, els: DomElements): vo
 export function initInitialState(
   getDisplay: () => TowerDisplay,
   getReadout: () => TowerStateReadout,
-  setLastState: (s: TowerState) => void,
+  setLastState: (s: TowerState | null) => void,
   els: DomElements
 ): void {
   syncConfigSelectorVisibility(getDisplay, els);

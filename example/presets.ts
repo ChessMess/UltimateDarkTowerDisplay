@@ -18,8 +18,6 @@ export function createReadmeExampleState(): TowerState {
   state.layer[0].light[1].effect = LIGHT_EFFECTS.breathe;
   state.drum[0].position = 1;
   state.drum[0].calibrated = true;
-  state.audio.sample = TOWER_AUDIO_LIBRARY.BattleStart.value;
-  state.audio.loop = false;
   state.beam.count = 2;
 
   return state;
@@ -65,8 +63,8 @@ export function createAllOnState(): TowerState {
 
 export const SEQUENCE_AUDIO_MAP: Partial<Record<number, number>> = buildSequenceAudioMap();
 
-export function createSequenceState(sequenceId: number): TowerState {
-  const state = createDefaultTowerState();
+export function createSequenceState(sequenceId: number, base?: TowerState): TowerState {
+  const state = base ? structuredClone(base) : createDefaultTowerState();
   state.led_sequence = sequenceId;
   const sample = SEQUENCE_AUDIO_MAP[sequenceId];
   if (sample !== undefined) {

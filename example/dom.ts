@@ -36,6 +36,10 @@ export interface DomElements {
   lblBloomStrength: HTMLElement | null;
   lblBloomRadius: HTMLElement | null;
   lblBloomThreshold: HTMLElement | null;
+  rngBoardSize: HTMLInputElement | null;
+  lblBoardSize: HTMLElement | null;
+  rngBoardBrightness: HTMLInputElement | null;
+  lblBoardBrightness: HTMLElement | null;
   btnEntrance: HTMLElement | null;
   btnReadme: HTMLElement | null;
   btnRandom: HTMLElement | null;
@@ -46,6 +50,7 @@ export interface DomElements {
   selSequence: HTMLSelectElement | null;
   btnTriggerSequence: HTMLButtonElement | null;
   drumRotateGrid: HTMLElement | null;
+  sealToggleGrid: HTMLElement | null;
   renderedPanel: HTMLElement | null;
   toolbarEl: Element | null;
 }
@@ -99,6 +104,10 @@ export function queryDom(): DomElements {
     lblBloomStrength: document.getElementById('lbl-bloom-strength'),
     lblBloomRadius: document.getElementById('lbl-bloom-radius'),
     lblBloomThreshold: document.getElementById('lbl-bloom-threshold'),
+    rngBoardSize: document.getElementById('rng-board-size') as HTMLInputElement | null,
+    lblBoardSize: document.getElementById('lbl-board-size'),
+    rngBoardBrightness: document.getElementById('rng-board-brightness') as HTMLInputElement | null,
+    lblBoardBrightness: document.getElementById('lbl-board-brightness'),
     btnEntrance: document.getElementById('btn-entrance'),
     btnReadme: document.getElementById('btn-readme'),
     btnRandom: document.getElementById('btn-random'),
@@ -109,6 +118,7 @@ export function queryDom(): DomElements {
     selSequence: document.getElementById('sel-sequence') as HTMLSelectElement | null,
     btnTriggerSequence: document.getElementById('btn-trigger-sequence') as HTMLButtonElement | null,
     drumRotateGrid: document.getElementById('drum-rotate-grid'),
+    sealToggleGrid: document.getElementById('seal-toggle-grid'),
     renderedPanel: document.getElementById('rendered-panel'),
     toolbarEl: document.querySelector('.toolbar'),
   };

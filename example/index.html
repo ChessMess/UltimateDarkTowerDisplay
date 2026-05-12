@@ -66,6 +66,26 @@
         <button data-drum-level="bottom" data-drum-side="3">W</button>
       </div>
     </div>
+    <div class="toolbar-group">
+      <span class="toolbar-group-label">Seals</span>
+      <div id="seal-toggle-grid" class="seal-toggle-grid">
+        <span class="seal-toggle-row-label">Top</span>
+        <button data-seal-level="top" data-seal-side="north">N</button>
+        <button data-seal-level="top" data-seal-side="east">E</button>
+        <button data-seal-level="top" data-seal-side="south">S</button>
+        <button data-seal-level="top" data-seal-side="west">W</button>
+        <span class="seal-toggle-row-label">Middle</span>
+        <button data-seal-level="middle" data-seal-side="north">N</button>
+        <button data-seal-level="middle" data-seal-side="east">E</button>
+        <button data-seal-level="middle" data-seal-side="south">S</button>
+        <button data-seal-level="middle" data-seal-side="west">W</button>
+        <span class="seal-toggle-row-label">Bottom</span>
+        <button data-seal-level="bottom" data-seal-side="north">N</button>
+        <button data-seal-level="bottom" data-seal-side="east">E</button>
+        <button data-seal-level="bottom" data-seal-side="south">S</button>
+        <button data-seal-level="bottom" data-seal-side="west">W</button>
+      </div>
+    </div>
   </div>
 
   <details class="three-d-options" id="three-d-options">
@@ -137,6 +157,19 @@
         Threshold
         <input type="range" id="rng-bloom-threshold" min="0" max="1" step="0.01" value="0" />
         <span id="lbl-bloom-threshold">0.00</span>
+      </label>
+    </div>
+    <h3 class="three-d-subhead">Board</h3>
+    <div class="sliders-grid">
+      <label class="slider-label">
+        Board Size
+        <input type="range" id="rng-board-size" min="1.5" max="6" step="0.1" value="3" />
+        <span id="lbl-board-size">3.0</span>
+      </label>
+      <label class="slider-label">
+        Brightness
+        <input type="range" id="rng-board-brightness" min="0" max="2" step="0.05" value="1" />
+        <span id="lbl-board-brightness">1.00</span>
       </label>
     </div>
   </details>

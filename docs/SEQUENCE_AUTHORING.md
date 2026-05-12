@@ -205,7 +205,7 @@ Every LED's level is decremented by `delta`, clamped to ≥ 0. Uses an internal 
 
 #### `mode: "randomLed"`
 
-One random `(layer, light)` is written to `level`. **Consumes 2 RNG draws per tick** in (layer, light) order.
+One random `(layer, light)` is written to `level`. **Consumes 2 RNG draws per fire at playback time** (layer pick, then light pick) — so each play picks a different LED.
 
 ```json
 {
@@ -286,11 +286,13 @@ The handler reuses [`applyFlickerStep`](../src/sequences/builders/ledSequenceOps
 
 #### Respawn mode (with `respawn`)
 
-The standard per-LED iteration is **skipped**. Instead, every tick:
+The standard per-LED iteration is **skipped**. Instead, **each playback tick**, the handler:
 
-1. One RNG draw to test `respawn.probability`.
-2. On pass: two more draws to pick a random `(layer, light)`.
-3. If that LED's level is below `respawn.threshold`: one final draw chooses a level uniformly in `[levelMin, levelMax]` and writes it.
+1. Draws once from the RNG to test `respawn.probability`.
+2. On pass: draws twice more to pick a random `(layer, light)`.
+3. If that LED's level is below `respawn.threshold`: draws one final time to choose a level uniformly in `[levelMin, levelMax]` and writes it.
+
+All draws happen live at playback time, so each play produces a different sparkle pattern.
 
 This is the twinkle pattern.
 
@@ -421,7 +423,7 @@ So with `lightStepTicks: 12` and `periodTicks: 48`, each layer's lit position mo
 
 Specialized for sealReveal. Allocates one slot per LED in scope, each with `{layer, light, delay, level}`. For each tick `t` in `[atTick, endTick)`:
 
-- If `t - atTick` matches one of the `reseed[i].atTick` offsets: reseed every slot's `delay` to `magnitude × ((rand mod 12) + 4)`. **No LED writes on a reseed tick.** Consumes 1 RNG draw per slot.
+- If `t - atTick` matches one of the `reseed[i].atTick` offsets: reseed every slot's `delay` to `magnitude × ((rand mod 12) + 4)`. **No LED writes on a reseed tick.** Consumes 1 RNG draw per slot **at playback time**, so each play's reseed produces a different delay pattern.
 - Otherwise: for each slot, if `slot.delay > 0 && (t - atTick) % slot.delay == 0`, set `slot.level = pulseLevel`; otherwise `slot.level *= decayPerTick`. Then write to the LED.
 
 ```json
@@ -524,6 +526,8 @@ Same goes for gloat (chortle setAll before per-tick decay) and twinkle (respawn 
 ---
 
 ## RNG and determinism
+
+**When the random draws happen:** every RNG call is wrapped in a GSAP `tl.call(() => …)` so it runs each time the timeline ticks — not when the JSON is loaded or when `SequencePlayer.build()` runs. The practical consequence: **each play of a random sequence looks different**. Nothing is baked in. The seeded `mulberry32` PRNG is used only in tests to make this reproducible.
 
 Several kinds consume random numbers (`flickerStep`, `pulseFlicker`, `discreteSet randomLed`). The sequence player consumes random numbers via an injectable `rng: () => number` on `SequenceAnimatorDeps` ([src/sequences/builders/types.ts:11](../src/sequences/builders/types.ts#L11)) — defaults to `Math.random` in production.
 

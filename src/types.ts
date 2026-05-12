@@ -55,8 +55,16 @@ export interface TowerDisplayOptions {
 
 /** Public interface for all display implementations. */
 export interface ITowerDisplay {
-  /** Update the display with a new decoded tower state. */
-  applyState(state: TowerState): void;
+  /**
+   * Update the display with a new decoded tower state.
+   *
+   * Pass `force = true` to treat this as a fresh user-initiated trigger:
+   * audio-capable renderers will replay the current sample even when it
+   * matches the previously-synced one. The default (`false`) is correct
+   * for BLE state-mirror callers, where identical successive packets must
+   * not restart playback.
+   */
+  applyState(state: TowerState, force?: boolean): void;
   /** Update seal visibility — pass the current list of broken seals. */
   applySeals(brokenSeals: SealIdentifier[]): void;
   /** Reset the display to its idle/waiting state. */

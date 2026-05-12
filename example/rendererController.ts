@@ -3,6 +3,7 @@ import type { TowerDisplayOptions, RendererType } from '../src/index';
 import type { TowerState, TowerSide } from 'ultimatedarktower';
 import type { DomElements } from './dom';
 import { toggleSeal, refreshSeals } from './sealController';
+import { setLedOverride as recordLedOverride, replayLedOverrides } from './ledOverrideController';
 import towerModelUrl from '../src/3d/assets/tower.glb?url';
 import { buildTowerAudioLibrary, hasTowerAudioAsset } from './towerAudioLibrary';
 
@@ -123,6 +124,7 @@ function recreateDisplay(renderers: RendererType | RendererType[], activeId: Vie
   setActiveViewButton(activeId);
   applyAudioConfig(els, true);
   if (lastState) display.applyState(lastState);
+  replayLedOverrides(display);
   refreshSeals(display, readout);
   if (lastSide) display.selectSide(lastSide);
   syncToolbar3DState(els);
@@ -134,7 +136,7 @@ export function initRendererController(els: DomElements): void {
   readout.clickToToggleSeals = true;
   readout.onSealClick = (seal) => toggleSeal(seal, display, readout);
   readout.clickToToggleLeds = true;
-  readout.onLedClick = (layer, light, effect) => display.setLedOverride(layer, light, effect);
+  readout.onLedClick = (layer, light, effect) => recordLedOverride(layer, light, effect, display);
   display = new TowerDisplay(buildDisplayOptions('3d-view', els));
   publishDisplay();
   applyAudioConfig(els);

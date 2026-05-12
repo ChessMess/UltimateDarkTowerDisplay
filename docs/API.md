@@ -61,11 +61,13 @@ new TowerDisplay(options: TowerDisplayOptions)
 
 #### Methods
 
-##### `applyState(state: TowerState): void`
+##### `applyState(state: TowerState, force?: boolean): void`
 
 Update all renderers with a new decoded tower state. Renders LED grid, drum positions, audio info, skull drops, and LED sequence overrides.
 
 Obtain `TowerState` from the [`ultimatedarktower`](https://www.npmjs.com/package/ultimatedarktower) peer dependency.
+
+**`force`:** Pass `true` to replay tower-sample audio even when `state.audio.sample` and `state.audio.loop` match the previously-synced values — appropriate for explicit user-initiated triggers (e.g. a "Trigger Sequence" button). The default `false` preserves dedup for BLE state-mirror callers, where identical successive packets must not restart playback.
 
 **Skull drop detection:** The readout tracks `beam.count` across consecutive calls. When the count increases between two calls, a skull drop animation is shown.
 
@@ -159,7 +161,7 @@ Apply a partial camera configuration at runtime. Any fields provided overwrite t
 
 ##### `setBoardDiscEnabled(enabled: boolean): void`
 
-Show or hide the canvas-generated game board texture on the ground disc. No-op when no 3D view is active.
+Show or hide the game board texture on the ground disc. The texture source is governed by `lighting.boardDisc.source` (`'image'` loads `src/3d/assets/board.png`; `'procedural'` uses the canvas-drawn fallback). No-op when no 3D view is active. See [LIGHTING.md §14](LIGHTING.md#14-ground-disc--game-board) for the full board configuration (size, brightness, north-kingdom rotation, source toggle).
 
 ##### `setSkyboxUrl(url: string | null): void`
 
@@ -208,7 +210,7 @@ When `clickToToggleSeals` is `true`:
 
 #### Methods
 
-`applyState(state)`, `applySeals(brokenSeals)`, `showIdle()`, `dispose()`, plus:
+`applyState(state, force?)`, `applySeals(brokenSeals)`, `showIdle()`, `dispose()`, plus:
 
 ##### `selectSide(side: TowerSide): void`
 
@@ -249,7 +251,7 @@ When `TowerStateReadout` is composed via `TowerDisplay`, both `clickToToggleSeal
 
 #### Methods
 
-Same as `TowerDisplay`: `applyState(state)`, `applySeals(brokenSeals)`, `showIdle()`, `dispose()`.
+Same as `TowerDisplay`: `applyState(state, force?)`, `applySeals(brokenSeals)`, `showIdle()`, `dispose()`. `force` is honored on the 3D view's audio path; see `TowerDisplay.applyState` above.
 
 ---
 
@@ -372,7 +374,14 @@ interface LightingConfig {
     color?: number; // 0x050505
     roughness?: number; // 0.92
     metalness?: number; // 0
-    radiusFactor?: number; // 3 × modelRadius
+    radiusFactor?: number; // 3 × modelRadius — also the board size, since the texture fills the disc
+  };
+  boardDisc?: {
+    enabled?: boolean;                       // true — show the board texture
+    opacity?: number;                        // 0.9
+    source?: 'image' | 'procedural';         // 'image' — load src/3d/assets/board.png; 'procedural' = canvas fallback
+    northKingdom?: 0 | 1 | 2 | 3;            // 0 — which kingdom faces +Z (90° steps)
+    brightness?: number;                     // 1 — per-board diffuse multiplier, 0–2
   };
 
 ```ts
@@ -446,6 +455,8 @@ Rotation audio is opt-in via `setDrumRotationSoundEnabled(true)`. While enabled,
 `applyState()` also drives sample playback from `state.audio` (sample id, loop flag, volume). Sample audio is opt-in — call `setSampleAudioEnabled(true)` (or the equivalent on `Tower3DView` directly) to activate it.
 
 Volume is treated as binary: `state.audio.volume === 3` (the firmware's mute value) silences playback; all other volume values play at full gain. No intermediate gain levels are applied.
+
+Pass `force: true` to replay the current sample even if it matches the previously-synced one (use for explicit user triggers; the default `false` preserves dedup for BLE state-mirror callers).
 
 ##### LED visualization
 

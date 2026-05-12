@@ -53,8 +53,16 @@ export class TowerSampleAudio {
     }
   }
 
-  /** Reconcile playback with the latest decoded state.audio fields. */
-  sync(sample: number, loop: boolean, volume: number): void {
+  /**
+   * Reconcile playback with the latest decoded state.audio fields.
+   *
+   * When `force` is true, replay the current sample even if `sample` and
+   * `loop` match what was last synced — used by explicit user triggers
+   * (e.g. the example app's sequence button) that must re-fire on every
+   * click. The default `false` preserves dedup for BLE state-mirror
+   * callers, where identical successive packets must not restart playback.
+   */
+  sync(sample: number, loop: boolean, volume: number, force = false): void {
     const sampleChanged = sample !== this.lastSample;
     const loopChanged = loop !== this.lastLoop;
     const volumeChanged = volume !== this.lastVolume;
@@ -69,7 +77,7 @@ export class TowerSampleAudio {
       return;
     }
 
-    if (sampleChanged || loopChanged) {
+    if (force || sampleChanged || loopChanged) {
       void this.play(sample, loop, volume);
     } else if (volumeChanged) {
       this.applyGain(volume);

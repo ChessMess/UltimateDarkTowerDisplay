@@ -456,24 +456,47 @@ All beat values live under `entrance.beats.*` and are merged via spread (`{ ...b
 
 ## 14. Ground disc & game board
 
-[`GroundDiscManager`](../src/3d/GroundDiscManager.ts) owns a `THREE.Mesh` with `THREE.CircleGeometry` and `MeshStandardMaterial`. Built lazily on first `setVisible(true)` so initial setup does not pay for it if the disc is never shown. Rotated `-π/2` (horizontal), positioned at `modelBottomY - modelRadius × 0.002` to avoid z-fighting, `receiveShadow: true`.
+[`GroundDiscManager`](../src/3d/GroundDiscManager.ts) owns a `THREE.Mesh` with `THREE.CircleGeometry` and `MeshStandardMaterial`. Built lazily on first `setVisible(true)` so initial setup does not pay for it if the disc is never shown. Rotated `-π/2` (horizontal), positioned at `modelBottomY - modelRadius × 0.002` to avoid z-fighting, `receiveShadow: true`. The same mesh is also the **shadow-catcher** for the key light, so its size (`groundDisc.radiusFactor`) determines how much of the cast shadow is visible.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `groundDisc.color` | `HexColor` | `0x050505` | Disc color (no board overlay) |
 | `groundDisc.roughness` | `number` | `0.92` | Material roughness |
 | `groundDisc.metalness` | `number` | `0` | Material metalness |
-| `groundDisc.radiusFactor` | `number` | `3` | Disc radius as factor of `modelRadius` |
-| `boardDisc.enabled` | `boolean` | `true` | Render the canvas-drawn game board overlay (the JSDoc on [types.ts:163](../src/3d/types.ts#L163) incorrectly says "Defaults to false"; the actual `DEFAULT_LIGHTING` value is `true` — see [Section 20](#20-known-gaps--discrepancies)) |
+| `groundDisc.radiusFactor` | `number` | `3` | Disc radius as factor of `modelRadius`. Doubles as the board's size since the board texture fills the disc geometry. Shrinking too far clips the tower's cast shadow at the edges |
+| `boardDisc.enabled` | `boolean` | `true` | Render the game board texture on the disc |
 | `boardDisc.opacity` | `number` | `0.9` | Material opacity when board overlay is active |
+| `boardDisc.source` | `'image' \| 'procedural'` | `'image'` | Texture source — see "Image vs procedural" below |
+| `boardDisc.northKingdom` | `0 \| 1 \| 2 \| 3` | `0` | Which of the four kingdoms faces the +Z direction. Rotates the image texture in 90° steps. No effect on `'procedural'` |
+| `boardDisc.brightness` | `number` | `1` | Per-board diffuse-color multiplier on top of scene lighting. `0` = black, `1` = native texture brightness, up to `2` for over-bright. Stacks with `scene.exposure` and key/hemi intensity |
 
-When the board overlay is enabled the disc swaps to a textured `MeshStandardMaterial` with `map` set to a canvas-generated `THREE.CanvasTexture` and `roughness: 0.95` ([GroundDiscManager.ts:31-47](../src/3d/GroundDiscManager.ts#L31-L47)). When disabled it reverts to the flat `groundDisc.color`.
+### Image vs procedural
+
+The board texture can be sourced two ways:
+
+- **`'image'` (default)** — loads `src/3d/assets/board.png` (the real game-board art) via `THREE.TextureLoader` ([GameBoardImageTexture.ts](../src/3d/GameBoardImageTexture.ts)). The texture is configured with `colorSpace = SRGBColorSpace`, the renderer's max anisotropy, `ClampToEdgeWrapping`, and a calibrated `texture.rotation` so kingdom-0 faces +Z. **Async load** — `GroundDiscManager` kicks off the load on first use and falls back to the procedural texture as a temporary stand-in until the image resolves, then swaps `material.map` in place. If the load fails (asset missing or fetch error) the manager logs a warning and permanently falls back to procedural for the session.
+- **`'procedural'`** — uses the stylized canvas-drawn fallback in [GameBoardTexture.ts](../src/3d/GameBoardTexture.ts) (12 sectors × 4 kingdoms, skull motifs at the rim).
+
+Both paths produce a texture set as `material.map` on a `MeshStandardMaterial` with `roughness: 0.95`, `metalness: 0`. When `boardDisc.enabled` is `false` the disc reverts to the flat `groundDisc.color`.
+
+### Texture rotation calibration
+
+The orientation calibration for `board.png` lives in [`GameBoardImageTexture.ts`](../src/3d/GameBoardImageTexture.ts) as `BASE_NORTH_OFFSET = Math.PI / 1.35`. This is specific to the shipped asset — if `board.png` is re-exported with a different orientation, retune this constant once and the per-kingdom 90° steps from `northKingdom` continue to work.
 
 Runtime control:
 
 ```ts
 display.setGroundDiscVisible(true);   // toggle visibility (no config field — method only)
 display.setBoardDiscEnabled(false);   // toggle board overlay; writes to lighting.boardDisc.enabled
+display.applyLightingConfig({         // resize the disc (and the board texture with it)
+  groundDisc: { radiusFactor: 4 },
+});
+display.applyLightingConfig({         // dim or brighten the board independently
+  boardDisc: { brightness: 0.6 },
+});
+display.applyLightingConfig({         // rotate to a different north kingdom
+  boardDisc: { northKingdom: 2 },
+});
 ```
 
 ## 15. Spatial layout reference
@@ -632,6 +655,9 @@ const DEFAULT_LIGHTING = {
   boardDisc: {
     enabled: true,
     opacity: 0.9,
+    source: 'image',
+    northKingdom: 0,
+    brightness: 1,
   },
 };
 ```
@@ -706,6 +732,38 @@ display.setGroundDiscVisible(false);
 
 There is no `groundDisc.enabled` field — visibility is a method, not config. The disc is built lazily on first enable, so calling `setGroundDiscVisible(false)` before it is built is a no-op.
 
+### Resize the board
+
+```ts
+display.applyLightingConfig({ groundDisc: { radiusFactor: 4 } });
+```
+
+The board texture fills the disc, so `groundDisc.radiusFactor` is also the effective board size. The example app exposes this as the **Board Size** slider under "3D Options → Board". The disc is also the shadow-catcher for the key light, so going much below `~2` will start clipping the tower's cast shadow at the edges.
+
+### Dim or brighten the board independently
+
+```ts
+display.applyLightingConfig({ boardDisc: { brightness: 0.6 } });
+```
+
+`boardDisc.brightness` multiplies the disc material's diffuse color, so it stacks on top of `scene.exposure` and key/hemi intensity. Useful when the board is reading too bright or too washed-out at a given scene lighting without wanting to change every other surface. Range `0`–`2`; exposed as the **Brightness** slider in the example app.
+
+### Rotate the board to a different "north"
+
+```ts
+display.applyLightingConfig({ boardDisc: { northKingdom: 2 } });
+```
+
+Rotates the image texture in 90° steps so a different kingdom faces +Z. The rotation is applied live without reloading the texture. No effect when `source === 'procedural'`.
+
+### Use the procedural board instead of the image
+
+```ts
+display.applyLightingConfig({ boardDisc: { source: 'procedural' } });
+```
+
+Useful as an offline/dev fallback or for A/B comparison. Cheaper to render (no PNG load) and decouples the look from the shipped asset.
+
 ### Make the entrance cinematic shorter
 
 ```ts
@@ -744,7 +802,6 @@ Unit-test access: `Tower3DView.__testables` ([Tower3DView.ts:42-71](../src/3d/To
 
 Recorded so contributors do not chase apparent bugs.
 
-- **`boardDisc.enabled` JSDoc/runtime mismatch.** The JSDoc on [types.ts:163](../src/3d/types.ts#L163) says "Defaults to false." The actual runtime default in `DEFAULT_LIGHTING` is `true` ([LightingResolver.ts:101](../src/3d/LightingResolver.ts#L101)). The runtime value is authoritative; the JSDoc is wrong.
 - **`LightingConfig` / `DEFAULT_LIGHTING` / `resolveLighting` not in package barrel.** They are not re-exported from [src/index.ts](../src/index.ts), so consumers cannot import them by name from the published package. TypeScript inference at the option site works, but explicit type annotations and access to the default object require deep imports.
 - **No exterior light aimed at seal faces.** All seal-related emitters live inside the drum at `radiusFactor × modelRadius`. Apparent exterior glow is bloom-amplified inside-the-drum proxy/halo plus corner `PointLight` spill — see [Section 11.5](#115-why-the-user-perceives-an-exterior-glow). If a true exterior fill on seal faces is wanted, it is a new feature.
 - **`entrance.beats` resolver inconsistency.** That branch uses spread merge (`{ ...base, ...user }`, [LightingResolver.ts:213](../src/3d/LightingResolver.ts#L213)) while every other branch uses leaf-level nullish-coalesce. Consumer-visible behavior is the same for partial overrides; the inconsistency only matters if someone is reasoning about the resolver in the abstract.

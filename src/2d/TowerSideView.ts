@@ -99,8 +99,13 @@ export class TowerSideView implements ITowerDisplay {
     this.build();
   }
 
-  /** Update the SVG display with a new decoded tower state. Auto-selects the active side on seal-reveal sequences. */
-  applyState(state: TowerState): void {
+  /**
+   * Update the SVG display with a new decoded tower state. Auto-selects
+   * the active side on seal-reveal sequences. The `_force` parameter
+   * exists for `ITowerDisplay` compatibility; this renderer has no audio
+   * path and ignores it.
+   */
+  applyState(state: TowerState, _force?: boolean): void {
     this.latestState = state;
     if (state.led_sequence === TOWER_LIGHT_SEQUENCES.sealReveal) {
       const side = this.detectSealSide(state);

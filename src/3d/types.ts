@@ -206,12 +206,32 @@ export interface LightingConfigCore {
     radiusFactor?: number;
   };
 
-  /** Canvas-generated game board texture overlaid on the ground disc. */
+  /** Game board texture overlaid on the ground disc. */
   boardDisc?: {
-    /** Show the board texture on the ground disc. Defaults to false. */
+    /** Show the board texture on the ground disc. Defaults to `true`. */
     enabled?: boolean;
     /** Material opacity when board texture is active (0–1). Defaults to 0.9. */
     opacity?: number;
+    /**
+     * Texture source. `'image'` loads `src/3d/assets/board.png` (the real game
+     * board art); `'procedural'` uses the stylized canvas-drawn fallback.
+     * If the image asset is missing or fails to load, falls back to procedural.
+     * Defaults to `'image'`.
+     */
+    source?: 'image' | 'procedural';
+    /**
+     * Which of the four kingdoms faces the +Z (camera-forward) direction.
+     * Rotates the image texture in 90° steps. Has no effect when
+     * `source === 'procedural'`. Defaults to `0`.
+     */
+    northKingdom?: 0 | 1 | 2 | 3;
+    /**
+     * Per-board brightness multiplier on top of the scene lighting. `1` is the
+     * native texture brightness; `0` is black; up to `2` for over-bright.
+     * Implemented as the material's diffuse color scalar so it stacks with
+     * scene exposure / key light. Defaults to `1`.
+     */
+    brightness?: number;
   };
 }
 

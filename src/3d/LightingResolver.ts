@@ -122,6 +122,9 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
   boardDisc: {
     enabled: true,
     opacity: 0.9,
+    source: 'image',
+    northKingdom: 0,
+    brightness: 1,
   },
 };
 
@@ -285,6 +288,9 @@ export function resolveLighting(
     boardDisc: {
       enabled: user?.boardDisc?.enabled ?? base.boardDisc.enabled,
       opacity: user?.boardDisc?.opacity ?? base.boardDisc.opacity,
+      source: user?.boardDisc?.source ?? base.boardDisc.source,
+      northKingdom: user?.boardDisc?.northKingdom ?? base.boardDisc.northKingdom,
+      brightness: user?.boardDisc?.brightness ?? base.boardDisc.brightness,
     },
   };
 
