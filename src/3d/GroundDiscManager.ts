@@ -12,6 +12,7 @@ import { buildBoardTextureFromImage, getBoardTextureRotation } from './GameBoard
  */
 export class GroundDiscManager {
   private disc: THREE.Mesh | null = null;
+  private undersideLight: THREE.DirectionalLight | null = null;
   private proceduralTexture: THREE.CanvasTexture | null = null;
   private imageTexture: THREE.Texture | null = null;
   private imageLoad: Promise<THREE.Texture | null> | null = null;
@@ -38,14 +39,24 @@ export class GroundDiscManager {
     if (this.disc) return;
 
     const { roughness, metalness, radiusFactor } = lighting.groundDisc;
-    const geom = new THREE.CircleGeometry(modelRadius * radiusFactor, 64);
+    const { thicknessFactor, edgeColor, bottomCap } = lighting.boardDisc;
+    const h = Math.max(modelRadius * thicknessFactor, 1e-4);
+    const geom = new THREE.CylinderGeometry(modelRadius * radiusFactor, modelRadius * radiusFactor, h, 64);
 
     const boardTex = lighting.boardDisc.enabled
       ? this.ensureBoardTexture(lighting)
       : null;
-    const mat = boardTex
+
+    // CylinderGeometry material groups: 0 = side wall, 1 = top cap, 2 = bottom cap
+    const sideMat = new THREE.MeshStandardMaterial({
+      color: edgeColor,
+      roughness: 0.85,
+      metalness: 0,
+    });
+    const topMat = boardTex
       ? new THREE.MeshStandardMaterial({
         map: boardTex,
+        color: new THREE.Color().setScalar(lighting.boardDisc.brightness),
         roughness: 0.95,
         metalness: 0,
         opacity: lighting.boardDisc.opacity,
@@ -56,13 +67,29 @@ export class GroundDiscManager {
         roughness,
         metalness,
       });
+    const bottomMat = new THREE.MeshStandardMaterial({
+      color: edgeColor,
+      roughness: 0.85,
+      metalness: 0,
+      opacity: bottomCap ? 1 : 0,
+      transparent: !bottomCap,
+      depthWrite: bottomCap,
+    });
 
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = modelBottomY - modelRadius * 0.002;
+    const mesh = new THREE.Mesh(geom, [sideMat, topMat, bottomMat]);
+    mesh.position.y = modelBottomY - modelRadius * 0.002 - h / 2;
     mesh.receiveShadow = true;
     this.scene.add(mesh);
     this.disc = mesh;
+
+    // Directional key light pointing straight up (+Y) so the bottom face and
+    // edge ring are evenly illuminated when the camera dips below the board.
+    // A PointLight would create a hot-spot; a DirectionalLight gives uniform fill.
+    // Position is far below so its direction (toward origin) is straight up.
+    const light = new THREE.DirectionalLight(0xffe8c8, 1.5);
+    light.position.set(0, -100, 0);
+    this.scene.add(light);
+    this.undersideLight = light;
   }
 
   /** Toggle disc visibility, building it lazily if it does not yet exist. */
@@ -84,22 +111,22 @@ export class GroundDiscManager {
     lighting: ResolvedLightingConfig,
   ): void {
     if (!this.disc) return;
-    const mat = this.disc.material;
-    if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+    const mats = this.disc.material as THREE.MeshStandardMaterial[];
+    const topMat = mats[1];
 
     if (enabled) {
       const tex = this.ensureBoardTexture(lighting);
       if (tex) {
-        this.applyBoardMaterial(mat, tex, lighting);
+        this.applyBoardMaterial(topMat, tex, lighting);
       }
     } else {
-      mat.map = null;
-      mat.color.setHex(lighting.groundDisc.color);
-      mat.roughness = lighting.groundDisc.roughness;
-      mat.metalness = lighting.groundDisc.metalness;
-      mat.opacity = 1;
-      mat.transparent = false;
-      mat.needsUpdate = true;
+      topMat.map = null;
+      topMat.color.setHex(lighting.groundDisc.color);
+      topMat.roughness = lighting.groundDisc.roughness;
+      topMat.metalness = lighting.groundDisc.metalness;
+      topMat.opacity = 1;
+      topMat.transparent = false;
+      topMat.needsUpdate = true;
     }
   }
 
@@ -110,32 +137,53 @@ export class GroundDiscManager {
     modelBottomY: number,
   ): void {
     if (!this.disc) return;
-    const mat = this.disc.material;
+    const mats = this.disc.material as THREE.MeshStandardMaterial[];
+    const [sideMat, topMat, bottomMat] = mats;
+    const { thicknessFactor, edgeColor, bottomCap } = lighting.boardDisc;
 
-    if (mat instanceof THREE.MeshStandardMaterial) {
-      if (lighting.boardDisc.enabled) {
-        const tex = this.ensureBoardTexture(lighting);
-        if (tex) this.applyBoardMaterial(mat, tex, lighting);
-      } else {
-        mat.map = null;
-        mat.color.setHex(lighting.groundDisc.color);
-        mat.roughness = lighting.groundDisc.roughness;
-        mat.metalness = lighting.groundDisc.metalness;
-        mat.opacity = 1;
-        mat.transparent = false;
-        mat.needsUpdate = true;
-      }
+    // Update top cap (board surface)
+    if (lighting.boardDisc.enabled) {
+      const tex = this.ensureBoardTexture(lighting);
+      if (tex) this.applyBoardMaterial(topMat, tex, lighting);
+    } else {
+      topMat.map = null;
+      topMat.color.setHex(lighting.groundDisc.color);
+      topMat.roughness = lighting.groundDisc.roughness;
+      topMat.metalness = lighting.groundDisc.metalness;
+      topMat.opacity = 1;
+      topMat.transparent = false;
+      topMat.needsUpdate = true;
     }
 
+    // Update side wall and bottom cap colors/transparency
+    sideMat.color.setHex(edgeColor);
+    sideMat.needsUpdate = true;
+    bottomMat.color.setHex(edgeColor);
+    bottomMat.opacity = bottomCap ? 1 : 0;
+    bottomMat.transparent = !bottomCap;
+    bottomMat.depthWrite = bottomCap;
+    bottomMat.needsUpdate = true;
+
+    const h = Math.max(modelRadius * thicknessFactor, 1e-4);
     this.disc.geometry.dispose();
-    this.disc.geometry = new THREE.CircleGeometry(
+    this.disc.geometry = new THREE.CylinderGeometry(
       modelRadius * lighting.groundDisc.radiusFactor,
+      modelRadius * lighting.groundDisc.radiusFactor,
+      h,
       64,
     );
-    this.disc.position.y = modelBottomY - modelRadius * 0.002;
+    this.disc.position.y = modelBottomY - modelRadius * 0.002 - h / 2;
+
+    // Directional light position only affects shadow frustum — direction is
+    // always from position toward target (origin), which stays straight up.
+    // No position update needed when thickness changes.
   }
 
   dispose(): void {
+    if (this.undersideLight) {
+      this.undersideLight.removeFromParent();
+      this.undersideLight = null;
+    }
     if (this.disc) {
       this.disc.geometry?.dispose();
       const mat = this.disc.material;
@@ -208,11 +256,10 @@ export class GroundDiscManager {
     lighting: ResolvedLightingConfig,
   ): void {
     if (!this.disc) return;
-    const mat = this.disc.material;
-    if (!(mat instanceof THREE.MeshStandardMaterial)) return;
     if (!lighting.boardDisc.enabled) return;
     if (lighting.boardDisc.source !== 'image') return;
-    this.applyBoardMaterial(mat, tex, lighting);
+    const mats = this.disc.material as THREE.MeshStandardMaterial[];
+    this.applyBoardMaterial(mats[1], tex, lighting);
   }
 
   private applyBoardMaterial(

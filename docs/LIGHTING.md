@@ -47,21 +47,21 @@ Light sources at a glance:
 
 File-by-file orientation. Use this table to jump straight to the code that owns each subsystem.
 
-| File | Focus | Key exports / classes |
-|------|-------|------------------------|
-| [src/3d/types.ts](../src/3d/types.ts) | Lighting type definitions and field-level JSDoc | `LightingConfig`, `LightingConfigCore`, `ResolvedLightingConfig`, `HexColor`, `Vec3`, `CameraConfig` |
-| [src/3d/LightingResolver.ts](../src/3d/LightingResolver.ts) | Single source of truth for default values; shallow-merge resolver | `DEFAULT_LIGHTING`, `resolveLighting()` |
-| [src/3d/SceneLighting.ts](../src/3d/SceneLighting.ts) | Three-point rig (hemi/key/fill); shadow camera retargeting; idle breathing tween | `SceneLighting` class |
-| [src/3d/Tower3DView.ts](../src/3d/Tower3DView.ts) | Top-level 3D orchestration; bloom pipeline; public lighting methods; re-exports `DEFAULT_LIGHTING` + `resolveLighting` | `Tower3DView` class |
-| [src/3d/SealManager.ts](../src/3d/SealManager.ts) | 12 seal nodes + per-seal proxy mesh / halo sprite / accent `PointLight`; broken-seal coupling | `SealManager` class, `SealBacklightRef` |
-| [src/3d/LedEffectAnimator.ts](../src/3d/LedEffectAnimator.ts) | Maps `LIGHT_EFFECTS` enum values to GSAP tweens that drive `driver.v ∈ [0,1]`; syncs ring LEDs (layer 0–2) with their corresponding seal backlight via `SealManager.setSealLed` | `LedEffectAnimator` class, `LedRef` |
-| [src/3d/EntranceAnimator.ts](../src/3d/EntranceAnimator.ts) | Six-beat noir entrance timeline; auto-starts breathing on completion | `EntranceAnimator` class |
-| [src/3d/GroundDiscManager.ts](../src/3d/GroundDiscManager.ts) | Shadow-catching disc + optional canvas board overlay | `GroundDiscManager` class |
-| [src/3d/SkyboxManager.ts](../src/3d/SkyboxManager.ts) | Equirectangular HDR/EXR/PNG/JPG loader with stale-load guard | `SkyboxManager` class |
-| [src/3d/constants.ts](../src/3d/constants.ts) | Azimuths, layer Y-fractions, `RED_LIGHT_LAYOUT`, `BLOOM_LAYER`, `SEAL_LED_RADIUS_FACTOR` | `RING_AZIMUTH`, `CORNER_AZIMUTH`, `LED_LAYOUT`, `RED_LIGHT_LAYOUT`, `BLOOM_LAYER`, `SIDES`, `SIDE_AZIMUTH` |
-| [src/3d/utils.ts](../src/3d/utils.ts) | Spatial math: polar→Cartesian, red light positioning, seal LED pose | `polarToXZ()`, `computeRedLightPosition()`, `computeSealLedPose()` |
-| [src/TowerDisplay.ts](../src/TowerDisplay.ts) | High-level wrapper that forwards lighting calls to `view3d` | `TowerDisplay` class |
-| [src/types.ts](../src/types.ts) | Re-exports `LightingConfig` (note: not in `src/index.ts` package barrel — see [Public exports](#4-public-exports--import-paths)) | — |
+| File                                                          | Focus                                                                                                                                                                           | Key exports / classes                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [src/3d/types.ts](../src/3d/types.ts)                         | Lighting type definitions and field-level JSDoc                                                                                                                                 | `LightingConfig`, `LightingConfigCore`, `ResolvedLightingConfig`, `HexColor`, `Vec3`, `CameraConfig`       |
+| [src/3d/LightingResolver.ts](../src/3d/LightingResolver.ts)   | Single source of truth for default values; shallow-merge resolver                                                                                                               | `DEFAULT_LIGHTING`, `resolveLighting()`                                                                    |
+| [src/3d/SceneLighting.ts](../src/3d/SceneLighting.ts)         | Three-point rig (hemi/key/fill); shadow camera retargeting; idle breathing tween                                                                                                | `SceneLighting` class                                                                                      |
+| [src/3d/Tower3DView.ts](../src/3d/Tower3DView.ts)             | Top-level 3D orchestration; bloom pipeline; public lighting methods; re-exports `DEFAULT_LIGHTING` + `resolveLighting`                                                          | `Tower3DView` class                                                                                        |
+| [src/3d/SealManager.ts](../src/3d/SealManager.ts)             | 12 seal nodes + per-seal proxy mesh / halo sprite / accent `PointLight`; broken-seal coupling                                                                                   | `SealManager` class, `SealBacklightRef`                                                                    |
+| [src/3d/LedEffectAnimator.ts](../src/3d/LedEffectAnimator.ts) | Maps `LIGHT_EFFECTS` enum values to GSAP tweens that drive `driver.v ∈ [0,1]`; syncs ring LEDs (layer 0–2) with their corresponding seal backlight via `SealManager.setSealLed` | `LedEffectAnimator` class, `LedRef`                                                                        |
+| [src/3d/EntranceAnimator.ts](../src/3d/EntranceAnimator.ts)   | Six-beat noir entrance timeline; auto-starts breathing on completion                                                                                                            | `EntranceAnimator` class                                                                                   |
+| [src/3d/GroundDiscManager.ts](../src/3d/GroundDiscManager.ts) | Shadow-catching disc + optional canvas board overlay                                                                                                                            | `GroundDiscManager` class                                                                                  |
+| [src/3d/SkyboxManager.ts](../src/3d/SkyboxManager.ts)         | Equirectangular HDR/EXR/PNG/JPG loader with stale-load guard                                                                                                                    | `SkyboxManager` class                                                                                      |
+| [src/3d/constants.ts](../src/3d/constants.ts)                 | Azimuths, layer Y-fractions, `RED_LIGHT_LAYOUT`, `BLOOM_LAYER`, `SEAL_LED_RADIUS_FACTOR`                                                                                        | `RING_AZIMUTH`, `CORNER_AZIMUTH`, `LED_LAYOUT`, `RED_LIGHT_LAYOUT`, `BLOOM_LAYER`, `SIDES`, `SIDE_AZIMUTH` |
+| [src/3d/utils.ts](../src/3d/utils.ts)                         | Spatial math: polar→Cartesian, red light positioning, seal LED pose                                                                                                             | `polarToXZ()`, `computeRedLightPosition()`, `computeSealLedPose()`                                         |
+| [src/TowerDisplay.ts](../src/TowerDisplay.ts)                 | High-level wrapper that forwards lighting calls to `view3d`                                                                                                                     | `TowerDisplay` class                                                                                       |
+| [src/types.ts](../src/types.ts)                               | Re-exports `LightingConfig` (note: not in `src/index.ts` package barrel — see [Public exports](#4-public-exports--import-paths))                                                | —                                                                                                          |
 
 ## 4. Public exports & import paths
 
@@ -90,7 +90,8 @@ import type {
 ```ts
 new TowerDisplay({
   container,
-  lighting: {           // structural-typed against LightingConfig
+  lighting: {
+    // structural-typed against LightingConfig
     scene: { exposure: 0.9 },
   },
 });
@@ -122,7 +123,15 @@ Merges via `resolveLighting(partial, currentResolved)` and reapplies every subsy
 ### 5.3 Fast scene-lights path
 
 ```ts
-display.setSceneLights({ hemi: 0.06, key: 1.8, fill: 5.5, exposure: 0.8, keyX: 3, keyY: 5, keyZ: -1 });
+display.setSceneLights({
+  hemi: 0.06,
+  key: 1.8,
+  fill: 5.5,
+  exposure: 0.8,
+  keyX: 3,
+  keyY: 5,
+  keyZ: -1,
+});
 ```
 
 Direct property writes for the three-point rig ([Tower3DView.ts:209-244](../src/3d/Tower3DView.ts#L209-L244)). Three guarantees:
@@ -134,7 +143,7 @@ Direct property writes for the three-point rig ([Tower3DView.ts:209-244](../src/
 ### 5.4 Subsystem-specific toggles
 
 ```ts
-display.setSkyboxUrl('https://example.com/sky.hdr');  // null clears
+display.setSkyboxUrl('https://example.com/sky.hdr'); // null clears
 display.setGroundDiscVisible(true);
 display.setBoardDiscEnabled(false);
 ```
@@ -144,8 +153,8 @@ display.setBoardDiscEnabled(false);
 ### 5.5 Animations and inspection
 
 ```ts
-display.playEntrance();                      // see Section 13
-const config = display.getLightingConfig();  // JSON-cloned snapshot
+display.playEntrance(); // see Section 13
+const config = display.getLightingConfig(); // JSON-cloned snapshot
 ```
 
 `playEntrance` is never called automatically; consumers must invoke it. It auto-transitions to the idle breathing tween via `onComplete` ([EntranceAnimator.ts:50](../src/3d/EntranceAnimator.ts#L50)). `getLightingConfig` returns a deep clone so callers can mutate freely without affecting internal state ([Tower3DView.ts:247-249](../src/3d/Tower3DView.ts#L247-L249)).
@@ -158,11 +167,11 @@ Implemented in [`SceneLighting`](../src/3d/SceneLighting.ts). All three lights a
 
 `THREE.HemisphereLight` providing scene-wide ambient (sky color blended with ground bounce). Defaults are intentionally low — most of the look comes from key + fill, not ambient.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `scene.hemisphere.color` | `HexColor` | `0xffffff` | Sky color |
-| `scene.hemisphere.ground` | `HexColor` | `0x000000` | Ground bounce color (black = no bounce) |
-| `scene.hemisphere.intensity` | `number` | `0.04` | Ambient strength |
+| Field                        | Type       | Default    | Description                             |
+| ---------------------------- | ---------- | ---------- | --------------------------------------- |
+| `scene.hemisphere.color`     | `HexColor` | `0xffffff` | Sky color                               |
+| `scene.hemisphere.ground`    | `HexColor` | `0x000000` | Ground bounce color (black = no bounce) |
+| `scene.hemisphere.intensity` | `number`   | `0.04`     | Ambient strength                        |
 
 Source: [SceneLighting.ts:26-31](../src/3d/SceneLighting.ts#L26-L31).
 
@@ -170,16 +179,16 @@ Source: [SceneLighting.ts:26-31](../src/3d/SceneLighting.ts#L26-L31).
 
 `THREE.DirectionalLight`, parented to the camera with target at camera-local `(0, 0, -10)`. Camera-parenting means the key orbits with the viewer, so modeling reads consistently from any angle.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `scene.key.color` | `HexColor` | `0xffffff` | Light color |
-| `scene.key.intensity` | `number` | `1.6` | Light intensity |
-| `scene.key.position` | `Vec3` | `[3, 4.5, -1]` | Camera-local position |
-| `scene.key.shadow.mapSize` | `number` | `2048` | Shadow map resolution (square) |
-| `scene.key.shadow.bias` | `number` | `-0.0003` | Shadow bias |
-| `scene.key.shadow.normalBias` | `number` | `0.02` | Normal-based bias |
-| `scene.key.shadow.frustumRadiusFactor` | `number` | `1.3` | Ortho frustum half-size as factor of `modelRadius` |
-| `scene.key.shadow.farFactor` | `number` | `10` | Shadow camera far plane as factor of `modelRadius` |
+| Field                                  | Type       | Default        | Description                                        |
+| -------------------------------------- | ---------- | -------------- | -------------------------------------------------- |
+| `scene.key.color`                      | `HexColor` | `0xffffff`     | Light color                                        |
+| `scene.key.intensity`                  | `number`   | `1.6`          | Light intensity                                    |
+| `scene.key.position`                   | `Vec3`     | `[3, 4.5, -1]` | Camera-local position                              |
+| `scene.key.shadow.mapSize`             | `number`   | `2048`         | Shadow map resolution (square)                     |
+| `scene.key.shadow.bias`                | `number`   | `-0.0003`      | Shadow bias                                        |
+| `scene.key.shadow.normalBias`          | `number`   | `0.02`         | Normal-based bias                                  |
+| `scene.key.shadow.frustumRadiusFactor` | `number`   | `1.3`          | Ortho frustum half-size as factor of `modelRadius` |
+| `scene.key.shadow.farFactor`           | `number`   | `10`           | Shadow camera far plane as factor of `modelRadius` |
 
 The shadow camera is recomputed in `retargetShadows()` ([SceneLighting.ts:113-124](../src/3d/SceneLighting.ts#L113-L124)) every time `applyLights` runs, so it stays correct after model swaps and config re-resolves. Renderer shadow setup is `shadowMap.enabled = true` and `shadowMap.type = THREE.PCFShadowMap` ([Tower3DView.ts:414-415](../src/3d/Tower3DView.ts#L414-L415)).
 
@@ -189,13 +198,13 @@ Source: [SceneLighting.ts:33-50](../src/3d/SceneLighting.ts#L33-L50).
 
 `THREE.RectAreaLight`, parented to the camera and made to face the model centre via `lookAt(0, 0, 0)` **every frame** in the render loop ([Tower3DView.ts:627](../src/3d/Tower3DView.ts#L627)) — so the rectangle keeps facing origin as the camera orbits.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `scene.fill.color` | `HexColor` | `0xffffff` | Light color |
-| `scene.fill.intensity` | `number` | `5.0` | Light intensity (high — area light decay is physical) |
-| `scene.fill.width` | `number` | `1.5` | Rectangle width |
-| `scene.fill.height` | `number` | `2.5` | Rectangle height |
-| `scene.fill.position` | `Vec3` | `[-4, 1.5, -8]` | Camera-local position (opposite side from key) |
+| Field                  | Type       | Default         | Description                                           |
+| ---------------------- | ---------- | --------------- | ----------------------------------------------------- |
+| `scene.fill.color`     | `HexColor` | `0xffffff`      | Light color                                           |
+| `scene.fill.intensity` | `number`   | `5.0`           | Light intensity (high — area light decay is physical) |
+| `scene.fill.width`     | `number`   | `1.5`           | Rectangle width                                       |
+| `scene.fill.height`    | `number`   | `2.5`           | Rectangle height                                      |
+| `scene.fill.position`  | `Vec3`     | `[-4, 1.5, -8]` | Camera-local position (opposite side from key)        |
 
 `RectAreaLightUniformsLib.init()` is called once globally and skipped when `window` is unavailable ([SceneLighting.ts:6-12](../src/3d/SceneLighting.ts#L6-L12)) — this is the test-environment guard.
 
@@ -211,9 +220,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = lighting.scene.exposure;
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `scene.exposure` | `number` | `0.7` | Renderer tone-mapping exposure |
+| Field            | Type     | Default | Description                    |
+| ---------------- | -------- | ------- | ------------------------------ |
+| `scene.exposure` | `number` | `0.7`   | Renderer tone-mapping exposure |
 
 The entrance cinematic dips this to `0.7 × 0.15 = 0.105` for the silhouette beat ([EntranceAnimator.ts:55-59](../src/3d/EntranceAnimator.ts#L55-L59)). Update via `scene.exposure` config or `setSceneLights({ exposure })`.
 
@@ -221,12 +230,12 @@ The entrance cinematic dips this to `0.7 × 0.15 = 0.105` for the silhouette bea
 
 `UnrealBloomPass` plus a two-composer pipeline (`bloomComposer` → `finalComposer`) built in `initScene` ([Tower3DView.ts:420-449](../src/3d/Tower3DView.ts#L420-L449)).
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `scene.bloom.enabled` | `boolean` | `true` | Build the bloom pipeline at all |
-| `scene.bloom.strength` | `number` | `1.5` | Glow intensity (0–3) |
-| `scene.bloom.radius` | `number` | `0.5` | Bloom spread radius (0–1) |
-| `scene.bloom.threshold` | `number` | `0.0` | Luminance threshold (0 = all bright pixels bloom) |
+| Field                   | Type      | Default | Description                                       |
+| ----------------------- | --------- | ------- | ------------------------------------------------- |
+| `scene.bloom.enabled`   | `boolean` | `true`  | Build the bloom pipeline at all                   |
+| `scene.bloom.strength`  | `number`  | `1.5`   | Glow intensity (0–3)                              |
+| `scene.bloom.radius`    | `number`  | `0.5`   | Bloom spread radius (0–1)                         |
+| `scene.bloom.threshold` | `number`  | `0.0`   | Luminance threshold (0 = all bright pixels bloom) |
 
 Selective-bloom mechanism:
 
@@ -241,10 +250,10 @@ Note: `scene.bloom.enabled: false` skips constructing the pipeline entirely; the
 
 Two ways to set what is behind the model.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `scene.background` | `HexColor` | `0x000000` | Solid clear color when no skybox is loaded |
-| `scene.skyboxUrl` | `string` | `''` | Equirectangular image URL — `.hdr`/`.exr`/`.png`/`.jpg` |
+| Field              | Type       | Default    | Description                                             |
+| ------------------ | ---------- | ---------- | ------------------------------------------------------- |
+| `scene.background` | `HexColor` | `0x000000` | Solid clear color when no skybox is loaded              |
+| `scene.skyboxUrl`  | `string`   | `''`       | Equirectangular image URL — `.hdr`/`.exr`/`.png`/`.jpg` |
 
 `SkyboxManager.apply(url, bgColor)` ([SkyboxManager.ts:19-52](../src/3d/SkyboxManager.ts#L19-L52)) handles loading: `.hdr`/`.exr` go through `HDRLoader`, others through `THREE.TextureLoader`. Loaded textures get `mapping = THREE.EquirectangularReflectionMapping` and are assigned to `scene.background`.
 
@@ -263,22 +272,22 @@ Layer/azimuth assignment via `computeRedLightPosition()` ([utils.ts:30-39](../sr
 
 Y position from `LED_Y_FRACTIONS` keyed by layer index ([constants.ts:78-85](../src/3d/constants.ts#L78-L85)):
 
-| Layer | Name | Y fraction of `modelRadius` |
-|-------|------|------------------------------|
-| 0 | top ring | `0.83` |
-| 1 | middle ring | `0.53` |
-| 2 | bottom ring | `0.23` |
-| 3 | ledge | `-0.36` |
-| 4 | base1 | `-0.26` |
-| 5 | base2 | `0.02` |
+| Layer | Name        | Y fraction of `modelRadius` |
+| ----- | ----------- | --------------------------- |
+| 0     | top ring    | `0.83`                      |
+| 1     | middle ring | `0.53`                      |
+| 2     | bottom ring | `0.23`                      |
+| 3     | ledge       | `-0.36`                     |
+| 4     | base1       | `-0.26`                     |
+| 5     | base2       | `0.02`                      |
 
 Light parameters:
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `leds.red.color` | `HexColor` | `0xff2020` | Light color (bright red) |
-| `leds.red.maxHalo` | `number` | `1.0` | Intensity at `driver.v = 1` |
-| `leds.red.haloDistanceFraction` | `number` | `0.20` | `PointLight.distance` as factor of `modelRadius` |
+| Field                           | Type       | Default    | Description                                      |
+| ------------------------------- | ---------- | ---------- | ------------------------------------------------ |
+| `leds.red.color`                | `HexColor` | `0xff2020` | Light color (bright red)                         |
+| `leds.red.maxHalo`              | `number`   | `1.0`      | Intensity at `driver.v = 1`                      |
+| `leds.red.haloDistanceFraction` | `number`   | `0.20`     | `PointLight.distance` as factor of `modelRadius` |
 
 Decay is hard-coded to `2` (quadratic) in the `THREE.PointLight` constructor.
 
@@ -343,7 +352,7 @@ Net visual effect reads as exterior glow even though every emitter is inside the
 
 ### 11.6 Driver coupling and broken seals
 
-Drivers for the seal backlights are not animated independently. Instead, `LedEffectAnimator.setEffect(layer, light, effect)` for layers 0–2 calls `sealManager.setSealLed(\`${side}:${level}\`, driver.v, lighting)` from inside its `write` callback ([LedEffectAnimator.ts:42-49](../src/3d/LedEffectAnimator.ts#L42-L49)). Layers 3–5 (ledge/base) do not have seal backlights — the synchronization only spans the three ring levels.
+Drivers for the seal backlights are not animated independently. Instead, `LedEffectAnimator.setEffect(layer, light, effect)` for layers 0–2 calls `sealManager.setSealLed(\`${side}:${level}\`, driver.v, lighting)`from inside its`write` callback ([LedEffectAnimator.ts:42-49](../src/3d/LedEffectAnimator.ts#L42-L49)). Layers 3–5 (ledge/base) do not have seal backlights — the synchronization only spans the three ring levels.
 
 Broken-seal handling: `applySeals(brokenSeals, lighting)` ([SealManager.ts:193-206](../src/3d/SealManager.ts#L193-L206)) toggles `sealNode.visible` and updates the backlight when a seal becomes broken:
 
@@ -354,35 +363,35 @@ Broken-seal handling: `applySeals(brokenSeals, lighting)` ([SealManager.ts:193-2
 
 ### 11.7 Configuration
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `leds.sealBacklights.enabled` | `boolean` | `true` | Master enable for all seal LED visuals |
-| `leds.sealBacklights.color` | `HexColor` | `0xff2020` | Color for proxy, halo, and accent |
-| `leds.sealBacklights.radiusFactor` | `number` | `0.15` | Radial position factor (inside drum) |
-| `leds.sealBacklights.intensity` | `number` | `2` | Accent `PointLight` intensity at `driver.v = 1` |
-| `leds.sealBacklights.distanceFactor` | `number` | `0.20` | Accent `PointLight.distance` factor |
-| `leds.sealBacklights.decay` | `number` | `2.0` | Accent `PointLight.decay` |
-| `leds.sealBacklights.accentLight` | `boolean` | `true` | Enable the accent `PointLight` |
-| `leds.sealBacklights.backlightWhenBroken` | `boolean` | `true` | Keep backlight on when seal is broken |
-| `leds.sealBacklights.proxy.enabled` | `boolean` | `true` | Render the proxy mesh |
-| `leds.sealBacklights.proxy.sizeFactor` | `number` | `0.025` | Proxy sphere radius factor |
-| `leds.sealBacklights.proxy.geometry` | `'sphere' \| 'cylinder'` | `'sphere'` | Proxy mesh shape |
-| `leds.sealBacklights.halo.enabled` | `boolean` | `true` | Render the halo sprite |
-| `leds.sealBacklights.halo.sizeFactor` | `number` | `0.14` | Halo sprite scale factor |
-| `leds.sealBacklights.halo.opacity` | `number` | `0.75` | Halo peak opacity at `driver.v = 1` |
+| Field                                     | Type                     | Default    | Description                                     |
+| ----------------------------------------- | ------------------------ | ---------- | ----------------------------------------------- |
+| `leds.sealBacklights.enabled`             | `boolean`                | `true`     | Master enable for all seal LED visuals          |
+| `leds.sealBacklights.color`               | `HexColor`               | `0xff2020` | Color for proxy, halo, and accent               |
+| `leds.sealBacklights.radiusFactor`        | `number`                 | `0.15`     | Radial position factor (inside drum)            |
+| `leds.sealBacklights.intensity`           | `number`                 | `2`        | Accent `PointLight` intensity at `driver.v = 1` |
+| `leds.sealBacklights.distanceFactor`      | `number`                 | `0.20`     | Accent `PointLight.distance` factor             |
+| `leds.sealBacklights.decay`               | `number`                 | `2.0`      | Accent `PointLight.decay`                       |
+| `leds.sealBacklights.accentLight`         | `boolean`                | `true`     | Enable the accent `PointLight`                  |
+| `leds.sealBacklights.backlightWhenBroken` | `boolean`                | `true`     | Keep backlight on when seal is broken           |
+| `leds.sealBacklights.proxy.enabled`       | `boolean`                | `true`     | Render the proxy mesh                           |
+| `leds.sealBacklights.proxy.sizeFactor`    | `number`                 | `0.025`    | Proxy sphere radius factor                      |
+| `leds.sealBacklights.proxy.geometry`      | `'sphere' \| 'cylinder'` | `'sphere'` | Proxy mesh shape                                |
+| `leds.sealBacklights.halo.enabled`        | `boolean`                | `true`     | Render the halo sprite                          |
+| `leds.sealBacklights.halo.sizeFactor`     | `number`                 | `0.14`     | Halo sprite scale factor                        |
+| `leds.sealBacklights.halo.opacity`        | `number`                 | `0.75`     | Halo peak opacity at `driver.v = 1`             |
 
 ## 12. LED effects & driver model
 
 `LIGHT_EFFECTS` is exported by the peer dependency `ultimatedarktower`. `LedEffectAnimator.setEffect(layer, light, effect)` ([LedEffectAnimator.ts:29-84](../src/3d/LedEffectAnimator.ts#L29-L84)) maps each effect to a GSAP tween that writes to `driver.v`. The same `write` callback updates the red `PointLight` intensity and (for layers 0–2) the matching seal backlight.
 
-| Effect | Tween target | Easing | Loop | Duration source |
-|--------|--------------|--------|------|------------------|
-| `on` | `v: 1` | linear | — | `animation.fadeS` (`0.15s`) |
-| `off` (also default) | `v: 0` | linear | — | `animation.fadeS` (`0.15s`) |
-| `breathe` | `v: 1`, yoyo | `sine.inOut` | repeat -1 | `animation.breatheS` (`2.0s`) |
-| `breatheFast` | `v: 1`, yoyo | `sine.inOut` | repeat -1 | `animation.breatheFastS` (`0.8s`) |
-| `breathe50percent` | `v: 0.5`, yoyo | `sine.inOut` | repeat -1 | `animation.breatheS` (`2.0s`) |
-| `flicker` | `v: 1` then yoyo to `0.2` | `steps(1)` | repeat -1 | `animation.flickerS` (`0.3s`) |
+| Effect               | Tween target              | Easing       | Loop      | Duration source                   |
+| -------------------- | ------------------------- | ------------ | --------- | --------------------------------- |
+| `on`                 | `v: 1`                    | linear       | —         | `animation.fadeS` (`0.15s`)       |
+| `off` (also default) | `v: 0`                    | linear       | —         | `animation.fadeS` (`0.15s`)       |
+| `breathe`            | `v: 1`, yoyo              | `sine.inOut` | repeat -1 | `animation.breatheS` (`2.0s`)     |
+| `breatheFast`        | `v: 1`, yoyo              | `sine.inOut` | repeat -1 | `animation.breatheFastS` (`0.8s`) |
+| `breathe50percent`   | `v: 0.5`, yoyo            | `sine.inOut` | repeat -1 | `animation.breatheS` (`2.0s`)     |
+| `flicker`            | `v: 1` then yoyo to `0.2` | `steps(1)`   | repeat -1 | `animation.flickerS` (`0.3s`)     |
 
 `replayAll(state)` ([LedEffectAnimator.ts:86-93](../src/3d/LedEffectAnimator.ts#L86-L93)) is called on every `applyState` to drive every LED in the grid from the latest `TowerState`, and again from `applyLightingConfig` ([Tower3DView.ts:255](../src/3d/Tower3DView.ts#L255)) so config changes immediately recolor and rescale running effects.
 
@@ -394,10 +403,10 @@ Two timed sequences sit on top of the static lighting state.
 
 A looping yoyo GSAP tween on `key.intensity` to `keyTarget × peakFactor` over `durationS`, eased `sine.inOut` ([SceneLighting.ts:87-102](../src/3d/SceneLighting.ts#L87-L102)).
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `animation.idleBreathe.peakFactor` | `number` | `1.08` | Overshoot multiplier on key intensity |
-| `animation.idleBreathe.durationS` | `number` | `4` | Yoyo cycle duration in seconds |
+| Field                              | Type     | Default | Description                           |
+| ---------------------------------- | -------- | ------- | ------------------------------------- |
+| `animation.idleBreathe.peakFactor` | `number` | `1.08`  | Overshoot multiplier on key intensity |
+| `animation.idleBreathe.durationS`  | `number` | `4`     | Yoyo cycle duration in seconds        |
 
 Started by `EntranceAnimator`'s `onComplete` ([EntranceAnimator.ts:50](../src/3d/EntranceAnimator.ts#L50)). Killed by `stopBreathing()`. `setSceneLights` restarts it with the new key target if `key` is set and breathing was already running.
 
@@ -409,66 +418,69 @@ Initial state ([EntranceAnimator.ts:37-44](../src/3d/EntranceAnimator.ts#L37-L44
 
 Beat-by-beat:
 
-| Beat | Target | Duration source | Delay source | Easing |
-|------|--------|------------------|---------------|---------|
-| 1a (silhouette exposure) | `renderer.toneMappingExposure → exposure × silhouetteExposureFactor` (`0.15`) | `silhouetteDurationS` (`1.4`) | `0` | `power1.in` |
-| 1b (silhouette hemi) | `hemi.intensity → hemi × silhouetteHemiFactor` (`0.25`) | `silhouetteDurationS` (`1.4`) | `0` | `power1.in` |
-| 2 (key arc 1) | `key.position → (keyX × 0.2, max(keyY × 1.8, keyY+3), keyZ − 3)` | `keyArc1DurationS` (`0.9`) | `keyArc1DelayS` (`1.2`) | `power2.in` |
-| 3a (key punch) | `key.intensity → key × peakKeyFactor` (`2.5`) | `keyPunchDurationS` (`0.6`) | `keyPunchDelayS` (`1.5`) | `power3.out` |
-| 3b (exposure in) | `renderer.toneMappingExposure → exposure` (target) | `exposureInDurationS` (`1.2`) | `keyPunchDelayS` (`1.5`) | `power2.out` |
-| 4 (key arc 2) | `key.position → (keyX, keyY, keyZ)` (target) | `keyArc2DurationS` (`1.0`) | `keyArc2DelayS` (`2.1`) | `power2.out` |
-| 5 (key settle) | `key.intensity → key` (target) | `keySettleDurationS` (`1.2`) | `keySettleDelayS` (`2.3`) | `power2.inOut` |
-| 6 (fill in) | `fill.intensity → fill` (target) | `fillInDurationS` (`1.1`) | `fillInDelayS` (`2.6`) | `power1.out` |
-| 7 (hemi in) | `hemi.intensity → hemi` (target) | `hemiInDurationS` (`1.1`) | `hemiInDelayS` (`2.8`) | `power1.out` |
+| Beat                     | Target                                                                        | Duration source               | Delay source              | Easing         |
+| ------------------------ | ----------------------------------------------------------------------------- | ----------------------------- | ------------------------- | -------------- |
+| 1a (silhouette exposure) | `renderer.toneMappingExposure → exposure × silhouetteExposureFactor` (`0.15`) | `silhouetteDurationS` (`1.4`) | `0`                       | `power1.in`    |
+| 1b (silhouette hemi)     | `hemi.intensity → hemi × silhouetteHemiFactor` (`0.25`)                       | `silhouetteDurationS` (`1.4`) | `0`                       | `power1.in`    |
+| 2 (key arc 1)            | `key.position → (keyX × 0.2, max(keyY × 1.8, keyY+3), keyZ − 3)`              | `keyArc1DurationS` (`0.9`)    | `keyArc1DelayS` (`1.2`)   | `power2.in`    |
+| 3a (key punch)           | `key.intensity → key × peakKeyFactor` (`2.5`)                                 | `keyPunchDurationS` (`0.6`)   | `keyPunchDelayS` (`1.5`)  | `power3.out`   |
+| 3b (exposure in)         | `renderer.toneMappingExposure → exposure` (target)                            | `exposureInDurationS` (`1.2`) | `keyPunchDelayS` (`1.5`)  | `power2.out`   |
+| 4 (key arc 2)            | `key.position → (keyX, keyY, keyZ)` (target)                                  | `keyArc2DurationS` (`1.0`)    | `keyArc2DelayS` (`2.1`)   | `power2.out`   |
+| 5 (key settle)           | `key.intensity → key` (target)                                                | `keySettleDurationS` (`1.2`)  | `keySettleDelayS` (`2.3`) | `power2.inOut` |
+| 6 (fill in)              | `fill.intensity → fill` (target)                                              | `fillInDurationS` (`1.1`)     | `fillInDelayS` (`2.6`)    | `power1.out`   |
+| 7 (hemi in)              | `hemi.intensity → hemi` (target)                                              | `hemiInDurationS` (`1.1`)     | `hemiInDelayS` (`2.8`)    | `power1.out`   |
 
 `onComplete: () => sl.startBreathing(targets.key, lighting)` — entrance auto-transitions to idle breathing.
 
 All beat values live under `entrance.beats.*` and are merged via spread (`{ ...base.entrance.beats, ...user?.entrance?.beats }`, [LightingResolver.ts:213](../src/3d/LightingResolver.ts#L213)). This is the **only** branch in the resolver that uses spread merge — every other branch uses leaf-level nullish-coalesce. Setting one beat does not clear the others, but the resolver is internally inconsistent (see [Section 20](#20-known-gaps--discrepancies)).
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `entrance.peakKeyFactor` | `number` | `2.5` | How far the key overshoots its target during the flash beat |
-| `entrance.beats.silhouetteHemiFactor` | `number` | `0.25` | Factor of target hemi intensity reached during silhouette |
-| `entrance.beats.silhouetteExposureFactor` | `number` | `0.15` | Factor of target exposure reached during silhouette |
-| `entrance.beats.silhouetteDurationS` | `number` | `1.4` | Silhouette beat duration |
-| `entrance.beats.keyArc1DurationS` | `number` | `0.9` | Key first-arc duration |
-| `entrance.beats.keyArc1DelayS` | `number` | `1.2` | Key first-arc delay (timeline t) |
-| `entrance.beats.keyPunchDurationS` | `number` | `0.6` | Key punch duration |
-| `entrance.beats.keyPunchDelayS` | `number` | `1.5` | Key punch delay |
-| `entrance.beats.exposureInDurationS` | `number` | `1.2` | Exposure in duration |
-| `entrance.beats.keyArc2DurationS` | `number` | `1.0` | Key second-arc duration |
-| `entrance.beats.keyArc2DelayS` | `number` | `2.1` | Key second-arc delay |
-| `entrance.beats.keySettleDurationS` | `number` | `1.2` | Key settle duration |
-| `entrance.beats.keySettleDelayS` | `number` | `2.3` | Key settle delay |
-| `entrance.beats.fillInDurationS` | `number` | `1.1` | Fill in duration |
-| `entrance.beats.fillInDelayS` | `number` | `2.6` | Fill in delay |
-| `entrance.beats.hemiInDurationS` | `number` | `1.1` | Hemi in duration |
-| `entrance.beats.hemiInDelayS` | `number` | `2.8` | Hemi in delay |
+| Field                                     | Type     | Default | Description                                                 |
+| ----------------------------------------- | -------- | ------- | ----------------------------------------------------------- |
+| `entrance.peakKeyFactor`                  | `number` | `2.5`   | How far the key overshoots its target during the flash beat |
+| `entrance.beats.silhouetteHemiFactor`     | `number` | `0.25`  | Factor of target hemi intensity reached during silhouette   |
+| `entrance.beats.silhouetteExposureFactor` | `number` | `0.15`  | Factor of target exposure reached during silhouette         |
+| `entrance.beats.silhouetteDurationS`      | `number` | `1.4`   | Silhouette beat duration                                    |
+| `entrance.beats.keyArc1DurationS`         | `number` | `0.9`   | Key first-arc duration                                      |
+| `entrance.beats.keyArc1DelayS`            | `number` | `1.2`   | Key first-arc delay (timeline t)                            |
+| `entrance.beats.keyPunchDurationS`        | `number` | `0.6`   | Key punch duration                                          |
+| `entrance.beats.keyPunchDelayS`           | `number` | `1.5`   | Key punch delay                                             |
+| `entrance.beats.exposureInDurationS`      | `number` | `1.2`   | Exposure in duration                                        |
+| `entrance.beats.keyArc2DurationS`         | `number` | `1.0`   | Key second-arc duration                                     |
+| `entrance.beats.keyArc2DelayS`            | `number` | `2.1`   | Key second-arc delay                                        |
+| `entrance.beats.keySettleDurationS`       | `number` | `1.2`   | Key settle duration                                         |
+| `entrance.beats.keySettleDelayS`          | `number` | `2.3`   | Key settle delay                                            |
+| `entrance.beats.fillInDurationS`          | `number` | `1.1`   | Fill in duration                                            |
+| `entrance.beats.fillInDelayS`             | `number` | `2.6`   | Fill in delay                                               |
+| `entrance.beats.hemiInDurationS`          | `number` | `1.1`   | Hemi in duration                                            |
+| `entrance.beats.hemiInDelayS`             | `number` | `2.8`   | Hemi in delay                                               |
 
 ### 13.3 Per-effect tween durations
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `animation.fadeS` | `number` | `0.15` | `on` / `off` tween duration |
-| `animation.breatheS` | `number` | `2.0` | `breathe` / `breathe50percent` cycle duration |
-| `animation.breatheFastS` | `number` | `0.8` | `breatheFast` cycle duration |
-| `animation.flickerS` | `number` | `0.3` | `flicker` step duration |
+| Field                    | Type     | Default | Description                                   |
+| ------------------------ | -------- | ------- | --------------------------------------------- |
+| `animation.fadeS`        | `number` | `0.15`  | `on` / `off` tween duration                   |
+| `animation.breatheS`     | `number` | `2.0`   | `breathe` / `breathe50percent` cycle duration |
+| `animation.breatheFastS` | `number` | `0.8`   | `breatheFast` cycle duration                  |
+| `animation.flickerS`     | `number` | `0.3`   | `flicker` step duration                       |
 
 ## 14. Ground disc & game board
 
-[`GroundDiscManager`](../src/3d/GroundDiscManager.ts) owns a `THREE.Mesh` with `THREE.CircleGeometry` and `MeshStandardMaterial`. Built lazily on first `setVisible(true)` so initial setup does not pay for it if the disc is never shown. Rotated `-π/2` (horizontal), positioned at `modelBottomY - modelRadius × 0.002` to avoid z-fighting, `receiveShadow: true`. The same mesh is also the **shadow-catcher** for the key light, so its size (`groundDisc.radiusFactor`) determines how much of the cast shadow is visible.
+[`GroundDiscManager`](../src/3d/GroundDiscManager.ts) owns a `THREE.Mesh` with `THREE.CylinderGeometry` and a 3-element material array `[sideMat, topMat, bottomMat]`. Built lazily on first `setVisible(true)` so initial setup does not pay for it if the disc is never shown. Positioned at `modelBottomY - modelRadius × 0.002 - h/2` (where `h = max(modelRadius × thicknessFactor, 1e-4)`) so the top face sits at the same world-Y as the original flat disc, `receiveShadow: true`. The same mesh is also the **shadow-catcher** for the key light, so its size (`groundDisc.radiusFactor`) determines how much of the cast shadow is visible.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `groundDisc.color` | `HexColor` | `0x050505` | Disc color (no board overlay) |
-| `groundDisc.roughness` | `number` | `0.92` | Material roughness |
-| `groundDisc.metalness` | `number` | `0` | Material metalness |
-| `groundDisc.radiusFactor` | `number` | `3` | Disc radius as factor of `modelRadius`. Doubles as the board's size since the board texture fills the disc geometry. Shrinking too far clips the tower's cast shadow at the edges |
-| `boardDisc.enabled` | `boolean` | `true` | Render the game board texture on the disc |
-| `boardDisc.opacity` | `number` | `0.9` | Material opacity when board overlay is active |
-| `boardDisc.source` | `'image' \| 'procedural'` | `'image'` | Texture source — see "Image vs procedural" below |
-| `boardDisc.northKingdom` | `0 \| 1 \| 2 \| 3` | `0` | Which of the four kingdoms faces the +Z direction. Rotates the image texture in 90° steps. No effect on `'procedural'` |
-| `boardDisc.brightness` | `number` | `1` | Per-board diffuse-color multiplier on top of scene lighting. `0` = black, `1` = native texture brightness, up to `2` for over-bright. Stacks with `scene.exposure` and key/hemi intensity |
+| Field                       | Type                      | Default    | Description                                                                                                                                                                               |
+| --------------------------- | ------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `groundDisc.color`          | `HexColor`                | `0x050505` | Disc color (no board overlay)                                                                                                                                                             |
+| `groundDisc.roughness`      | `number`                  | `0.92`     | Material roughness                                                                                                                                                                        |
+| `groundDisc.metalness`      | `number`                  | `0`        | Material metalness                                                                                                                                                                        |
+| `groundDisc.radiusFactor`   | `number`                  | `3`        | Disc radius as factor of `modelRadius`. Doubles as the board's size since the board texture fills the disc geometry. Shrinking too far clips the tower's cast shadow at the edges         |
+| `boardDisc.enabled`         | `boolean`                 | `true`     | Render the game board texture on the disc                                                                                                                                                 |
+| `boardDisc.opacity`         | `number`                  | `0.9`      | Material opacity when board overlay is active                                                                                                                                             |
+| `boardDisc.source`          | `'image' \| 'procedural'` | `'image'`  | Texture source — see "Image vs procedural" below                                                                                                                                          |
+| `boardDisc.northKingdom`    | `0 \| 1 \| 2 \| 3`        | `0`        | Which of the four kingdoms faces the +Z direction. Rotates the image texture in 90° steps. No effect on `'procedural'`                                                                    |
+| `boardDisc.brightness`      | `number`                  | `1`        | Per-board diffuse-color multiplier on top of scene lighting. `0` = black, `1` = native texture brightness, up to `2` for over-bright. Stacks with `scene.exposure` and key/hemi intensity |
+| `boardDisc.thicknessFactor` | `number`                  | `0.06`     | Cylinder height as a fraction of `modelRadius`. Values `0.01`–`0.04` look natural; clamped to a minimum of `1e-4` to avoid degenerate geometry                                            |
+| `boardDisc.edgeColor`       | `HexColor`                | `0x5c3318` | Color of the board's side-wall. Two common presets: `0x5c3318` (medium warm wood/cardboard), `0x0e0e0e` (near-black neoprene mat)                                                         |
+| `boardDisc.bottomCap`       | `boolean`                 | `true`     | Render the underside face of the board cylinder. Normally invisible unless the camera dips below the board; set `false` to skip that draw call                                            |
 
 ### Image vs procedural
 
@@ -486,15 +498,18 @@ The orientation calibration for `board.png` lives in [`GameBoardImageTexture.ts`
 Runtime control:
 
 ```ts
-display.setGroundDiscVisible(true);   // toggle visibility (no config field — method only)
-display.setBoardDiscEnabled(false);   // toggle board overlay; writes to lighting.boardDisc.enabled
-display.applyLightingConfig({         // resize the disc (and the board texture with it)
+display.setGroundDiscVisible(true); // toggle visibility (no config field — method only)
+display.setBoardDiscEnabled(false); // toggle board overlay; writes to lighting.boardDisc.enabled
+display.applyLightingConfig({
+  // resize the disc (and the board texture with it)
   groundDisc: { radiusFactor: 4 },
 });
-display.applyLightingConfig({         // dim or brighten the board independently
+display.applyLightingConfig({
+  // dim or brighten the board independently
   boardDisc: { brightness: 0.6 },
 });
-display.applyLightingConfig({         // rotate to a different north kingdom
+display.applyLightingConfig({
+  // rotate to a different north kingdom
   boardDisc: { northKingdom: 2 },
 });
 ```
@@ -503,25 +518,25 @@ display.applyLightingConfig({         // rotate to a different north kingdom
 
 Every spatial parameter that drives lighting placement is expressed as a **fraction of `modelRadius`** (the half-size of the loaded GLB's bounding sphere). This is deliberate — swapping the GLB for a different-sized model rescales every light and disc automatically.
 
-| Constant | Default | Source | Purpose |
-|----------|---------|--------|---------|
-| `LED_LAYOUT.topY` | `0.83` | [constants.ts](../src/3d/constants.ts#L79) | Top ring Y |
-| `LED_LAYOUT.middleY` | `0.53` | [constants.ts](../src/3d/constants.ts#L80) | Middle ring Y |
-| `LED_LAYOUT.bottomY` | `0.23` | [constants.ts](../src/3d/constants.ts#L81) | Bottom ring Y |
-| `LED_LAYOUT.ledgeY` | `-0.36` | [constants.ts](../src/3d/constants.ts#L82) | Ledge Y |
-| `LED_LAYOUT.base1Y` | `-0.26` | [constants.ts](../src/3d/constants.ts#L83) | Base 1 Y |
-| `LED_LAYOUT.base2Y` | `0.02` | [constants.ts](../src/3d/constants.ts#L84) | Base 2 Y |
-| `RED_LIGHT_LAYOUT.ringInsetRadius` | `0.35` | [constants.ts](../src/3d/constants.ts#L94) | Ring layers (0–2) red light radial inset |
-| `RED_LIGHT_LAYOUT.cornerNearSurfaceRadius` | `0.52` | [constants.ts](../src/3d/constants.ts#L95) | Ledge/base layers (3–5) red light radial position |
-| `SEAL_LED_RADIUS_FACTOR` | `0.15` | [constants.ts](../src/3d/constants.ts#L76) | Hard-coded constant; mirrored in `leds.sealBacklights.radiusFactor` default |
-| `leds.red.haloDistanceFraction` | `0.20` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L39) | Red `PointLight.distance` factor |
-| `leds.sealBacklights.radiusFactor` | `0.15` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L47) | Seal proxy/halo/accent radial position |
-| `leds.sealBacklights.distanceFactor` | `0.20` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L50) | Seal accent `PointLight.distance` factor |
-| `leds.sealBacklights.proxy.sizeFactor` | `0.025` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L56) | Proxy sphere radius |
-| `leds.sealBacklights.halo.sizeFactor` | `0.14` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L61) | Halo sprite scale |
-| `groundDisc.radiusFactor` | `3` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L98) | Ground disc radius |
-| `key.shadow.frustumRadiusFactor` | `1.3` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L16) | Shadow ortho half-size |
-| `key.shadow.farFactor` | `10` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L17) | Shadow camera far plane |
+| Constant                                   | Default | Source                                                   | Purpose                                                                     |
+| ------------------------------------------ | ------- | -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `LED_LAYOUT.topY`                          | `0.83`  | [constants.ts](../src/3d/constants.ts#L79)               | Top ring Y                                                                  |
+| `LED_LAYOUT.middleY`                       | `0.53`  | [constants.ts](../src/3d/constants.ts#L80)               | Middle ring Y                                                               |
+| `LED_LAYOUT.bottomY`                       | `0.23`  | [constants.ts](../src/3d/constants.ts#L81)               | Bottom ring Y                                                               |
+| `LED_LAYOUT.ledgeY`                        | `-0.36` | [constants.ts](../src/3d/constants.ts#L82)               | Ledge Y                                                                     |
+| `LED_LAYOUT.base1Y`                        | `-0.26` | [constants.ts](../src/3d/constants.ts#L83)               | Base 1 Y                                                                    |
+| `LED_LAYOUT.base2Y`                        | `0.02`  | [constants.ts](../src/3d/constants.ts#L84)               | Base 2 Y                                                                    |
+| `RED_LIGHT_LAYOUT.ringInsetRadius`         | `0.35`  | [constants.ts](../src/3d/constants.ts#L94)               | Ring layers (0–2) red light radial inset                                    |
+| `RED_LIGHT_LAYOUT.cornerNearSurfaceRadius` | `0.52`  | [constants.ts](../src/3d/constants.ts#L95)               | Ledge/base layers (3–5) red light radial position                           |
+| `SEAL_LED_RADIUS_FACTOR`                   | `0.15`  | [constants.ts](../src/3d/constants.ts#L76)               | Hard-coded constant; mirrored in `leds.sealBacklights.radiusFactor` default |
+| `leds.red.haloDistanceFraction`            | `0.20`  | [LightingResolver.ts](../src/3d/LightingResolver.ts#L39) | Red `PointLight.distance` factor                                            |
+| `leds.sealBacklights.radiusFactor`         | `0.15`  | [LightingResolver.ts](../src/3d/LightingResolver.ts#L47) | Seal proxy/halo/accent radial position                                      |
+| `leds.sealBacklights.distanceFactor`       | `0.20`  | [LightingResolver.ts](../src/3d/LightingResolver.ts#L50) | Seal accent `PointLight.distance` factor                                    |
+| `leds.sealBacklights.proxy.sizeFactor`     | `0.025` | [LightingResolver.ts](../src/3d/LightingResolver.ts#L56) | Proxy sphere radius                                                         |
+| `leds.sealBacklights.halo.sizeFactor`      | `0.14`  | [LightingResolver.ts](../src/3d/LightingResolver.ts#L61) | Halo sprite scale                                                           |
+| `groundDisc.radiusFactor`                  | `3`     | [LightingResolver.ts](../src/3d/LightingResolver.ts#L98) | Ground disc radius                                                          |
+| `key.shadow.frustumRadiusFactor`           | `1.3`   | [LightingResolver.ts](../src/3d/LightingResolver.ts#L16) | Shadow ortho half-size                                                      |
+| `key.shadow.farFactor`                     | `10`    | [LightingResolver.ts](../src/3d/LightingResolver.ts#L17) | Shadow camera far plane                                                     |
 
 Azimuth tables ([constants.ts:29, 57-62](../src/3d/constants.ts#L29-L62)):
 
@@ -533,8 +548,8 @@ CORNER_AZIMUTH = [π/4, 3π/4, 5π/4, 7π/4]      // NE, SE, SW, NW
 Polar→Cartesian ([utils.ts](../src/3d/utils.ts)):
 
 ```ts
-x = sin(azimuth) * r
-z = cos(azimuth) * r
+x = sin(azimuth) * r;
+z = cos(azimuth) * r;
 ```
 
 Coordinate axes used throughout: X east-positive, Y up-positive, Z toward-camera-positive.
@@ -595,14 +610,14 @@ const DEFAULT_LIGHTING = {
     red: {
       color: 0xff2020,
       maxHalo: 1.0,
-      haloDistanceFraction: 0.20,
+      haloDistanceFraction: 0.2,
     },
     sealBacklights: {
       enabled: true,
       color: 0xff2020,
       radiusFactor: 0.15,
       intensity: 2,
-      distanceFactor: 0.20,
+      distanceFactor: 0.2,
       decay: 2.0,
       accentLight: true,
       backlightWhenBroken: true,
@@ -658,6 +673,9 @@ const DEFAULT_LIGHTING = {
     source: 'image',
     northKingdom: 0,
     brightness: 1,
+    thicknessFactor: 0.06,
+    edgeColor: 0x5c3318,
+    bottomCap: true,
   },
 };
 ```
@@ -665,6 +683,23 @@ const DEFAULT_LIGHTING = {
 ## 18. Tuning recipes
 
 Short worked examples. Each one is self-contained.
+
+### Board thickness and edge color
+
+```ts
+// Thicker board with a neoprene/rubber mat look
+display.applyLightingConfig({
+  boardDisc: { thicknessFactor: 0.025, edgeColor: 0x0e0e0e },
+});
+
+// Thinner board with a warm cardboard edge
+display.applyLightingConfig({
+  boardDisc: { thicknessFactor: 0.012, edgeColor: 0x7a4520 },
+});
+
+// Hide the underside face (useful when the camera never dips below the board)
+display.applyLightingConfig({ boardDisc: { bottomCap: false } });
+```
 
 ### Brighter scene overall
 

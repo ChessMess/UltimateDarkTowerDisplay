@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Board thickness** — the game-board disc is now a `THREE.CylinderGeometry` instead of a flat `CircleGeometry`, giving it a visible edge and underside when the camera is at an oblique or below-board angle. Three new `boardDisc` config fields:
+  - `boardDisc.thicknessFactor: number` — cylinder height as a fraction of `modelRadius` (default `0.06`). Exposed as a **Thickness** slider in the example app (range 0–0.12).
+  - `boardDisc.edgeColor: HexColor` — colour of the side-wall face (default `0x5c3318`, warm medium wood). Example app exposes **Wood** (`0x5c3318`) and **Neoprene** (`0x0e0e0e`) preset buttons.
+  - `boardDisc.bottomCap: boolean` — whether the underside face is rendered (default `true`). Example app exposes a **Board Bottom Face** checkbox.
+- Upward `DirectionalLight` (`0xffe8c8`, intensity 1.5) added by `GroundDiscManager` to evenly illuminate the board's bottom face and edge ring when the camera dips below the board. The light is owned and disposed alongside the disc mesh.
+
+### Changed
+
+- `GroundDiscManager` now uses a 3-element material array `[sideMat, topMat, bottomMat]` on the disc mesh (matching `CylinderGeometry` material groups 0/1/2). All board-texture and lighting updates target `mats[1]` (top cap) so the edge and bottom cap colours are independent.
+
 - Game-board image texture for the ground disc. The 3D view now loads `src/3d/assets/board.png` (real Return to Dark Tower board art) via `THREE.TextureLoader`, configured with sRGB color space, max anisotropy, and a calibrated rotation. New module: [`src/3d/GameBoardImageTexture.ts`](src/3d/GameBoardImageTexture.ts). Loading is async with a procedural-texture stand-in until the image resolves; the manager swaps `material.map` live when it lands. On failure (missing asset or fetch error) it logs a warning and falls back to procedural permanently for the session.
 - `lighting.boardDisc.source: 'image' | 'procedural'` — picks which texture renders on the disc. Defaults to `'image'`; the existing procedural board ([`GameBoardTexture.ts`](src/3d/GameBoardTexture.ts)) is kept as the fallback.
 - `lighting.boardDisc.northKingdom: 0 | 1 | 2 | 3` — rotates the image texture in 90° steps so any kingdom can face +Z. Live-updates without reloading the texture. No effect on `'procedural'` source.

@@ -232,6 +232,27 @@ export interface LightingConfigCore {
      * scene exposure / key light. Defaults to `1`.
      */
     brightness?: number;
+    /**
+     * Physical thickness of the board as a fraction of `modelRadius`.
+     * Drives the height of a `CylinderGeometry` so the board has a visible edge
+     * when viewed at oblique angles. Values in the range `0.01–0.04` look natural;
+     * `0` is clamped to a minimum to avoid degenerate geometry. Defaults to `0.018`.
+     */
+    thicknessFactor?: number;
+    /**
+     * Color of the board's side-wall (edge). Two common presets:
+     * - `0x5c3318` — medium warm wood / cardboard
+     * - `0x0e0e0e` — near-black neoprene / rubber mat
+     * Defaults to `0x5c3318`.
+     */
+    edgeColor?: HexColor;
+    /**
+     * Whether the underside face of the board cylinder is rendered.
+     * Normally invisible unless the camera goes below the board. Set to `false`
+     * to skip it (saves one draw call; safe when the camera never dips under).
+     * Defaults to `true`.
+     */
+    bottomCap?: boolean;
   };
 }
 

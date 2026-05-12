@@ -391,6 +391,13 @@ class CircleGeometry {
   dispose() {}
 }
 
+class CylinderGeometry {
+  constructor(radiusTop, radiusBottom, height, radialSegments) {
+    this.parameters = { radiusTop, radiusBottom, height, radialSegments };
+  }
+  dispose() {}
+}
+
 class AxesHelper {
   constructor(size) {
     this.size = size;
@@ -429,6 +436,7 @@ module.exports = {
   SpotLight,
   SphereGeometry,
   CircleGeometry,
+  CylinderGeometry,
   AxesHelper,
   MOUSE: {
     ROTATE: 0,

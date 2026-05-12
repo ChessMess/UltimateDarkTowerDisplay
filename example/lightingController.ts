@@ -31,6 +31,7 @@ function syncSceneLightControls(lighting: ResolvedLightingConfig, els: DomElemen
     [els.rngBloomThreshold, els.lblBloomThreshold, bloom.threshold, 2],
     [els.rngBoardSize, els.lblBoardSize, boardSize, 1],
     [els.rngBoardBrightness, els.lblBoardBrightness, boardBrightness, 2],
+    [els.rngBoardThickness, els.lblBoardThickness, lighting.boardDisc.thicknessFactor, 3],
   ];
   for (const [rng, lbl, val, dec] of syncTargets) {
     if (rng) rng.value = String(val);
@@ -114,6 +115,28 @@ export function initLightingController(getDisplay: () => TowerDisplay, els: DomE
   bindLightSlider(els.rngBoardBrightness, els.lblBoardBrightness, v => {
     getDisplay().applyLightingConfig({ boardDisc: { brightness: v } });
   }, getDisplay, els);
+
+  bindLightSlider(els.rngBoardThickness, els.lblBoardThickness, v => {
+    getDisplay().applyLightingConfig({ boardDisc: { thicknessFactor: v } });
+  }, getDisplay, els, 3);
+
+  if (els.chkBoardBottomCap) {
+    els.chkBoardBottomCap.addEventListener('change', () => {
+      getDisplay().applyLightingConfig({ boardDisc: { bottomCap: els.chkBoardBottomCap!.checked } });
+    });
+  }
+
+  if (els.btnBoardEdgeWood) {
+    els.btnBoardEdgeWood.addEventListener('click', () => {
+      getDisplay().applyLightingConfig({ boardDisc: { edgeColor: 0x5c3318 } });
+    });
+  }
+
+  if (els.btnBoardEdgeNeoprene) {
+    els.btnBoardEdgeNeoprene.addEventListener('click', () => {
+      getDisplay().applyLightingConfig({ boardDisc: { edgeColor: 0x0e0e0e } });
+    });
+  }
 
   if (els.chkGroundDisc) {
     els.chkGroundDisc.addEventListener('change', () => {

@@ -125,6 +125,9 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
     source: 'image',
     northKingdom: 0,
     brightness: 1,
+    thicknessFactor: 0.06,
+    edgeColor: 0x5c3318,
+    bottomCap: true,
   },
 };
 
@@ -291,6 +294,9 @@ export function resolveLighting(
       source: user?.boardDisc?.source ?? base.boardDisc.source,
       northKingdom: user?.boardDisc?.northKingdom ?? base.boardDisc.northKingdom,
       brightness: user?.boardDisc?.brightness ?? base.boardDisc.brightness,
+      thicknessFactor: user?.boardDisc?.thicknessFactor ?? base.boardDisc.thicknessFactor,
+      edgeColor: user?.boardDisc?.edgeColor ?? base.boardDisc.edgeColor,
+      bottomCap: user?.boardDisc?.bottomCap ?? base.boardDisc.bottomCap,
     },
   };
 

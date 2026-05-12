@@ -382,6 +382,9 @@ interface LightingConfig {
     source?: 'image' | 'procedural';         // 'image' — load src/3d/assets/board.png; 'procedural' = canvas fallback
     northKingdom?: 0 | 1 | 2 | 3;            // 0 — which kingdom faces +Z (90° steps)
     brightness?: number;                     // 1 — per-board diffuse multiplier, 0–2
+    thicknessFactor?: number;                // 0.018 — cylinder height as fraction of modelRadius (visual edge thickness)
+    edgeColor?: number;                      // 0x5c3318 — side-wall color (0x5c3318 = wood/cardboard, 0x0e0e0e = neoprene)
+    bottomCap?: boolean;                     // true — render the underside face of the board cylinder
   };
 
 ```ts

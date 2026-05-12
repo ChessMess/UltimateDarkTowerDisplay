@@ -40,6 +40,11 @@ export interface DomElements {
   lblBoardSize: HTMLElement | null;
   rngBoardBrightness: HTMLInputElement | null;
   lblBoardBrightness: HTMLElement | null;
+  rngBoardThickness: HTMLInputElement | null;
+  lblBoardThickness: HTMLElement | null;
+  chkBoardBottomCap: HTMLInputElement | null;
+  btnBoardEdgeWood: HTMLButtonElement | null;
+  btnBoardEdgeNeoprene: HTMLButtonElement | null;
   btnEntrance: HTMLElement | null;
   btnReadme: HTMLElement | null;
   btnRandom: HTMLElement | null;
@@ -108,6 +113,11 @@ export function queryDom(): DomElements {
     lblBoardSize: document.getElementById('lbl-board-size'),
     rngBoardBrightness: document.getElementById('rng-board-brightness') as HTMLInputElement | null,
     lblBoardBrightness: document.getElementById('lbl-board-brightness'),
+    rngBoardThickness: document.getElementById('rng-board-thickness') as HTMLInputElement | null,
+    lblBoardThickness: document.getElementById('lbl-board-thickness'),
+    chkBoardBottomCap: document.getElementById('chk-board-bottom-cap') as HTMLInputElement | null,
+    btnBoardEdgeWood: document.getElementById('btn-board-edge-wood') as HTMLButtonElement | null,
+    btnBoardEdgeNeoprene: document.getElementById('btn-board-edge-neoprene') as HTMLButtonElement | null,
     btnEntrance: document.getElementById('btn-entrance'),
     btnReadme: document.getElementById('btn-readme'),
     btnRandom: document.getElementById('btn-random'),
