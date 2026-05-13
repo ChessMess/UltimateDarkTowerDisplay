@@ -1,6 +1,9 @@
 import type { DomElements } from './dom';
 
+let suspended = false;
+
 function constrainRenderedPanelHeight(els: DomElements): void {
+  if (suspended) return;
   if (!els.renderedPanel) return;
   const rect = els.renderedPanel.getBoundingClientRect();
   const docTop = rect.top + window.scrollY;
@@ -17,4 +20,13 @@ export function initLayoutManager(els: DomElements): void {
   if (els.toolbarEl) observer.observe(els.toolbarEl);
 
   constrainRenderedPanelHeight(els);
+}
+
+/**
+ * Suspend the main-page layout manager. Used while #rendered-panel lives in
+ * a pop-out window — its bounding rect would be popup-relative and corrupt
+ * the main page's height calculation.
+ */
+export function setLayoutSuspended(value: boolean): void {
+  suspended = value;
 }

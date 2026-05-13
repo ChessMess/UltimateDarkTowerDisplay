@@ -9,6 +9,8 @@ export interface ModelLoadResult {
   modelRadius: number;
   /** Y coordinate of the model's bottom edge (world space, after centering). */
   modelBottomY: number;
+  /** Y coordinate of the model's top edge (world space, after centering). */
+  modelTopY: number;
 }
 
 /**
@@ -52,6 +54,7 @@ export function loadTowerModel(
       box.getBoundingSphere(sphere);
       const modelRadius = sphere.radius || 1;
       const modelBottomY = -size.y / 2;
+      const modelTopY = size.y / 2;
 
       // Enable shadows on every mesh in the hierarchy.
       root.traverse((child) => {
@@ -62,7 +65,7 @@ export function loadTowerModel(
         }
       });
 
-      onLoaded({ root, modelRadius, modelBottomY });
+      onLoaded({ root, modelRadius, modelBottomY, modelTopY });
     },
     undefined,
     (err) => {

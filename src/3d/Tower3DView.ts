@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { LIGHT_EFFECTS } from 'ultimatedarktower';
 import type { TowerState, SealIdentifier, TowerSide } from 'ultimatedarktower';
 
-import type { ITowerDisplay } from '../types';
+import type { ITowerDisplay, TowerPhysicsHooks } from '../types';
 import { injectStyles } from '../styles';
 import { SideButtons } from '../shared/SideButtons';
 import { DrumRotationAudio } from '../audio/DrumRotationAudio';
@@ -155,6 +155,14 @@ export class Tower3DView implements ITowerDisplay {
   private axesHelper: THREE.AxesHelper | null = null;
   private modelRadius = 1;
   private modelBottomY = -1;
+  private modelTopY = 1;
+
+  /** Clock for deriving `dt` for registered physics frame callbacks. */
+  private readonly physicsClock = new THREE.Clock();
+  private physicsFrameListeners: Set<(dt: number) => void> = new Set();
+  private physicsModelLoadListeners: Set<
+    (info: { root: THREE.Object3D; modelRadius: number; modelBottomY: number; modelTopY: number }) => void
+  > = new Set();
 
   private cameraController: CameraController | null = null;
 
@@ -232,6 +240,65 @@ export class Tower3DView implements ITowerDisplay {
   applySeals(brokenSeals: SealIdentifier[]): void {
     this.latestBrokenSeals = brokenSeals;
     this.sealManager.applySeals(brokenSeals, this.lighting);
+  }
+
+  /**
+   * Expose a narrow integration surface for external add-ons (e.g. a physics
+   * companion package). Returns hooks for: the Three.js scene, per-drum-level
+   * Object3D access, a per-frame callback registry, a seal-state listener, and
+   * the current model bounds. All callbacks return an unsubscribe function.
+   * Bounds (`modelRadius`, `modelBottomY`, `modelTopY`) are snapshotted at call
+   * time — call after the GLB has loaded for non-default values.
+   */
+  getPhysicsHooks(): TowerPhysicsHooks {
+    return {
+      scene: this.scene as THREE.Scene,
+      drumNode: (level) => this.drumManager.getDrumNode(level),
+      onFrame: (cb) => {
+        this.physicsFrameListeners.add(cb);
+        return () => { this.physicsFrameListeners.delete(cb); };
+      },
+      onSealsApplied: (cb) => this.sealManager.onSealsApplied(cb),
+      onModelLoaded: (cb) => {
+        this.physicsModelLoadListeners.add(cb);
+        // Fire immediately if the model is already loaded.
+        if (this.model) {
+          try {
+            cb({
+              root: this.model,
+              modelRadius: this.modelRadius,
+              modelBottomY: this.modelBottomY,
+              modelTopY: this.modelTopY,
+            });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[Tower3DView] onModelLoaded listener threw', err);
+          }
+        }
+        return () => { this.physicsModelLoadListeners.delete(cb); };
+      },
+      modelRadius: this.modelRadius,
+      modelBottomY: this.modelBottomY,
+      modelTopY: this.modelTopY,
+    };
+  }
+
+  /** @internal — exposed for tests; equals `physicsFrameListeners.size`. */
+  get physicsFrameListenerCount(): number {
+    return this.physicsFrameListeners.size;
+  }
+
+  private tickPhysicsListeners(): void {
+    if (this.physicsFrameListeners.size === 0) return;
+    const dt = this.physicsClock.getDelta();
+    for (const cb of this.physicsFrameListeners) {
+      try {
+        cb(dt);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[Tower3DView] physics frame listener threw', err);
+      }
+    }
   }
 
   /** Tween the camera to face the given tower side. No-op if the camera is already on that side. */
@@ -426,6 +493,8 @@ export class Tower3DView implements ITowerDisplay {
     this.ledRefs.clear();
     this.sealManager.dispose();
     this.drumManager.dispose();
+    this.physicsFrameListeners.clear();
+    this.physicsModelLoadListeners.clear();
     this.drumAudio.dispose();
     this.towerSampleAudio.dispose();
     if (this.model) {
@@ -565,11 +634,12 @@ export class Tower3DView implements ITowerDisplay {
     loadTowerModel(
       url,
       this.dracoDecoderPath,
-      ({ root, modelRadius, modelBottomY }) => {
+      ({ root, modelRadius, modelBottomY, modelTopY }) => {
         if (!this.scene) return;
 
         this.modelRadius = modelRadius;
         this.modelBottomY = modelBottomY;
+        this.modelTopY = modelTopY;
 
         this.logger.log('modelLoaded', {
           url,
@@ -606,6 +676,17 @@ export class Tower3DView implements ITowerDisplay {
         // Replay state AFTER all visuals are built (seals + LEDs)
         this._loadState = 'ready';
         if (this.latestState) this.applyState(this.latestState);
+
+        // Notify physics integration listeners (e.g. the companion physics
+        // package) that the model is now in the scene with finalized bounds.
+        for (const cb of this.physicsModelLoadListeners) {
+          try {
+            cb({ root, modelRadius, modelBottomY, modelTopY });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[Tower3DView] onModelLoaded listener threw', err);
+          }
+        }
       },
       (details) => {
         // eslint-disable-next-line no-console
@@ -788,10 +869,12 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   private startRenderLoop(): void {
+    this.physicsClock.start();
     const tick = () => {
       this.rafId = requestAnimationFrame(tick);
       this.controls?.update();
       this.cameraController?.tickDerivedSide();
+      this.tickPhysicsListeners();
       this.sceneLighting?.tick();
       if (this.renderer && this.scene && this.camera) {
         if (this.bloomManager) {

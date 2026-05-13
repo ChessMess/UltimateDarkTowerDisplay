@@ -61,10 +61,17 @@ export default defineConfig({
   assetsInclude: ['**/*.glb'],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
-      name: 'UltimateDarkTowerDisplay',
+      // Two entries: the core (`ultimatedarktowerdisplay`) and the optional
+      // physics subpath (`ultimatedarktowerdisplay/physics`). Each emits its
+      // own ESM + CJS bundle so consumers who don't import the physics
+      // subpath never load Rapier.
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        physics: resolve(__dirname, 'src/physics/index.ts'),
+      },
       formats: ['es', 'cjs'],
-      fileName: (format) => `index.${format === 'es' ? 'esm' : 'cjs'}.js`,
+      fileName: (format, entryName) =>
+        `${entryName}.${format === 'es' ? 'esm' : 'cjs'}.js`,
     },
     // Force large binary assets (GLB model) to emit as separate files rather
     // than inlining as base64 in the JS bundle.
@@ -76,6 +83,7 @@ export default defineConfig({
         'three',
         /^three\/.*/,
         'gsap',
+        '@dimforge/rapier3d-compat',
       ],
     },
     sourcemap: true,

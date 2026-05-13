@@ -1,9 +1,54 @@
 import type { TowerState, TowerSide, SealIdentifier } from 'ultimatedarktower';
+import type * as THREE from 'three';
 import type { LightingConfig, CameraConfig } from './3d/types';
 
 export type { TowerSide, SealIdentifier };
 export type { LightingConfig };
 export type { CameraConfig };
+
+/**
+ * Narrow integration surface returned by `Tower3DView.getPhysicsHooks()`.
+ * External add-ons (e.g. a physics companion package) use these to plug into
+ * the render loop, observe drum/seal state, and read model bounds. The shape
+ * is intentionally minimal so add-ons stay decoupled from view internals.
+ */
+export interface TowerPhysicsHooks {
+  /** The active Three.js scene; add-ons may add meshes/objects to it. */
+  scene: THREE.Scene;
+  /** Returns the registered Object3D for a drum level, or `null` if absent. */
+  drumNode: (level: 'top' | 'middle' | 'bottom') => THREE.Object3D | null;
+  /**
+   * Register a per-frame callback invoked once per render tick (before render
+   * and lighting tick), with `dt` in seconds. Returns an unsubscribe function.
+   */
+  onFrame: (cb: (dt: number) => void) => () => void;
+  /**
+   * Register a callback that fires after every `applySeals` call with the
+   * broken-seals list. Returns an unsubscribe function.
+   */
+  onSealsApplied: (cb: (broken: SealIdentifier[]) => void) => () => void;
+  /**
+   * Register a callback that fires once the GLB model has been loaded and
+   * added to the scene. If the model is already loaded when this is called,
+   * the callback fires synchronously. Receives the model root Object3D and
+   * the latest `modelRadius` / `modelBottomY` / `modelTopY`. Returns an
+   * unsubscribe function.
+   */
+  onModelLoaded: (
+    cb: (info: {
+      root: THREE.Object3D;
+      modelRadius: number;
+      modelBottomY: number;
+      modelTopY: number;
+    }) => void,
+  ) => () => void;
+  /** Bounding-sphere radius of the loaded GLB. Defaults to 1 before load. */
+  modelRadius: number;
+  /** World-space Y of the model's bottom edge (after centering). */
+  modelBottomY: number;
+  /** World-space Y of the model's top edge (after centering). */
+  modelTopY: number;
+}
 
 /** Identifies which renderer implementation to use. */
 export type RendererType = 'readout' | 'side-view' | '3d-view';

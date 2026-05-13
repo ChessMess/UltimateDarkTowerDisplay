@@ -39,6 +39,22 @@ export class SealManager {
 
   private debugHelpers: THREE.Mesh[] = [];
   private gradientTexture: THREE.CanvasTexture | null = null;
+  private sealListeners: Set<(broken: SealIdentifier[]) => void> = new Set();
+
+  /**
+   * Register a callback that fires after every `applySeals` call with the
+   * broken-seals list. Returns an unsubscribe function. Used by external
+   * integrations (e.g. physics colliders) that need to mirror seal state.
+   */
+  onSealsApplied(cb: (broken: SealIdentifier[]) => void): () => void {
+    this.sealListeners.add(cb);
+    return () => { this.sealListeners.delete(cb); };
+  }
+
+  /** @internal — exposed for tests; equals `sealListeners.size`. */
+  get sealListenerCount(): number {
+    return this.sealListeners.size;
+  }
 
   /** Walk the loaded GLTF root and register every seal_<side>_<level> node. */
   buildSealNodes(root: THREE.Object3D): void {
@@ -191,7 +207,10 @@ export class SealManager {
    * off; if true (default), the LED keeps its current driver state.
    */
   applySeals(brokenSeals: SealIdentifier[], lighting?: ResolvedLightingConfig): void {
-    if (this.sealNodes.size === 0) return;
+    if (this.sealNodes.size === 0) {
+      this.notifySealListeners(brokenSeals);
+      return;
+    }
     const broken = new Set(brokenSeals.map(s => sealKey(s.side, s.level)));
     for (const [key, node] of this.sealNodes) {
       const isBroken = broken.has(key);
@@ -201,6 +220,18 @@ export class SealManager {
         const keepOn = lighting.leds.sealBacklights.backlightWhenBroken;
         const driverV = keepOn ? (ref?.driver.v ?? 0) : 0;
         this.setSealLed(key, driverV, lighting);
+      }
+    }
+    this.notifySealListeners(brokenSeals);
+  }
+
+  private notifySealListeners(brokenSeals: SealIdentifier[]): void {
+    for (const cb of this.sealListeners) {
+      try {
+        cb(brokenSeals);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[SealManager] seal listener threw', err);
       }
     }
   }
@@ -308,6 +339,8 @@ export class SealManager {
 
     this.gradientTexture?.dispose();
     this.gradientTexture = null;
+
+    this.sealListeners.clear();
   }
 
   // ─────────────────────────────────────────────────────────────────────────

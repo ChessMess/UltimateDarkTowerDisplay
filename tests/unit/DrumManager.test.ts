@@ -103,6 +103,19 @@ describe('DrumManager', () => {
       expect(mgr.drumRefs.get('top')).toBeDefined();
     });
 
+    it('getDrumNode returns the registered Object3D for a level or null', () => {
+      const root = makeRoot(['drum_top', 'drum_bottom']);
+      const mgr = new DrumManager();
+      mgr.buildDrumNodes(root);
+
+      const top = mgr.getDrumNode('top');
+      expect(top).not.toBeNull();
+      expect(top).toBe(mgr.drumRefs.get('top')!.node);
+
+      expect(mgr.getDrumNode('middle')).toBeNull();
+      expect(mgr.getDrumNode('bottom')).toBe(mgr.drumRefs.get('bottom')!.node);
+    });
+
     it('warnOnMissing logs once per missing drum and is silent when all present', () => {
       const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       try {

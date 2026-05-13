@@ -29,7 +29,7 @@ let lastState: TowerState | null = null;
 let lastSide: TowerSide | null = null;
 let currentRenderers: RendererType | RendererType[] = '3d-view';
 let currentActiveId: ViewButtonId = 'btn-view-3d';
-let onViewChanged: (() => void) | null = null;
+const viewChangeListeners = new Set<() => void>();
 
 function publishDisplay(): void {
   window.display = display;
@@ -60,8 +60,20 @@ export function is3DViewVisible(): boolean {
   return currentRenderers === '3d-view';
 }
 
-export function onViewChange(cb: () => void): void {
-  onViewChanged = cb;
+export function onViewChange(cb: () => void): () => void {
+  viewChangeListeners.add(cb);
+  return () => { viewChangeListeners.delete(cb); };
+}
+
+function fireViewChange(): void {
+  for (const cb of viewChangeListeners) {
+    try {
+      cb();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[rendererController] onViewChange listener threw', err);
+    }
+  }
 }
 
 function buildDisplayOptions(renderers: RendererType | RendererType[], els: DomElements): TowerDisplayOptions {
@@ -87,9 +99,17 @@ function buildDisplayOptions(renderers: RendererType | RendererType[], els: DomE
   };
 }
 
-function setActiveViewButton(activeId: ViewButtonId): void {
+function getViewButtonRef(id: ViewButtonId, els: DomElements): HTMLButtonElement | null {
+  switch (id) {
+    case 'btn-view-2d': return els.btnView2d;
+    case 'btn-view-3d': return els.btnView3d;
+    case 'btn-view-2d3d': return els.btnView2d3d;
+  }
+}
+
+function setActiveViewButton(activeId: ViewButtonId, els: DomElements): void {
   for (const id of Object.keys(viewButtons) as ViewButtonId[]) {
-    const el = document.getElementById(id);
+    const el = getViewButtonRef(id, els);
     if (el) el.classList.toggle('active', id === activeId);
   }
 }
@@ -121,14 +141,23 @@ function recreateDisplay(renderers: RendererType | RendererType[], activeId: Vie
   currentActiveId = activeId;
   display = new TowerDisplay(buildDisplayOptions(renderers, els));
   publishDisplay();
-  setActiveViewButton(activeId);
+  setActiveViewButton(activeId, els);
   applyAudioConfig(els, true);
   if (lastState) display.applyState(lastState);
   replayLedOverrides(display);
   refreshSeals(display, readout);
   if (lastSide) display.selectSide(lastSide);
   syncToolbar3DState(els);
-  onViewChanged?.();
+  fireViewChange();
+}
+
+/**
+ * Rebuild the TowerDisplay in place using the currently-selected renderers
+ * and view button. Used by the pop-out controller after moving #tower
+ * between the main document and a popup document.
+ */
+export function recreateCurrentDisplay(els: DomElements): void {
+  recreateDisplay(currentRenderers, currentActiveId, els);
 }
 
 export function initRendererController(els: DomElements): void {
@@ -142,7 +171,7 @@ export function initRendererController(els: DomElements): void {
   applyAudioConfig(els);
 
   for (const [id, renderers] of Object.entries(viewButtons) as [ViewButtonId, RendererType | RendererType[]][]) {
-    const btn = document.getElementById(id);
+    const btn = getViewButtonRef(id, els);
     if (btn) btn.addEventListener('click', () => recreateDisplay(renderers, id, els));
   }
 

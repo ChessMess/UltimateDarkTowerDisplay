@@ -58,6 +58,10 @@ export interface DomElements {
   sealToggleGrid: HTMLElement | null;
   renderedPanel: HTMLElement | null;
   toolbarEl: Element | null;
+  btnView2d: HTMLButtonElement | null;
+  btnView3d: HTMLButtonElement | null;
+  btnView2d3d: HTMLButtonElement | null;
+  btnPopOut: HTMLButtonElement | null;
 }
 
 export function queryDom(): DomElements {
@@ -131,5 +135,9 @@ export function queryDom(): DomElements {
     sealToggleGrid: document.getElementById('seal-toggle-grid'),
     renderedPanel: document.getElementById('rendered-panel'),
     toolbarEl: document.querySelector('.toolbar'),
+    btnView2d: document.getElementById('btn-view-2d') as HTMLButtonElement | null,
+    btnView3d: document.getElementById('btn-view-3d') as HTMLButtonElement | null,
+    btnView2d3d: document.getElementById('btn-view-2d3d') as HTMLButtonElement | null,
+    btnPopOut: document.getElementById('btn-pop-out') as HTMLButtonElement | null,
   };
 }

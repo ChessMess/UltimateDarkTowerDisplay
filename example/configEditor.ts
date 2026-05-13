@@ -1,12 +1,17 @@
 import type { TowerDisplay, TowerStateReadout } from '../src/index';
 import type { LightingConfig, CameraConfig } from '../src/3d/types';
+import type {
+  PhysicsConfig,
+  ResolvedPhysicsConfig,
+  SkullPhysicsHandle,
+} from '../src/physics';
 import type { TowerState } from 'ultimatedarktower';
 import type { DomElements } from './dom';
 import { armTowerAudioFromUserGesture, is3DViewVisible, getLastState } from './rendererController';
 import { clearLedOverrides } from './ledOverrideController';
 import { showBannerError, bindCopyButton } from './utils';
 
-type ConfigType = 'state' | 'lighting' | 'camera';
+type ConfigType = 'state' | 'lighting' | 'camera' | 'physics';
 
 let activeConfigType: ConfigType = 'state';
 let cleanConfigJson = '';
@@ -26,6 +31,9 @@ export function refreshConfigPreview(getDisplay: () => TowerDisplay, els: DomEle
   } else if (activeConfigType === 'camera') {
     const config = getDisplay().getCameraConfig();
     json = config ? JSON.stringify(config, null, 2) : '';
+  } else if (activeConfigType === 'physics') {
+    const h = physicsHandleGetter?.();
+    json = h ? JSON.stringify(h.getPhysicsConfig(), null, 2) : '';
   } else {
     const state = getLastState();
     json = state ? JSON.stringify(state, null, 2) : '';
@@ -51,15 +59,47 @@ export function syncConfigSelectorVisibility(getDisplay: () => TowerDisplay, els
   const visible = is3DViewVisible();
   const optLighting = document.getElementById('opt-lighting') as HTMLOptionElement | null;
   const optCamera = document.getElementById('opt-camera') as HTMLOptionElement | null;
+  const optPhysics = document.getElementById('opt-physics') as HTMLOptionElement | null;
 
   if (optLighting) optLighting.disabled = !visible;
   if (optCamera) optCamera.disabled = !visible;
+  if (optPhysics) optPhysics.disabled = !visible;
 
-  if (!visible && (activeConfigType === 'lighting' || activeConfigType === 'camera')) {
+  if (!visible && (
+    activeConfigType === 'lighting' ||
+    activeConfigType === 'camera' ||
+    activeConfigType === 'physics'
+  )) {
     activeConfigType = 'state';
     if (els.selConfigType) els.selConfigType.value = 'state';
     refreshConfigPreview(getDisplay, els);
   }
+}
+
+/**
+ * Module-level pointer to the physics handle getter; set by
+ * `initConfigEditor`. Used by `refreshConfigPreview` (which has no params
+ * for it) and by the apply handler.
+ */
+let physicsHandleGetter: (() => SkullPhysicsHandle | null) | null = null;
+let physicsSyncSliders: ((cfg: ResolvedPhysicsConfig) => void) | null = null;
+let editorGetDisplay: (() => TowerDisplay) | null = null;
+let editorEls: DomElements | null = null;
+
+/**
+ * Refresh the JSON preview if the user is currently viewing the physics
+ * config. Called by `physicsController` whenever a slider edit mutates the
+ * live config, so the textarea stays in lockstep with the canonical state.
+ */
+export function notifyPhysicsConfigChanged(): void {
+  if (activeConfigType !== 'physics') return;
+  if (!editorGetDisplay || !editorEls) return;
+  // Skip the refresh while the user has unsaved edits in the textarea,
+  // otherwise we'd clobber whatever they were typing. The slider-driven
+  // change still landed in the live physics world; only the visible JSON
+  // lags until they apply or revert.
+  if (editorEls.btnApplyConfig && !editorEls.btnApplyConfig.disabled) return;
+  refreshConfigPreview(editorGetDisplay, editorEls);
 }
 
 export function initConfigEditor(
@@ -67,8 +107,14 @@ export function initConfigEditor(
   getReadout: () => TowerStateReadout,
   setLastState: (s: TowerState | null) => void,
   onStateApplied: (state: TowerState) => void,
+  getPhysicsHandle: () => SkullPhysicsHandle | null,
+  syncSlidersFromConfig: (cfg: ResolvedPhysicsConfig) => void,
   els: DomElements,
 ): void {
+  physicsHandleGetter = getPhysicsHandle;
+  physicsSyncSliders = syncSlidersFromConfig;
+  editorGetDisplay = getDisplay;
+  editorEls = els;
   if (els.selConfigType) {
     els.selConfigType.addEventListener('change', () => {
       activeConfigType = els.selConfigType!.value as ConfigType;
@@ -97,6 +143,14 @@ export function initConfigEditor(
         } else if (activeConfigType === 'camera') {
           const parsed = JSON.parse(els.configPreview.value) as CameraConfig;
           getDisplay().applyCameraConfig(parsed);
+          refreshConfigPreview(getDisplay, els);
+        } else if (activeConfigType === 'physics') {
+          const parsed = JSON.parse(els.configPreview.value) as PhysicsConfig;
+          const h = physicsHandleGetter?.();
+          if (h) {
+            h.applyPhysicsConfig(parsed);
+            physicsSyncSliders?.(h.getPhysicsConfig());
+          }
           refreshConfigPreview(getDisplay, els);
         } else {
           const parsed = JSON.parse(els.configPreview.value) as TowerState;

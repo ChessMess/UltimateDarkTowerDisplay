@@ -4,21 +4,35 @@ import { initLightingController } from './lightingController';
 import { initStateEditor, initInitialState, refreshDrumRotateActive } from './stateEditor';
 import { initConfigEditor, syncConfigSelectorVisibility } from './configEditor';
 import { initLayoutManager } from './layoutManager';
+import { initPhysicsController, getPhysicsHandle, syncSlidersFromConfig } from './physicsController';
+import { initPopOutController } from './popOutController';
 
 const els = queryDom();
 
 initRendererController(els);
 
-initConfigEditor(getDisplay, getReadout, setLastState, (state) => refreshDrumRotateActive(state, els), els);
+initConfigEditor(
+  getDisplay,
+  getReadout,
+  setLastState,
+  (state) => refreshDrumRotateActive(state, els),
+  getPhysicsHandle,
+  syncSlidersFromConfig,
+  els,
+);
 
 initLightingController(getDisplay, els);
 
 initStateEditor(getDisplay, getReadout, setLastState, els);
+
+initPhysicsController();
 
 onViewChange(() => syncConfigSelectorVisibility(getDisplay, els));
 
 initInitialState(getDisplay, getReadout, setLastState, els);
 
 initLayoutManager(els);
+
+initPopOutController(els);
 
 window.__udtdExampleReady = true;

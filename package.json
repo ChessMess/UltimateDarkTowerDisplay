@@ -1,7 +1,7 @@
 {
   "name": "ultimatedarktowerdisplay",
-  "version": "0.2.0",
-  "description": "DOM-based state readout for the Ultimate Dark Tower board game.",
+  "version": "0.4.0",
+  "description": "DOM-based state readout for the Ultimate Dark Tower board game, with an optional physics-driven skull subpath.",
   "type": "module",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.esm.js",
       "require": "./dist/index.cjs.js"
+    },
+    "./physics": {
+      "types": "./dist/physics/index.d.ts",
+      "import": "./dist/physics.esm.js",
+      "require": "./dist/physics.cjs.js"
     }
   },
   "sideEffects": false,
@@ -18,7 +23,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs"
   ],
   "scripts": {
     "build": "vite build && tsc --emitDeclarationOnly",
@@ -39,7 +45,8 @@
   "peerDependencies": {
     "gsap": "^3.12.0",
     "three": "^0.170.0",
-    "ultimatedarktower": "^2.5.0"
+    "ultimatedarktower": "file:../UltimateDarkTower",
+    "@dimforge/rapier3d-compat": "^0.19.3"
   },
   "peerDependenciesMeta": {
     "three": {
@@ -47,9 +54,13 @@
     },
     "gsap": {
       "optional": true
+    },
+    "@dimforge/rapier3d-compat": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
     "@types/jest": "^29.5.0",
     "@types/three": "^0.183.1",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
@@ -62,7 +73,7 @@
     "three": "^0.183.2",
     "ts-jest": "^29.1.0",
     "typescript": "^5.4.0",
-    "ultimatedarktower": "^2.5.0",
+    "ultimatedarktower": "file:../UltimateDarkTower",
     "vite": "^5.4.0"
   },
   "keywords": [

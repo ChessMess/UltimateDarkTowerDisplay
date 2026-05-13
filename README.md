@@ -34,6 +34,20 @@ npm install ultimatedarktowerdisplay ultimatedarktower
 
 `ultimatedarktower` is a peer dependency and must be installed by the consuming app.
 
+### Optional: physics add-on
+
+Physics-driven skulls inside the 3D view ship as an **opt-in subpath** of this same package. To use them, also install Rapier (declared as an optional peer dependency):
+
+```bash
+npm install @dimforge/rapier3d-compat
+```
+
+```ts
+import { attachSkullPhysics } from 'ultimatedarktowerdisplay/physics';
+```
+
+If you don't import the subpath, Rapier is never loaded and adds no bundle cost. See [docs/PHYSICS.md](docs/PHYSICS.md) for the API and tuning guide.
+
 ## Quick Start
 
 ```ts

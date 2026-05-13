@@ -639,3 +639,46 @@ code {
     padding: 0.4rem 0.6rem;
   }
 }
+
+/* ── Pop-out window ─────────────────────────────────────── */
+
+.popout-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0.5rem;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Cinzel', serif;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.popout-body > #rendered-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+/* In the popup, drop the library's square aspect ratio so the canvas fills
+   the panel even when the window is wider or taller than 1:1. */
+.popout-body .t3v-wrapper {
+  aspect-ratio: auto;
+  max-height: none;
+  height: 100%;
+}
+
+.popout-placeholder {
+  border: 1px dashed var(--border-gold);
+  border-radius: 6px;
+  padding: 1.25rem 1rem;
+  color: var(--text-dim);
+  font-style: italic;
+  text-align: center;
+  background: var(--bg-panel);
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+

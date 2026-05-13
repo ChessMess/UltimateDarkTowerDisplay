@@ -111,6 +111,15 @@ export class TowerDisplay implements ITowerDisplay {
   }
 
   /**
+   * Return the underlying Tower3DView instance if the display includes a 3D
+   * renderer, or `null` otherwise. Useful for external add-ons (e.g. a physics
+   * companion package) that need to call `view3d.getPhysicsHooks()`.
+   */
+  get view3D(): Tower3DView | null {
+    return this.view3d;
+  }
+
+  /**
    * Update the display with a new decoded tower state. Pass `force = true`
    * to replay tower-sample audio even when the sample/loop match the
    * previous state — useful for explicit user triggers. The default

@@ -40,6 +40,11 @@ export class DrumManager {
 
   constructor(private readonly audio?: DrumRotationAudio) {}
 
+  /** Return the registered drum Object3D for a level, or `null` if absent. */
+  getDrumNode(level: DrumLevel): THREE.Object3D | null {
+    return this.drumRefs.get(level)?.node ?? null;
+  }
+
   /** Walk the loaded GLTF root and register `drum_top` / `drum_middle` / `drum_bottom`. */
   buildDrumNodes(root: THREE.Object3D): void {
     root.traverse((child) => {

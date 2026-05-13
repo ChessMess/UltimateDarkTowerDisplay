@@ -6,8 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Added
 
+- **Physics subpath** (`ultimatedarktowerdisplay/physics`) — physics-driven skulls inside the 3D view, available as an opt-in subpath import. Mirrors the Three.js `three/examples/jsm` pattern: same package, separate entry, separate output bundle. Consumers who don't import the subpath never load Rapier or pay any bundle cost for it. See [docs/PHYSICS.md](docs/PHYSICS.md) for the API and tuning guide.
+  - Public API: `attachSkullPhysics(view, config?)`, `getPhysicsConfig()`, `applyPhysicsConfig(partial)`, `dropSkull()`, `dispose()`.
+  - Single nested `PhysicsConfig` (mirrors the lighting-config pattern) with `DEFAULT_PHYSICS` and `resolvePhysics()` helpers.
+  - `@dimforge/rapier3d-compat` is declared as an **optional peer dependency**. Install it only if you want physics:
+    ```bash
+    npm install ultimatedarktowerdisplay @dimforge/rapier3d-compat
+    ```
+  - TypeScript consumers need `moduleResolution: "bundler"` (or `"node16"` / `"nodenext"`) to resolve the subpath.
+
+### Changed
+
+- Build emits two ESM + two CJS bundles (`dist/index.{esm,cjs}.js` and `dist/physics.{esm,cjs}.js`) plus matching `.d.ts` files. Vite multi-entry lib mode.
+
+## [0.3.0]
+
+### Added
+
+- **Physics integration hooks** — new public API surface on `Tower3DView` so external add-ons (e.g. a forthcoming `@ultimatedarktowerdisplay/physics` companion package) can integrate without reaching into view internals. Additions:
+  - `Tower3DView.getPhysicsHooks(): TowerPhysicsHooks` — returns `{ scene, drumNode(level), onFrame(cb), onSealsApplied(cb), modelRadius, modelBottomY, modelTopY }`.
+  - `ModelLoadResult.modelTopY` — world-space Y of the model's top edge (mirrors existing `modelBottomY`).
+  - `DrumManager.getDrumNode(level)` — public accessor for a drum's Object3D.
+  - `SealManager.onSealsApplied(cb)` — listener API fired after every `applySeals` call.
+  - `TowerPhysicsHooks` type, exported from the package root.
+  - Render loop now ticks registered `onFrame` callbacks (with a `THREE.Clock`-derived `dt`) before scene lighting and render, so physics-driven mesh transforms are reflected the same frame.
+- Documentation: see the companion package's docs/PHYSICS.md (added separately) for the mental model and tuning guide.
 - **Board thickness** — the game-board disc is now a `THREE.CylinderGeometry` instead of a flat `CircleGeometry`, giving it a visible edge and underside when the camera is at an oblique or below-board angle. Three new `boardDisc` config fields:
   - `boardDisc.thicknessFactor: number` — cylinder height as a fraction of `modelRadius` (default `0.06`). Exposed as a **Thickness** slider in the example app (range 0–0.12).
   - `boardDisc.edgeColor: HexColor` — colour of the side-wall face (default `0x5c3318`, warm medium wood). Example app exposes **Wood** (`0x5c3318`) and **Neoprene** (`0x0e0e0e`) preset buttons.
