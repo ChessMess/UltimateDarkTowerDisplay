@@ -1,5 +1,9 @@
 # Physics for the Ultimate Dark Tower Display
 
+*Docs: [Index](README.md) > Physics user > Physics*
+
+**Before reading:** [GETTING_STARTED](GETTING_STARTED.md) covers install and the first `Tower3DView`. [ARCHITECTURE §where physics plugs in](ARCHITECTURE.md#where-physics-plugs-in) explains the `TowerPhysicsHooks` seam.
+
 ## Overview
 
 This package adds physics-driven skulls inside the 3D tower view. Drop a skull into the top of the tower; it falls through the drum stack, settles on whichever closed seal is below it, and rides along as the drum rotates. Break that seal and the skull continues downward, eventually landing on the game board.
@@ -225,7 +229,7 @@ Non-goals for this MVP, in rough order of value:
 
 ## Verification reference
 
-The implementation plan's manual verification checks live in [`how-hard-would-it-sunny-gem.md`](../../../how-hard-would-it-sunny-gem.md) (Step 9). The must-pass cases are:
+The must-pass manual cases for any change in this area:
 
 1. Skull dropped onto a closed seal collider settles in place.
 2. Rotating that drum 90° carries the skull along with the rotating collider geometry.
@@ -234,3 +238,10 @@ The implementation plan's manual verification checks live in [`how-hard-would-it
 5. Test (4) with the visual board disc hidden via the lighting config — behavior must be identical (proves the physics floor is decoupled from the visual disc).
 6. Spinning drums via a state sequence with a skull inside — no tunneling.
 7. Calling `handle.dispose()` removes the debug overlay and unsubscribes all listeners.
+
+## See also
+
+- [API §TowerPhysicsHooks](API.md#towerphysicshooks) — the seam this subpath uses to attach to `Tower3DView`.
+- [ARCHITECTURE §where physics plugs in](ARCHITECTURE.md#where-physics-plugs-in) — how physics integrates with the render loop.
+- [EXAMPLE §panel-physics](EXAMPLE.md#panel-physics) — the demo's live physics tuner.
+- [TROUBLESHOOTING §rapier-wasm-not-loading](TROUBLESHOOTING.md#rapier-wasm-not-loading) — bundler config for the subpath.

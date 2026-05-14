@@ -1,4 +1,8 @@
-# 3D Lighting Reference
+# 3D lighting reference
+
+*Docs: [Index](README.md) > 3D tuner > Lighting*
+
+**Before reading:** [API §Tower3DView](API.md#tower3dview) covers the lighting and camera methods that consume this config. [EXAMPLE §3D Options](EXAMPLE.md#panel-3d-options-lighting-and-scene) shows the demo's live editor.
 
 Comprehensive reference for the lighting system in `Tower3DView` — covering both the public configuration surface (what consumers tune) and the internal wiring (how it is rendered). All defaults, behaviors, and constants documented here are linked back to source so they can be verified or modified directly.
 
@@ -840,3 +844,10 @@ Recorded so contributors do not chase apparent bugs.
 - **`LightingConfig` / `DEFAULT_LIGHTING` / `resolveLighting` not in package barrel.** They are not re-exported from [src/index.ts](../src/index.ts), so consumers cannot import them by name from the published package. TypeScript inference at the option site works, but explicit type annotations and access to the default object require deep imports.
 - **No exterior light aimed at seal faces.** All seal-related emitters live inside the drum at `radiusFactor × modelRadius`. Apparent exterior glow is bloom-amplified inside-the-drum proxy/halo plus corner `PointLight` spill — see [Section 11.5](#115-why-the-user-perceives-an-exterior-glow). If a true exterior fill on seal faces is wanted, it is a new feature.
 - **`entrance.beats` resolver inconsistency.** That branch uses spread merge (`{ ...base, ...user }`, [LightingResolver.ts:213](../src/3d/LightingResolver.ts#L213)) while every other branch uses leaf-level nullish-coalesce. Consumer-visible behavior is the same for partial overrides; the inconsistency only matters if someone is reasoning about the resolver in the abstract.
+
+## See also
+
+- [API §Tower3DView](API.md#tower3dview) — the lighting and camera methods that consume this config.
+- [RENDERERS §Tower3DView](RENDERERS.md#tower3dview) — when to pick the 3D renderer.
+- [EXAMPLE §3D Options](EXAMPLE.md#panel-3d-options-lighting-and-scene) — the demo's live lighting editor.
+- [ARCHITECTURE §subsystem map](ARCHITECTURE.md#subsystem-map) — file-by-file orientation in `src/3d/`.

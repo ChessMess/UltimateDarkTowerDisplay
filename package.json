@@ -1,7 +1,7 @@
 {
   "name": "ultimatedarktowerdisplay",
   "version": "0.4.0",
-  "description": "DOM-based state readout for the Ultimate Dark Tower board game, with an optional physics-driven skull subpath.",
+  "description": "Composable text, 2D, and 3D renderers for Return to Dark Tower tower state, with optional skull physics.",
   "type": "module",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",

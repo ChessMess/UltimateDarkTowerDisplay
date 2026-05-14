@@ -1,8 +1,10 @@
-# Authoring Light Sequences in JSON
+# Authoring light sequences in JSON
+
+*Docs: [Index](README.md) > Sequence author > Sequence authoring*
 
 This document explains how to write a new light sequence as a JSON file and have the player run it on the tower. It assumes you've never touched this code before — a junior dev should be able to read this top-to-bottom and end up with a working sequence.
 
-For background on _what_ each existing sequence looks like and where the firmware behavior came from, see [LIGHT_SEQUENCES.md](LIGHT_SEQUENCES.md). This file focuses on the _how_: file format, available track kinds, and the steps to wire a new sequence into the app.
+This file focuses on the _how_: file format, available track kinds, and the steps to wire a new sequence into the app. The existing JSON sequences under [src/sequences/data/](../src/sequences/data/) are the best worked examples of what each firmware sequence looks like.
 
 ---
 
@@ -637,7 +639,7 @@ No — Vite's JSON import is strict. Use the `description` field at the sequence
 Yes — wherever you see a `level`/`delta`/`floorLevel`/etc. field, there's a sibling `<name>Pwm` field that takes an integer 0..255. So `"deltaPwm": 28` instead of `"delta": 0.10980392156862745`.
 
 **Q: Where do the firmware constants come from?**
-[docs/LIGHT_SEQUENCES.md](LIGHT_SEQUENCES.md) describes the firmware case for each sequence. The original TS builders that translated from the firmware C source are archived under `.local/legacy-sequence-system/builders/` for reference.
+The original TS builders that translated from the firmware C source are archived under `.local/legacy-sequence-system/builders/` for reference.
 
 **Q: My sequence needs behavior that doesn't fit any kind.**
 Use `custom` and register a TS handler via `registerCustomHandler('myId', ...)` from outside the player. If you find yourself doing this often, the kind is probably worth adding to `playerKinds/`.
@@ -646,7 +648,6 @@ Use `custom` and register a TS handler via `registerCustomHandler('myId', ...)` 
 
 ## Further reading
 
-- [LIGHT_SEQUENCES.md](LIGHT_SEQUENCES.md) — firmware-side documentation for each existing sequence.
 - [src/sequences/data/](../src/sequences/data/) — the 21 existing JSON files. Read them as worked examples.
 - [src/sequences/playerKinds/](../src/sequences/playerKinds/) — one file per kind, schema and handler co-located.
 - [tests/sequenceSnapshots/parity.test.ts](../tests/sequenceSnapshots/parity.test.ts) — how parity is checked.

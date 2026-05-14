@@ -1,4 +1,8 @@
-# API Reference
+# API reference
+
+*Docs: [Index](README.md) > Integrator > API*
+
+**Before reading:** [GETTING_STARTED](GETTING_STARTED.md) covers prerequisites and the first render. [RENDERERS](RENDERERS.md) compares the three renderers at a glance.
 
 This document covers the public API exported by `ultimatedarktowerdisplay`.
 
@@ -192,7 +196,7 @@ view.onSealClick = (seal) => console.log(seal.side, seal.level);
 new TowerSideView(container: HTMLElement)
 ```
 
-#### Public Properties
+#### Public properties
 
 | Property             | Type                             | Default | Description                                                                |
 | -------------------- | -------------------------------- | ------- | -------------------------------------------------------------------------- |
@@ -236,7 +240,7 @@ readout.applySeals([{ side: 'north', level: 'top' }]);
 new TowerStateReadout(container: HTMLElement)
 ```
 
-#### Public Properties
+#### Public properties
 
 | Property             | Type                                                     | Default | Description                                                                                                                           |
 | -------------------- | -------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -394,7 +398,7 @@ new Tower3DView(el, { lighting: { leds: { red: { color: 0x00ff00 } } } }); // gr
 new Tower3DView(el, { lighting: { animation: { breatheS: 3 } } }); // slower breathe
 ````
 
-#### Public Properties
+#### Public properties
 
 | Property       | Type                              | Default     | Description                                                                                                                                                                                                    |
 | -------------- | --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -588,7 +592,7 @@ type SealIdentifier = { side: TowerSide; level: TowerLevels };
 
 ---
 
-## Rendered Sections
+## Rendered sections
 
 When `applyState()` is called, the display renders three sections:
 
@@ -652,7 +656,7 @@ All readout elements use the `tdr-` prefix:
 | `.tdr-beam-count`  | Beam/skull count              |
 | `.tdr-led-seq`     | LED sequence override label   |
 
-### Side View (`tsv-` prefix)
+### Side view (`tsv-` prefix)
 
 | Class                               | Element                                        |
 | ----------------------------------- | ---------------------------------------------- |
@@ -672,9 +676,17 @@ All readout elements use the `tdr-` prefix:
 
 ---
 
-## Peer Dependency
+## Peer dependency
 
 This package requires [`ultimatedarktower`](https://www.npmjs.com/package/ultimatedarktower) `^2.5.0` as a peer dependency. It provides:
 
 - `TowerState` — the state type passed to `applyState()`
 - `GLYPHS`, `TOWER_AUDIO_LIBRARY`, `TOWER_LIGHT_SEQUENCES`, `VOLUME_DESCRIPTIONS`, `LAYER_TO_POSITION`, `LIGHT_INDEX_TO_DIRECTION`, `LIGHT_EFFECTS` — lookup constants used for rendering
+
+## See also
+
+- [RENDERERS](RENDERERS.md) — feature comparison + when to pick which renderer.
+- [ARCHITECTURE](ARCHITECTURE.md) — mental model, data flow, composition, lifecycle.
+- [LIGHTING](LIGHTING.md) — full `LightingConfig` field reference and tuning recipes.
+- [PHYSICS](PHYSICS.md) — `TowerPhysicsHooks` and the `attachSkullPhysics` API.
+- [TROUBLESHOOTING](TROUBLESHOOTING.md) — common failure modes for every callback in this doc.

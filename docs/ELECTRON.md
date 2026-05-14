@@ -1,5 +1,9 @@
 # Using UltimateDarkTowerDisplay in Electron
 
+*Docs: [Index](README.md) > Electron integrator > Electron*
+
+**Before reading:** [GETTING_STARTED](GETTING_STARTED.md) covers install and the first render. [TROUBLESHOOTING §electron-specific](TROUBLESHOOTING.md#electron-specific) lists the predictable failure modes; this doc is the full walkthrough.
+
 ## TL;DR
 
 This package runs in Electron's **renderer process** unchanged — the renderer is Chromium, so WebGL, Web Audio, and the DOM are all available. It does **not** run in the main process; use the parent [`ultimatedarktower`](https://github.com/ChessMess/UltimateDarkTower) package there for state decoding and BLE communication.
@@ -99,7 +103,7 @@ You can set `webSecurity: false` in `BrowserWindow.webPreferences` and pass a `f
 
 ---
 
-## Content Security Policy
+## Content security policy
 
 If your app sets a CSP header (recommended), inline `<style>` tags are blocked by `style-src 'self'`. By default this package injects styles into `document.head`. To opt out:
 
@@ -180,3 +184,9 @@ import { TowerStateController } from 'ultimatedarktowerdisplay';
 // No DOM dependency — works in Node, Electron main, or browser
 const ctrl = new TowerStateController();
 ```
+
+## See also
+
+- [TROUBLESHOOTING §electron-specific](TROUBLESHOOTING.md#electron-specific) — short symptom-to-fix entries for Electron.
+- [GETTING_STARTED §production-checklist](GETTING_STARTED.md#production-checklist) — general bundler considerations.
+- [API §TowerDisplay](API.md#towerdisplay) — `injectStyles: false` and `TOWER_DISPLAY_CSS` reference.
