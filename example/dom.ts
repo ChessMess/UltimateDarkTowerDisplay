@@ -136,7 +136,7 @@ export function queryDom(): DomElements {
     drumRotateGrid: document.getElementById('drum-rotate-grid'),
     sealToggleGrid: document.getElementById('seal-toggle-grid'),
     renderedPanel: document.getElementById('rendered-panel'),
-    toolbarEl: document.querySelector('.toolbar'),
+    toolbarEl: document.getElementById('sidebar'),
     btnView2d: document.getElementById('btn-view-2d') as HTMLButtonElement | null,
     btnView3d: document.getElementById('btn-view-3d') as HTMLButtonElement | null,
     btnView2d3d: document.getElementById('btn-view-2d3d') as HTMLButtonElement | null,

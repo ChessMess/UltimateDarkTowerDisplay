@@ -6,6 +6,7 @@ import { initConfigEditor, syncConfigSelectorVisibility } from './configEditor';
 import { initLayoutManager } from './layoutManager';
 import { initPhysicsController, getPhysicsHandle, syncSlidersFromConfig } from './physicsController';
 import { initPopOutController } from './popOutController';
+import { initInspectorTabs } from './inspectorTabs';
 
 const els = queryDom();
 
@@ -32,6 +33,8 @@ onViewChange(() => syncConfigSelectorVisibility(getDisplay, els));
 initInitialState(getDisplay, getReadout, setLastState, els);
 
 initLayoutManager(els);
+
+initInspectorTabs();
 
 initPopOutController(els);
 
