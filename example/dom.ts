@@ -26,7 +26,6 @@ export interface DomElements {
   chkGroundDisc: HTMLInputElement | null;
   chkBoardDisc: HTMLInputElement | null;
   inpSkyboxUrl: HTMLInputElement | null;
-  chkDrumSound: HTMLInputElement | null;
   chkTowerAudio: HTMLInputElement | null;
   chkZoomToCursor: HTMLInputElement | null;
   chkPreserveViewOnSideSelect: HTMLInputElement | null;
@@ -36,6 +35,8 @@ export interface DomElements {
   lblBloomStrength: HTMLElement | null;
   lblBloomRadius: HTMLElement | null;
   lblBloomThreshold: HTMLElement | null;
+  rngUndersideLight: HTMLInputElement | null;
+  lblUndersideLight: HTMLElement | null;
   rngBoardSize: HTMLInputElement | null;
   lblBoardSize: HTMLElement | null;
   rngBoardBrightness: HTMLInputElement | null;
@@ -103,7 +104,6 @@ export function queryDom(): DomElements {
     chkGroundDisc: document.getElementById('chk-ground-disc') as HTMLInputElement | null,
     chkBoardDisc: document.getElementById('chk-board-disc') as HTMLInputElement | null,
     inpSkyboxUrl: document.getElementById('inp-skybox-url') as HTMLInputElement | null,
-    chkDrumSound: document.getElementById('chk-drum-sound') as HTMLInputElement | null,
     chkTowerAudio: document.getElementById('chk-tower-audio') as HTMLInputElement | null,
     chkZoomToCursor: document.getElementById('chk-zoom-to-cursor') as HTMLInputElement | null,
     chkPreserveViewOnSideSelect: document.getElementById('chk-preserve-view-on-side-select') as HTMLInputElement | null,
@@ -113,6 +113,8 @@ export function queryDom(): DomElements {
     lblBloomStrength: document.getElementById('lbl-bloom-strength'),
     lblBloomRadius: document.getElementById('lbl-bloom-radius'),
     lblBloomThreshold: document.getElementById('lbl-bloom-threshold'),
+    rngUndersideLight: document.getElementById('rng-underside-light') as HTMLInputElement | null,
+    lblUndersideLight: document.getElementById('lbl-underside-light'),
     rngBoardSize: document.getElementById('rng-board-size') as HTMLInputElement | null,
     lblBoardSize: document.getElementById('lbl-board-size'),
     rngBoardBrightness: document.getElementById('rng-board-brightness') as HTMLInputElement | null,

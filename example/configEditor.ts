@@ -1,5 +1,5 @@
 import type { TowerDisplay, TowerStateReadout } from '../src/index';
-import type { LightingConfig, CameraConfig } from '../src/3d/types';
+import type { LightingConfig, CameraConfig, AudioConfig } from '../src/3d/types';
 import type {
   PhysicsConfig,
   ResolvedPhysicsConfig,
@@ -11,7 +11,7 @@ import { armTowerAudioFromUserGesture, is3DViewVisible, getLastState } from './r
 import { clearLedOverrides } from './ledOverrideController';
 import { showBannerError, bindCopyButton } from './utils';
 
-type ConfigType = 'state' | 'lighting' | 'camera' | 'physics';
+type ConfigType = 'state' | 'lighting' | 'camera' | 'audio' | 'physics';
 
 let activeConfigType: ConfigType = 'state';
 let cleanConfigJson = '';
@@ -30,6 +30,9 @@ export function refreshConfigPreview(getDisplay: () => TowerDisplay, els: DomEle
     json = config ? JSON.stringify(config, null, 2) : '';
   } else if (activeConfigType === 'camera') {
     const config = getDisplay().getCameraConfig();
+    json = config ? JSON.stringify(config, null, 2) : '';
+  } else if (activeConfigType === 'audio') {
+    const config = getDisplay().getAudioConfig();
     json = config ? JSON.stringify(config, null, 2) : '';
   } else if (activeConfigType === 'physics') {
     const h = physicsHandleGetter?.();
@@ -59,15 +62,18 @@ export function syncConfigSelectorVisibility(getDisplay: () => TowerDisplay, els
   const visible = is3DViewVisible();
   const optLighting = document.getElementById('opt-lighting') as HTMLOptionElement | null;
   const optCamera = document.getElementById('opt-camera') as HTMLOptionElement | null;
+  const optAudio = document.getElementById('opt-audio') as HTMLOptionElement | null;
   const optPhysics = document.getElementById('opt-physics') as HTMLOptionElement | null;
 
   if (optLighting) optLighting.disabled = !visible;
   if (optCamera) optCamera.disabled = !visible;
+  if (optAudio) optAudio.disabled = !visible;
   if (optPhysics) optPhysics.disabled = !visible;
 
   if (!visible && (
     activeConfigType === 'lighting' ||
     activeConfigType === 'camera' ||
+    activeConfigType === 'audio' ||
     activeConfigType === 'physics'
   )) {
     activeConfigType = 'state';
@@ -143,6 +149,15 @@ export function initConfigEditor(
         } else if (activeConfigType === 'camera') {
           const parsed = JSON.parse(els.configPreview.value) as CameraConfig;
           getDisplay().applyCameraConfig(parsed);
+          refreshConfigPreview(getDisplay, els);
+        } else if (activeConfigType === 'audio') {
+          const parsed = JSON.parse(els.configPreview.value) as AudioConfig;
+          getDisplay().applyAudioConfig(parsed);
+          // Keep the toolbar "Audio" checkbox in lockstep with the resolved
+          // enabled flag — applying `{"enabled": true}` ticks the box and vice
+          // versa, so the JSON editor and the checkbox never disagree.
+          const resolved = getDisplay().getAudioConfig();
+          if (resolved && els.chkTowerAudio) els.chkTowerAudio.checked = resolved.enabled;
           refreshConfigPreview(getDisplay, els);
         } else if (activeConfigType === 'physics') {
           const parsed = JSON.parse(els.configPreview.value) as PhysicsConfig;

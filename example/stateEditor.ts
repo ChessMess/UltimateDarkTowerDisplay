@@ -160,7 +160,7 @@ function populateSequenceSelect(els: DomElements): void {
     opt.dataset.name = meta.name;
     const hasAudio = meta.id in SEQUENCE_AUDIO_MAP;
     opt.textContent = (hasAudio ? '🔊 ' : '') + formatSequenceName(meta.name);
-    if (meta.name === 'sealReveal') opt.selected = true;
+    if (meta.name === 'monthStarted') opt.selected = true;
     sel.appendChild(opt);
   }
 }

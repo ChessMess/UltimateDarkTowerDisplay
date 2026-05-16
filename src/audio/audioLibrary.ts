@@ -1,18 +1,22 @@
-/// <reference types="vite/client" />
 import { TOWER_AUDIO_LIBRARY } from 'ultimatedarktower';
+import type { SoundPack } from './soundPack';
 
 const A = TOWER_AUDIO_LIBRARY;
 
-function resolveAudioBase(): string {
-  // `npm run dev:example` serves `/example/index.html` from the project root,
-  // while sample assets are emitted under `/dist-example/audio/`.
-  if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.pathname.startsWith('/example/')) {
-    return '/dist-example/audio/';
-  }
-  return `${import.meta.env.BASE_URL}audio/`;
+// Resolved by the consumer's bundler. Vite, webpack 5+, Rollup, esbuild,
+// parcel, and native Node ESM all support `new URL(rel, import.meta.url)`
+// for referencing assets bundled next to the JS — the bundler emits the
+// asset and rewrites the URL to point at its final location.
+//
+// The trailing slash on the rel input is sometimes stripped during bundler
+// transformation (Vite serves `./assets/` as `/src/audio/assets`), so we
+// normalise it back on before string concatenation downstream.
+function withTrailingSlash(s: string): string {
+  return s.endsWith('/') ? s : s + '/';
 }
+const DEFAULT_ASSET_BASE = withTrailingSlash(new URL('./assets/', import.meta.url).href);
 
-function buildFileAudioLibrary(base: string): Record<number, string> {
+function buildSamples(base: string): Record<number, string> {
   // === BEGIN AUTOGEN (scripts/extract-audio.mjs) ===
   return {
     [A.Ashstrider.value]: base + 'Adversary_Ashstrider_01.ogg',
@@ -23,7 +27,7 @@ function buildFileAudioLibrary(base: string): Record<number, string> {
     [A.IsatheHollow.value]: base + 'Adversary_Isa_01.ogg',
     [A.LingeringRot.value]: base + 'Adversary_Rot_03.ogg',
     [A.UtukKu.value]: base + 'Adversary_Utuk_03.ogg',
-    [A.Gleb.value]: base + 'Ally_Gleb_05.ogg',
+    [A.Gleb.value]: base + 'Ally_Gleb_01.ogg',
     [A.Grigor.value]: base + 'Ally_Grigor_01.ogg',
     [A.Hakan.value]: base + 'Ally_Hakan_02.ogg',
     [A.Letha.value]: base + 'Ally_Letha_02.ogg',
@@ -33,7 +37,7 @@ function buildFileAudioLibrary(base: string): Record<number, string> {
     [A.Vasa.value]: base + 'Ally_Vasa_03.ogg',
     [A.Yana.value]: base + 'Ally_Yana_01.ogg',
     [A.Zaida.value]: base + 'Ally_Zaida_01.ogg',
-    [A.ApplyAdvantage01.value]: base + 'Battle_Advantage_Applied_01F.ogg',
+    [A.ApplyAdvantage01.value]: base + 'Battle_Advantage_Applied_01.ogg',
     [A.ApplyAdvantage02.value]: base + 'Battle_Advantage_Applied_02.ogg',
     [A.ApplyAdvantage03.value]: base + 'Battle_Advantage_Applied_03.ogg',
     [A.ApplyAdvantage04.value]: base + 'Battle_Advantage_Applied_04.ogg',
@@ -133,20 +137,42 @@ function buildFileAudioLibrary(base: string): Record<number, string> {
 }
 
 /**
- * Sample-id → URL map for the example app.
+ * The official-game sound pack bundled with this package. Built from the
+ * Return to Dark Tower app firmware; samples are extracted Ogg Vorbis.
+ * Used as the default by `TowerDisplay.applyAudioConfig` when no `pack`
+ * is supplied.
  *
- * Generated from the firmware flash image (.local/out.bin) via
- * scripts/extract-audio.mjs. Every UDT sample id (0x01–0x71) is covered.
- *
- * Re-run `node scripts/extract-audio.mjs` after updating the firmware blob
- * or audio_metadata.{c,h}.
+ * (C) Restoration Games, LLC; used with permission.
  */
-export function buildTowerAudioLibrary(): Record<number, string> {
-  return buildFileAudioLibrary(resolveAudioBase());
+export const DEFAULT_TOWER_SOUND_PACK: SoundPack = {
+  name: 'Restoration Games — Official',
+  description: 'Extracted from the Return to Dark Tower app firmware. © Restoration Games, LLC; used with permission.',
+  samples: buildSamples(DEFAULT_ASSET_BASE),
+};
+
+/**
+ * Build a sound pack with the official filenames against a custom base URL.
+ * Useful if you want to self-host the same audio (e.g., behind a CDN or
+ * proxy) without re-typing all 113 filenames.
+ *
+ * @param baseUrl Path or URL prefix to which official filenames are appended
+ *                (e.g., `'https://cdn.example.com/udt-audio/'`). A trailing
+ *                slash is expected.
+ */
+export function buildOfficialSoundPack(baseUrl: string): SoundPack {
+  return {
+    name: DEFAULT_TOWER_SOUND_PACK.name,
+    description: DEFAULT_TOWER_SOUND_PACK.description,
+    samples: buildSamples(withTrailingSlash(baseUrl)),
+  };
 }
 
-export function hasTowerAudioAsset(sample: number): boolean {
+/**
+ * True if the given sample ID has an entry in the default pack. `0` (silence)
+ * always returns true so callers can suppress "missing asset" warnings for
+ * the no-audio state.
+ */
+export function hasDefaultAudioAsset(sample: number): boolean {
   if (sample === 0) return true;
-  const library = buildTowerAudioLibrary();
-  return typeof library[sample] === 'string';
+  return typeof DEFAULT_TOWER_SOUND_PACK.samples[sample] === 'string';
 }

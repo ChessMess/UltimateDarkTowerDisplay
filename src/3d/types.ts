@@ -1,3 +1,5 @@
+import type { SoundPack } from '../audio/soundPack';
+
 /** Recursively make every property of `T` required. */
 export type DeepRequired<T> = T extends object
   ? { [K in keyof T]-?: DeepRequired<T[K]> }
@@ -204,6 +206,8 @@ export interface LightingConfigCore {
     metalness?: number;
     /** Disc radius as a factor of modelRadius. */
     radiusFactor?: number;
+    /** Intensity of the upward directional light that fills the board underside. 0 disables it. Defaults to 1.5. */
+    undersideLightIntensity?: number;
   };
 
   /** Game board texture overlaid on the ground disc. */
@@ -294,3 +298,44 @@ export interface CameraConfig {
 
 /** Fully-resolved lighting config (all nested fields required) used internally by Tower3DView. */
 export type ResolvedLightingConfig = DeepRequired<LightingConfigCore>;
+
+/**
+ * Audio behaviour for the 3D view. All fields optional; `applyAudioConfig`
+ * sparse-merges so callers can set any subset. `getAudioConfig()` returns
+ * the fully-resolved state via `Required<AudioConfig>`.
+ *
+ * The simplest use is `display.applyAudioConfig({ enabled: true })` from a
+ * user-gesture handler — the default sound pack is already wired in.
+ */
+export interface AudioConfig {
+  /**
+   * Sound pack used for sample playback. Defaults to `DEFAULT_TOWER_SOUND_PACK`
+   * (the official Restoration Games audio). Swap in your own at runtime to
+   * change all samples at once.
+   */
+  pack?: SoundPack;
+  /**
+   * Master enable for audio playback. Browsers block AudioContext until a user
+   * gesture, so this must be set from a click/keydown handler. Defaults to
+   * `false` (silent until the consumer opts in).
+   */
+  enabled?: boolean;
+  /**
+   * When true, `applyState()` auto-fills `state.audio.sample` from the active
+   * sequence map if the state has a known light sequence but no explicit
+   * sample. Defaults to `false` (lights and audio are decoupled — the consumer
+   * sets `state.audio.sample` explicitly to trigger audio).
+   */
+  bindSequenceToSample?: boolean;
+  /**
+   * Optional override of the sequence-id → sample-id binding used when
+   * `bindSequenceToSample` is true. Resolution order:
+   *   `config.sequenceMap` ?? `config.pack?.sequenceMap` ?? `DEFAULT_SEQUENCE_AUDIO_MAP`.
+   */
+  sequenceMap?: Record<number, number>;
+  /**
+   * URL for the looping drum-rotation sound, or `null` for the procedural
+   * sawtooth fallback. Defaults to `null`.
+   */
+  drumRotationUrl?: string | null;
+}

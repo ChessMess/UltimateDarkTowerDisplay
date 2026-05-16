@@ -15,6 +15,7 @@ export type SceneLightsPartial = {
   hemi?: number;
   key?: number;
   fill?: number;
+  fillY?: number;
   exposure?: number;
   keyX?: number;
   keyY?: number;
@@ -110,6 +111,7 @@ export class SceneLighting {
       if (this.isBreathing) this.startBreathing(opts.key, lighting);
     }
     if (opts.fill !== undefined) this.fill.intensity = opts.fill;
+    if (opts.fillY !== undefined) this.fill.position.y = opts.fillY;
     if (opts.exposure !== undefined) this.renderer.toneMappingExposure = opts.exposure;
     if (opts.keyX !== undefined) this.key.position.x = opts.keyX;
     if (opts.keyY !== undefined) this.key.position.y = opts.keyY;

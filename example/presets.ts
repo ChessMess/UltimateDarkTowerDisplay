@@ -4,7 +4,7 @@ import {
   LIGHT_EFFECTS,
   TOWER_AUDIO_LIBRARY,
 } from 'ultimatedarktower';
-import { buildSequenceAudioMap } from './sequenceAudioConfig';
+import { DEFAULT_SEQUENCE_AUDIO_MAP } from '../src/index';
 
 const lightEffects = Object.values(LIGHT_EFFECTS).filter(
   (value): value is number => typeof value === 'number'
@@ -61,7 +61,7 @@ export function createAllOnState(): TowerState {
   return state;
 }
 
-export const SEQUENCE_AUDIO_MAP: Partial<Record<number, number>> = buildSequenceAudioMap();
+export const SEQUENCE_AUDIO_MAP: Readonly<Record<number, number>> = DEFAULT_SEQUENCE_AUDIO_MAP;
 
 export function createSequenceState(sequenceId: number, base?: TowerState): TowerState {
   const state = base ? structuredClone(base) : createDefaultTowerState();

@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync } from 'fs';
+import { copyFileSync, mkdirSync, readdirSync, existsSync } from 'fs';
 
 function redirectExamplePath(): Plugin {
   const redirect = (req: { url?: string }, res: { statusCode: number; setHeader(name: string, value: string): void; end(): void }, next: () => void) => {
@@ -49,8 +49,30 @@ function copyTowerAsset(): Plugin {
   };
 }
 
+// Copies every .ogg under src/audio/assets/ into dist/audio/assets/ so the
+// bundled default sound pack ships with the package. The source URLs in
+// audioLibrary.ts use `new URL('./assets/...', import.meta.url)` which
+// resolves relative to the published JS module — assets must sit next to it.
+function copyAudioAssets(): Plugin {
+  return {
+    name: 'copy-audio-assets',
+    apply: 'build',
+    closeBundle() {
+      const srcDir = resolve(__dirname, 'src/audio/assets');
+      const destDir = resolve(__dirname, 'dist/audio/assets');
+      if (!existsSync(srcDir)) return;
+      mkdirSync(destDir, { recursive: true });
+      for (const file of readdirSync(srcDir)) {
+        if (file.endsWith('.ogg')) {
+          copyFileSync(resolve(srcDir, file), resolve(destDir, file));
+        }
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [redirectExamplePath(), copyTowerAsset()],
+  plugins: [redirectExamplePath(), copyTowerAsset(), copyAudioAssets()],
   resolve: {
     alias: {
       // The ESM build of ultimatedarktower uses createRequire which is not
@@ -58,7 +80,7 @@ export default defineConfig({
       ultimatedarktower: resolve(__dirname, 'node_modules/ultimatedarktower/dist/src/index.js'),
     },
   },
-  assetsInclude: ['**/*.glb'],
+  assetsInclude: ['**/*.glb', '**/*.ogg'],
   build: {
     lib: {
       // Two entries: the core (`ultimatedarktowerdisplay`) and the optional

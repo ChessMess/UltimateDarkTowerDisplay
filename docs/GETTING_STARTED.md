@@ -134,9 +134,21 @@ Quick guide:
 
 - **`'readout'`** — text DOM grid. Smallest, most information-dense, no animations. Pick when you need a debug panel or a compact info strip.
 - **`'side-view'`** — SVG of one tower face with seal overlays. Side-aware. Pick when you want a stylized 2D view without WebGL.
-- **`'3d-view'`** — Three.js model with rotating drums, animated LEDs, bloom, and configurable lighting. Pick when you want the visual centerpiece. Pulls Three.js + GSAP + a 22 MB GLB.
+- **`'3d-view'`** — Three.js model with rotating drums, animated LEDs, bloom, and configurable lighting. Pick when you want the visual centerpiece. Pulls Three.js + GSAP + a 22 MB GLB + ~20 MB of bundled audio.
 
 For the full comparison see [RENDERERS](RENDERERS.md).
+
+## Audio
+
+The 3D renderer plays decoded tower-state audio (`state.audio.sample`) using a bundled sound pack of 132 official samples — no consumer setup needed. Audio is silent until you opt in from a user gesture:
+
+```ts
+button.addEventListener('click', () => {
+  display.applyAudioConfig({ enabled: true });
+});
+```
+
+To swap in your own samples or rebind sequence-to-sample mappings, see [AUDIO](AUDIO.md).
 
 ## Framework integration patterns
 

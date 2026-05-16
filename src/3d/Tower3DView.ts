@@ -9,8 +9,11 @@ import { injectStyles } from '../styles';
 import { SideButtons } from '../shared/SideButtons';
 import { DrumRotationAudio } from '../audio/DrumRotationAudio';
 import { TowerSampleAudio } from '../audio/TowerSampleAudio';
+import { DEFAULT_TOWER_SOUND_PACK } from '../audio/audioLibrary';
+import { DEFAULT_SEQUENCE_AUDIO_MAP } from '../audio/sequenceAudio';
+import type { SoundPack } from '../audio/soundPack';
 
-import type { LightingConfig, ResolvedLightingConfig, CameraConfig } from './types';
+import type { LightingConfig, ResolvedLightingConfig, CameraConfig, AudioConfig } from './types';
 import {
   TOWER_LAYER_COUNT, LIGHTS_PER_LAYER,
   RING_AZIMUTH, CORNER_AZIMUTH,
@@ -96,6 +99,10 @@ export const __testables = {
     internals(view).sealManager.sealBacklights.size,
 };
 
+function isSoundPack(v: Record<number, string> | SoundPack): v is SoundPack {
+  return typeof (v as SoundPack).name === 'string' && typeof (v as SoundPack).samples === 'object';
+}
+
 export interface Tower3DViewOptions {
   /**
    * URL of the tower GLB model. The package ships the model file at
@@ -114,6 +121,8 @@ export interface Tower3DViewOptions {
   lighting?: LightingConfig;
   /** Initial camera eye and look-target defaults. */
   camera?: CameraConfig;
+  /** Initial audio configuration (sound pack, enable, sequence binding, etc.). */
+  audio?: AudioConfig;
 }
 
 /**
@@ -141,6 +150,22 @@ export class Tower3DView implements ITowerDisplay {
   private sealManager: SealManager = new SealManager();
   private drumAudio: DrumRotationAudio = new DrumRotationAudio();
   private towerSampleAudio: TowerSampleAudio = new TowerSampleAudio();
+  // Resolved audio state. `sequenceMapOverride` holds the user-supplied
+  // override; `activeSequenceMap()` resolves it against the pack/default at
+  // read time so getAudioConfig().sequenceMap always reflects what is in use.
+  private audioState: {
+    pack: SoundPack;
+    enabled: boolean;
+    bindSequenceToSample: boolean;
+    sequenceMapOverride: Record<number, number> | undefined;
+    drumRotationUrl: string | null;
+  } = {
+      pack: DEFAULT_TOWER_SOUND_PACK,
+      enabled: false,
+      bindSequenceToSample: false,
+      sequenceMapOverride: undefined,
+      drumRotationUrl: null,
+    };
   private drumManager: DrumManager;
 
   private wrapper: HTMLDivElement | null = null;
@@ -200,6 +225,12 @@ export class Tower3DView implements ITowerDisplay {
     this.showGroundDisc = options.showGroundDisc ?? true;
     this.cameraConfig = options.camera ?? {};
     this.drumManager = new DrumManager(this.drumAudio);
+    // Seed audio state. Pack defaults to the bundled official pack so audio
+    // works without any consumer setup beyond enabling from a user gesture.
+    // Push the default pack to TowerSampleAudio first so the empty options.audio
+    // case still gets sample URLs; applyAudioConfig then layers any overrides.
+    this.towerSampleAudio.setLibrary(this.audioState.pack.samples);
+    this.applyAudioConfig(options.audio ?? {});
     injectStyles();
     this.build();
     this.initScene();
@@ -233,7 +264,28 @@ export class Tower3DView implements ITowerDisplay {
     }
 
     this.drumManager.applyDrums(state.drum);
-    this.towerSampleAudio.sync(state.audio.sample, state.audio.loop, state.audio.volume, force);
+
+    // Sequence → sample auto-binding: when the consumer opted in and the state
+    // carries a known sequence but no explicit sample, substitute the mapped
+    // sample. The default (decoupled) behaviour leaves state.audio.sample as-is.
+    let effectiveSample = state.audio.sample;
+    if (
+      effectiveSample === 0 &&
+      this.audioState.bindSequenceToSample &&
+      state.led_sequence
+    ) {
+      const mapped = this.activeSequenceMap()[state.led_sequence];
+      if (mapped !== undefined) effectiveSample = mapped;
+    }
+    this.towerSampleAudio.sync(effectiveSample, state.audio.loop, state.audio.volume, force);
+  }
+
+  private activeSequenceMap(): Record<number, number> {
+    return (
+      this.audioState.sequenceMapOverride ??
+      this.audioState.pack.sequenceMap ??
+      DEFAULT_SEQUENCE_AUDIO_MAP
+    );
   }
 
   /** Update seal backlight visibility — pass the current list of broken seals. */
@@ -336,24 +388,39 @@ export class Tower3DView implements ITowerDisplay {
    * the background; rotations that fire mid-decode use the placeholder.
    */
   setDrumRotationSoundUrl(url: string | null): void {
-    this.drumAudio.setUrl(url);
+    this.applyAudioConfig({ drumRotationUrl: url });
   }
 
   /**
    * Enable or disable drum rotation audio. Disabled by default — consumers
    * must opt in (which also satisfies browser autoplay-policy gestures).
+   *
+   * @deprecated The `enabled` field of `AudioConfig` is a single master toggle
+   *   covering both drum-rotation and tower-sample audio. Prefer
+   *   `applyAudioConfig({ enabled })`.
    */
   setDrumRotationSoundEnabled(enabled: boolean): void {
-    this.drumAudio.setEnabled(enabled);
+    this.applyAudioConfig({ enabled });
   }
 
   /**
    * Provide the sample-id → URL map used to play decoded tower audio
    * (`state.audio.sample`). Sparse maps are fine — unmapped ids warn-once
    * and skip playback. Sample id 0 always means silence.
+   *
+   * Pass no argument (or `undefined`) to install the bundled default pack.
+   * Pass a `SoundPack` to install a full pack with metadata + optional
+   * sequence map. Pass a `Record<number, string>` for the legacy one-shot
+   * "just the URLs" path; the library wraps it as an unnamed pack.
    */
-  setTowerAudioLibrary(library: Record<number, string>): void {
-    this.towerSampleAudio.setLibrary(library);
+  setTowerAudioLibrary(library?: Record<number, string> | SoundPack): void {
+    const pack: SoundPack =
+      library === undefined
+        ? DEFAULT_TOWER_SOUND_PACK
+        : isSoundPack(library)
+          ? library
+          : { name: 'custom', samples: library };
+    this.applyAudioConfig({ pack });
   }
 
   /**
@@ -363,7 +430,49 @@ export class Tower3DView implements ITowerDisplay {
    * playback so users hear active loops without waiting for the next state.
    */
   setTowerAudioEnabled(enabled: boolean): void {
-    this.towerSampleAudio.setEnabled(enabled);
+    this.applyAudioConfig({ enabled });
+  }
+
+  /**
+   * Return the fully-resolved audio configuration. Every field is populated:
+   * `pack`, `enabled`, `bindSequenceToSample`, `sequenceMap` (the effective
+   * map after fallback resolution), and `drumRotationUrl`.
+   */
+  getAudioConfig(): Required<AudioConfig> {
+    return {
+      pack: this.audioState.pack,
+      enabled: this.audioState.enabled,
+      bindSequenceToSample: this.audioState.bindSequenceToSample,
+      sequenceMap: this.activeSequenceMap(),
+      drumRotationUrl: this.audioState.drumRotationUrl,
+    };
+  }
+
+  /**
+   * Sparse-merge an audio configuration: only fields explicitly provided
+   * (i.e., not `undefined`) overwrite the current state. Mirrors
+   * `applyLightingConfig` / `applyCameraConfig`.
+   */
+  applyAudioConfig(config: AudioConfig): void {
+    if (config.pack !== undefined) {
+      this.audioState.pack = config.pack;
+      this.towerSampleAudio.setLibrary(config.pack.samples);
+    }
+    if (config.enabled !== undefined) {
+      this.audioState.enabled = config.enabled;
+      this.towerSampleAudio.setEnabled(config.enabled);
+      this.drumAudio.setEnabled(config.enabled);
+    }
+    if (config.bindSequenceToSample !== undefined) {
+      this.audioState.bindSequenceToSample = config.bindSequenceToSample;
+    }
+    if (config.sequenceMap !== undefined) {
+      this.audioState.sequenceMapOverride = config.sequenceMap;
+    }
+    if (config.drumRotationUrl !== undefined) {
+      this.audioState.drumRotationUrl = config.drumRotationUrl;
+      this.drumAudio.setUrl(config.drumRotationUrl);
+    }
   }
 
   /** When enabled, preserve the current camera orbit instead of resetting to the default fit on side selection. */
@@ -387,6 +496,10 @@ export class Tower3DView implements ITowerDisplay {
     if (opts.hemi !== undefined) scene.hemisphere.intensity = opts.hemi;
     if (opts.key !== undefined) scene.key.intensity = opts.key;
     if (opts.fill !== undefined) scene.fill.intensity = opts.fill;
+    if (opts.fillY !== undefined) {
+      const [x, y, z] = scene.fill.position;
+      scene.fill.position = [x, opts.fillY ?? y, z];
+    }
     if (opts.exposure !== undefined) scene.exposure = opts.exposure;
     if (opts.keyX !== undefined || opts.keyY !== undefined || opts.keyZ !== undefined) {
       const [x, y, z] = scene.key.position;

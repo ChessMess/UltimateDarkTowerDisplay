@@ -1,6 +1,7 @@
 import type { TowerState, SealIdentifier, TowerSide } from 'ultimatedarktower';
-import type { LightingConfig, ResolvedLightingConfig, CameraConfig } from './3d/types';
+import type { LightingConfig, ResolvedLightingConfig, CameraConfig, AudioConfig } from './3d/types';
 import type { TowerDisplayOptions, ITowerDisplay, RendererType } from './types';
+import type { SoundPack } from './audio/soundPack';
 import { TowerStateReadout } from './TowerStateReadout';
 import { TowerSideView } from './2d/TowerSideView';
 import { Tower3DView } from './3d/Tower3DView';
@@ -33,6 +34,7 @@ function createRenderer(type: RendererType, container: HTMLElement, options: Tow
         showGroundDisc: options.showGroundDisc,
         lighting: options.lighting,
         camera: options.camera,
+        audio: options.audio,
       });
     default:
       throw new Error(`Unknown renderer type: ${type}`);
@@ -203,6 +205,7 @@ export class TowerDisplay implements ITowerDisplay {
     hemi?: number;
     key?: number;
     fill?: number;
+    fillY?: number;
     exposure?: number;
     keyX?: number;
     keyY?: number;
@@ -281,11 +284,12 @@ export class TowerDisplay implements ITowerDisplay {
   }
 
   /**
-   * Provide the sample-id → URL map used to play decoded tower audio
-   * (`state.audio.sample`). Sparse maps are fine — unmapped ids warn-once
-   * and skip playback. No-op when no 3D renderer is active.
+   * Provide the sound pack (or raw sample-id → URL map) used to play decoded
+   * tower audio (`state.audio.sample`). Sparse maps are fine — unmapped ids
+   * warn-once and skip playback. Pass no argument to install the bundled
+   * default pack. No-op when no 3D renderer is active.
    */
-  setTowerAudioLibrary(library: Record<number, string>): void {
+  setTowerAudioLibrary(library?: Record<number, string> | SoundPack): void {
     this.view3d?.setTowerAudioLibrary(library);
   }
 
@@ -296,6 +300,22 @@ export class TowerDisplay implements ITowerDisplay {
    */
   setTowerAudioEnabled(enabled: boolean): void {
     this.view3d?.setTowerAudioEnabled(enabled);
+  }
+
+  /**
+   * Get the fully-resolved audio configuration for the 3D view. Returns
+   * `undefined` when no 3D view is active. Mirrors `getLightingConfig`.
+   */
+  getAudioConfig(): Required<AudioConfig> | undefined {
+    return this.view3d?.getAudioConfig();
+  }
+
+  /**
+   * Apply a sparse audio config to the 3D view. Only fields that are not
+   * `undefined` overwrite the current state. No-op when no 3D view is active.
+   */
+  applyAudioConfig(config: AudioConfig): void {
+    this.view3d?.applyAudioConfig(config);
   }
 
   /** Remove all rendered DOM content and reset internal state. */

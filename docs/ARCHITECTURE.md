@@ -133,7 +133,7 @@ When the user clicks a side button on the 2D view, `selectSide` fans out: `Tower
 | [src/](../src/) | Public entry points + state controller | `index.ts`, `TowerDisplay.ts`, `TowerStateReadout.ts`, `TowerStateController.ts`, `styles.ts`, `types.ts` |
 | [src/2d/](../src/2d/) | SVG side view | `TowerSideView.ts`, `TowerSide.svg`, `Seal.svg` |
 | [src/3d/](../src/3d/) | Three.js 3D view and managers | `Tower3DView.ts`, `SceneLighting.ts`, `LedEffectAnimator.ts`, `SealManager.ts`, `DrumManager.ts`, `CameraController.ts`, `GroundDiscManager.ts`, `SkyboxManager.ts`, `LightingResolver.ts`, `GameBoardImageTexture.ts`, `EntranceAnimator.ts` |
-| [src/audio/](../src/audio/) | Web Audio playback | `TowerSampleAudio.ts`, `DrumRotationAudio.ts` |
+| [src/audio/](../src/audio/) | Web Audio playback + bundled official sound pack | `TowerSampleAudio.ts`, `DrumRotationAudio.ts`, `audioLibrary.ts`, `sequenceAudio.ts`, `soundPack.ts`, `assets/*.ogg` |
 | [src/sequences/](../src/sequences/) | LED sequence player | `SequencePlayer.ts`, `SequenceAnimator.ts`, JSON sequence data |
 | [src/state/](../src/state/) | Headless state merge | `TowerStateController.ts` |
 | [src/physics/](../src/physics/) | Optional Rapier skull physics | `index.ts`, `PhysicsManager.ts`, `ColliderBuilder.ts`, `PhysicsResolver.ts` |
@@ -159,7 +159,7 @@ physics.dropSkull();
 - **`TowerStateController` as a public export** — drive renderers from a non-DOM store, run them headless in tests, or compose your own multi-renderer layout outside `TowerDisplay`.
 - **`TowerPhysicsHooks`** — the seam external add-ons use. Anyone can write a non-skull add-on (smoke, particles, falling glyphs) against the same API.
 - **`setLedOverride(layer, light, effect)`** — bypass the underlying state for a single light. Used by the example app's "Trigger Sequence" button.
-- **Custom audio library** — `TowerSampleAudio` resolves sample IDs through `TOWER_AUDIO_LIBRARY` from UDT. If you host your own assets, populate the URL map your application uses and forward through the example's `towerAudioLibrary.ts` pattern.
+- **Custom sound packs** — the bundled `DEFAULT_TOWER_SOUND_PACK` plays out of the box. Swap in your own pack at runtime via `applyAudioConfig({ pack })` to use alternative samples; sample IDs come from UDT's `TOWER_AUDIO_LIBRARY`. See [AUDIO](AUDIO.md).
 
 ## See also
 

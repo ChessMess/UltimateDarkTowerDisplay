@@ -1,10 +1,13 @@
 import type { TowerState, TowerSide, SealIdentifier } from 'ultimatedarktower';
 import type * as THREE from 'three';
-import type { LightingConfig, CameraConfig } from './3d/types';
+import type { LightingConfig, CameraConfig, AudioConfig } from './3d/types';
+import type { SoundPack } from './audio/soundPack';
 
 export type { TowerSide, SealIdentifier };
 export type { LightingConfig };
 export type { CameraConfig };
+export type { AudioConfig };
+export type { SoundPack };
 
 /**
  * Narrow integration surface returned by `Tower3DView.getPhysicsHooks()`.
@@ -88,6 +91,13 @@ export interface TowerDisplayOptions {
   lighting?: LightingConfig;
   /** Initial camera eye and look-target defaults for the 3D view. Forwarded to Tower3DView. */
   camera?: CameraConfig;
+  /**
+   * Initial audio configuration for the 3D view (sound pack, enable, sequence
+   * binding, etc.). Forwarded to Tower3DView. Audio is silent until enabled
+   * from a user gesture — `enabled: true` here without a click/keydown
+   * elsewhere will not unmute the AudioContext.
+   */
+  audio?: AudioConfig;
   /**
    * When false, skips injecting the built-in `<style>` tag into `document.head`.
    * Use this in environments with a strict Content Security Policy (e.g. Electron)

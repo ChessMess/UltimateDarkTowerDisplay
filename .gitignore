@@ -6,5 +6,5 @@ coverage/
 .vite/
 .DS_Store
 /.fallow
-example/public/audio/
+src/audio/assets/
 .local/

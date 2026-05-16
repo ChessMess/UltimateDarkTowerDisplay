@@ -23,12 +23,14 @@ function syncSceneLightControls(lighting: ResolvedLightingConfig, els: DomElemen
   const boardBrightness = lighting.boardDisc.brightness;
   const syncTargets: [HTMLInputElement | null, HTMLElement | null, number, number][] = [
     [els.rngHemi, els.lblHemi, hemi, 2], [els.rngKey, els.lblKey, key, 2],
-    [els.rngFill, els.lblFill, fill, 2], [els.rngExposure, els.lblExposure, exposure, 2],
+    [els.rngFill, els.lblFill, fill, 2],
+    [els.rngExposure, els.lblExposure, exposure, 2],
     [els.rngKeyX, els.lblKeyX, keyX, 1], [els.rngKeyY, els.lblKeyY, keyY, 1],
     [els.rngKeyZ, els.lblKeyZ, keyZ, 1],
     [els.rngBloomStrength, els.lblBloomStrength, bloom.strength, 2],
     [els.rngBloomRadius, els.lblBloomRadius, bloom.radius, 2],
     [els.rngBloomThreshold, els.lblBloomThreshold, bloom.threshold, 2],
+    [els.rngUndersideLight, els.lblUndersideLight, lighting.groundDisc.undersideLightIntensity, 2],
     [els.rngBoardSize, els.lblBoardSize, boardSize, 1],
     [els.rngBoardBrightness, els.lblBoardBrightness, boardBrightness, 2],
     [els.rngBoardThickness, els.lblBoardThickness, lighting.boardDisc.thicknessFactor, 3],
@@ -108,6 +110,10 @@ export function initLightingController(getDisplay: () => TowerDisplay, els: DomE
     getDisplay().applyLightingConfig({ scene: { bloom: { threshold: v } } });
   }, getDisplay, els);
 
+  bindLightSlider(els.rngUndersideLight, els.lblUndersideLight, v => {
+    getDisplay().applyLightingConfig({ groundDisc: { undersideLightIntensity: v } });
+  }, getDisplay, els);
+
   bindLightSlider(els.rngBoardSize, els.lblBoardSize, v => {
     getDisplay().applyLightingConfig({ groundDisc: { radiusFactor: v } });
   }, getDisplay, els, 1);
@@ -157,18 +163,13 @@ export function initLightingController(getDisplay: () => TowerDisplay, els: DomE
     });
   }
 
-  if (els.chkDrumSound) {
-    els.chkDrumSound.addEventListener('change', () => {
-      getDisplay().setDrumRotationSoundEnabled(els.chkDrumSound!.checked);
-    });
-  }
-
   // Toggling this is the user gesture that lets the AudioContext leave the
   // suspended state — autoplay policy means we cannot enable audio until the
-  // user opts in by clicking something.
+  // user opts in by clicking something. The single `enabled` flag covers both
+  // tower-sample and drum-rotation playback (master toggle).
   if (els.chkTowerAudio) {
     els.chkTowerAudio.addEventListener('change', () => {
-      getDisplay().setTowerAudioEnabled(els.chkTowerAudio!.checked);
+      getDisplay().applyAudioConfig({ enabled: els.chkTowerAudio!.checked });
     });
   }
 

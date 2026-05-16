@@ -111,13 +111,11 @@ Lift this pattern any time your app might recreate the display: keep broken-seal
 
 ## Panel: Light Effects
 
-[`example/sequenceAudioConfig.ts`](../example/sequenceAudioConfig.ts), [`example/towerAudioLibrary.ts`](../example/towerAudioLibrary.ts).
-
 A dropdown lists every `TOWER_LIGHT_SEQUENCES` entry from UDT — about 20 named sequences (angry, defeat, dungeon idle, gloat, seal reveal, victory, drum rotation, etc.). The Trigger button calls `display.applyState(stateWithSequence, true)`. The `force: true` flag bypasses the audio-dedup so the same sample replays on a second click.
 
-The audio side: each sequence is mapped to a `TOWER_AUDIO_LIBRARY` sample, looked up via the example's URL map (since the package itself does not ship audio assets). When the sequence triggers, `Tower3DView`'s audio subsystem plays the mapped sample.
+The audio side: the example uses `DEFAULT_SEQUENCE_AUDIO_MAP` (exported from the library) to look up the `TOWER_AUDIO_LIBRARY` sample for each sequence. The bundled default sound pack ships with the package, so playback works out of the box. To rebind sequences to different samples, build your own map with `buildSequenceAudioMap({ victory: 'TowerGloat1', ... })` and pass it via `applyAudioConfig({ sequenceMap, bindSequenceToSample: true })`.
 
-Lift when you want explicit user-triggered effects: `setLedOverride` for one-shot LEDs, `applyState(..., true)` for forced audio retrigger, and an asset-URL map you host yourself. See [SEQUENCE_AUTHORING](SEQUENCE_AUTHORING.md) for writing new sequences.
+Lift when you want explicit user-triggered effects: `setLedOverride` for one-shot LEDs, `applyState(..., true)` for forced audio retrigger. See [SEQUENCE_AUTHORING](SEQUENCE_AUTHORING.md) for writing new sequences.
 
 ## Panel: Physics
 
@@ -159,9 +157,11 @@ Lift for any multi-window companion app: keep the source-of-truth in one window,
 
 [`example/configEditor.ts`](../example/configEditor.ts).
 
-Two textareas — lighting config and camera config — let you paste any subset of `LightingConfig` or `CameraConfig` and click Apply. The textarea round-trips: clicking Read repopulates it from the current resolved config so you can copy the active state and tweak it.
+One textarea with a dropdown to switch between **Tower State**, **3D Lighting Config**, **3D Camera Config**, **3D Audio Config**, and **Physics Config**. Pasting any subset of the matching shape and clicking Apply calls the corresponding `applyLightingConfig` / `applyCameraConfig` / `applyAudioConfig` / `applyPhysicsConfig` method on the display, which deep-merges and re-renders. Clicking Read repopulates from the current resolved config so you can copy the active state and tweak it.
 
-Lift when you want a serialise/restore workflow: the public `getLightingConfig` and `getCameraConfig` methods return JSON-serialisable objects you can save to localStorage or a backend.
+The audio textarea is where you can swap sound packs, toggle `bindSequenceToSample`, or override the sequence map. Applying `{"enabled": true}` here is equivalent to ticking the toolbar **Audio** checkbox — the two stay in sync. See [AUDIO](AUDIO.md) for the full `AudioConfig` shape.
+
+Lift when you want a serialise/restore workflow: the public `getLightingConfig`, `getCameraConfig`, and `getAudioConfig` methods return JSON-serialisable objects you can save to localStorage or a backend.
 
 ## Patterns worth lifting
 
@@ -169,7 +169,7 @@ Lift when you want a serialise/restore workflow: the public `getLightingConfig` 
 - **Recreate on view switch.** Do not mutate `renderers`; dispose and reconstruct.
 - **Force-replay on explicit user click.** Pass `force: true` to `applyState` from a button handler; never from a BLE state subscription.
 - **Nested-config deep merge.** Every visual tunable lives in `LightingConfig` or `CameraConfig`. Sliders write one path; `applyLightingConfig` merges.
-- **Asset-URL maps.** The package does not ship audio assets. Map UDT's `TOWER_AUDIO_LIBRARY` IDs to your own hosted URLs, the same way `example/towerAudioLibrary.ts` does.
+- **Sound packs.** Audio assets ship with the package; the default pack works with no consumer setup. To use your own samples, build a `SoundPack` (`{ name, samples: { [sampleId]: url } }`) and pass it via `applyAudioConfig({ pack })`. See [AUDIO](AUDIO.md).
 - **Pop-out via `window.opener`.** A passive receiver in a second window, driven by the parent's state updates, is a small amount of code for a big UX win.
 
 ## See also

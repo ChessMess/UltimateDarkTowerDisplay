@@ -5,7 +5,8 @@ import type { DomElements } from './dom';
 import { toggleSeal, refreshSeals } from './sealController';
 import { setLedOverride as recordLedOverride, replayLedOverrides } from './ledOverrideController';
 import towerModelUrl from '../src/3d/assets/tower.glb?url';
-import { buildTowerAudioLibrary, hasTowerAudioAsset } from './towerAudioLibrary';
+// The bundled default pack works out of the box — no consumer-side URL map
+// needed. `applyAudioConfig({ enabled })` is the one-line toggle.
 
 export type ViewButtonId = 'btn-view-2d' | 'btn-view-3d' | 'btn-view-2d3d';
 
@@ -120,19 +121,17 @@ function syncToolbar3DState(els: DomElements): void {
   }
 }
 
-function applyAudioConfig(els: DomElements, enableNow = false): void {
-  display.setTowerAudioLibrary(buildTowerAudioLibrary());
-  // Only enable from a user gesture. Initial page load is not a valid
-  // autoplay-policy gesture, so defer until the user applies state or toggles
-  // a 3D control.
+// The default sound pack is wired in by Tower3DView's constructor — the
+// example only needs to flip `enabled` on user gesture.
+function syncAudioEnabledFromCheckbox(els: DomElements, enableNow = false): void {
   if (enableNow && els.chkTowerAudio?.checked) {
-    display.setTowerAudioEnabled(true);
+    display.applyAudioConfig({ enabled: true });
   }
 }
 
 export function armTowerAudioFromUserGesture(els: DomElements): void {
   if (!is3DViewVisible() || !els.chkTowerAudio?.checked) return;
-  display.setTowerAudioEnabled(true);
+  display.applyAudioConfig({ enabled: true });
 }
 
 function recreateDisplay(renderers: RendererType | RendererType[], activeId: ViewButtonId, els: DomElements): void {
@@ -142,7 +141,7 @@ function recreateDisplay(renderers: RendererType | RendererType[], activeId: Vie
   display = new TowerDisplay(buildDisplayOptions(renderers, els));
   publishDisplay();
   setActiveViewButton(activeId, els);
-  applyAudioConfig(els, true);
+  syncAudioEnabledFromCheckbox(els, true);
   if (lastState) display.applyState(lastState);
   replayLedOverrides(display);
   refreshSeals(display, readout);
@@ -168,7 +167,7 @@ export function initRendererController(els: DomElements): void {
   readout.onLedClick = (layer, light, effect) => recordLedOverride(layer, light, effect, display);
   display = new TowerDisplay(buildDisplayOptions('3d-view', els));
   publishDisplay();
-  applyAudioConfig(els);
+  syncAudioEnabledFromCheckbox(els);
 
   for (const [id, renderers] of Object.entries(viewButtons) as [ViewButtonId, RendererType | RendererType[]][]) {
     const btn = getViewButtonRef(id, els);

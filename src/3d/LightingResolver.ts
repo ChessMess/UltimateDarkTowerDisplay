@@ -118,6 +118,7 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
     roughness: 0.92,
     metalness: 0,
     radiusFactor: 3,
+    undersideLightIntensity: 0.15,
   },
   boardDisc: {
     enabled: true,
@@ -287,6 +288,7 @@ export function resolveLighting(
       roughness: user?.groundDisc?.roughness ?? base.groundDisc.roughness,
       metalness: user?.groundDisc?.metalness ?? base.groundDisc.metalness,
       radiusFactor: user?.groundDisc?.radiusFactor ?? base.groundDisc.radiusFactor,
+      undersideLightIntensity: user?.groundDisc?.undersideLightIntensity ?? base.groundDisc.undersideLightIntensity,
     },
     boardDisc: {
       enabled: user?.boardDisc?.enabled ?? base.boardDisc.enabled,

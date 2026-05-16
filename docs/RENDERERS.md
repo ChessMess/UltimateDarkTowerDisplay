@@ -86,7 +86,7 @@ API surface ([API §Tower3DView](API.md#tower3dview)) is the largest of the thre
 - `applyState`, `applySeals`, `selectSide`, `showIdle`, `dispose`.
 - Lighting: `setSceneLights`, `getLightingConfig`, `applyLightingConfig`, `setGroundDiscVisible`, `setBoardDiscEnabled`, `setSkyboxUrl`.
 - Camera: `getCameraConfig`, `applyCameraConfig`, `setZoomToCursor`, `setPreserveViewOnSideSelect`.
-- Audio: `setDrumRotationSoundUrl`, `setDrumRotationSoundEnabled`.
+- Audio: `applyAudioConfig`, `getAudioConfig` (plus legacy shims `setTowerAudioLibrary`, `setTowerAudioEnabled`, `setDrumRotationSoundUrl`, `setDrumRotationSoundEnabled`). Bundled official sound pack — see [AUDIO](AUDIO.md).
 - Effects: `setLedOverride`, `playEntrance`.
 - Diagnostics: `loadState` getter, `onLoadError` callback, `debug3D` option.
 

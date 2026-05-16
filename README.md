@@ -66,12 +66,12 @@ That renders the default composition: a text readout plus a 2D side view. Add `'
 | Rendering tech | DOM text grid | Inline SVG | Three.js + WebGL2 |
 | Shows LED layers | All 6, all 4 sides | One side at a time | On the 3D model |
 | Shows drum positions | Numeric + glyph | Rotated SVG | Rotating meshes |
-| Shows audio info | Sample name + volume | No | Plays the sample |
+| Shows audio info | Sample name + volume | No | Plays the sample (bundled default pack, swappable) |
 | Shows beam + skull count | Yes | No | No |
 | Side-aware | No | Yes | Yes |
 | Clickable seals | Optional | Yes | No (clicks land in 2D) |
 | Animations | None | LED tweens | Full (LEDs, drums, bloom) |
-| Bundle cost (rough) | <5 KB gzip | <10 KB gzip | ~150 KB gzip + 22 MB GLB |
+| Bundle cost (rough) | <5 KB gzip | <10 KB gzip | ~150 KB gzip + 22 MB GLB + 20 MB audio |
 
 `TowerDisplay` accepts any subset of `['readout', 'side-view', '3d-view']` via the `renderers` option. Default is `['readout', 'side-view']`. Full comparison and per-renderer details in [docs/RENDERERS.md](docs/RENDERERS.md).
 

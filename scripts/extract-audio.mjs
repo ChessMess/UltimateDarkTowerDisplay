@@ -2,7 +2,7 @@
 // Extracts Ogg Opus tracks from the firmware flash blob (.local/out.bin)
 // using offset/length tables in .local/audio_metadata.{c,h}, transcodes them
 // to Ogg Vorbis (so VSCode's audio preview can play them — its Opus support is
-// flaky), then regenerates example/towerAudioLibrary.ts so every UDT sample id
+// flaky), then regenerates src/audio/audioLibrary.ts so every UDT sample id
 // maps to its file.
 //
 // Requires `ffmpeg` (decode Opus → WAV) and `oggenc` from vorbis-tools
@@ -11,7 +11,7 @@
 // Run: node scripts/extract-audio.mjs [--bin <path>] [--out <dir>] [--raw]
 //   --bin  firmware blob to read (default: .local/out.bin)
 //   --out  output directory for extracted .ogg files
-//          (default: example/public/audio/, or .local/audio_raw/ when --raw)
+//          (default: src/audio/assets/, or .local/audio_raw/ when --raw)
 //   --raw  dump raw Ogg Opus slices verbatim — no transcoding, no enhancement,
 //          no library regen
 
@@ -27,9 +27,9 @@ const ROOT = resolve(HERE, '..');
 const HEADER = join(ROOT, '.local/audio_metadata.h');
 const SOURCE = join(ROOT, '.local/audio_metadata.c');
 const DEFAULT_BIN = join(ROOT, '.local/out.bin');
-const DEFAULT_AUDIO_DIR = join(ROOT, 'example/public/audio');
+const DEFAULT_AUDIO_DIR = join(ROOT, 'src/audio/assets');
 const DEFAULT_RAW_DIR = join(ROOT, '.local/audio_raw');
-const LIBRARY_TS = join(ROOT, 'example/towerAudioLibrary.ts');
+const LIBRARY_TS = join(ROOT, 'src/audio/audioLibrary.ts');
 const UDT_CONST = resolve(ROOT, '..', 'UltimateDarkTower/src/udtConstants.ts');
 
 function parseArgs(argv) {
@@ -75,7 +75,7 @@ function parseUdtLibrary(text) {
   return valueToKey;
 }
 
-// Enhancement chain (settled via A/B testing in example/public/audio_enhanced_preview/):
+// Enhancement chain (settled via A/B testing in .local/audio_enhanced_preview/):
 //   - lowpass 13 kHz: trim Opus codec hiss
 //   - bass shelf +3 dB @ 120 Hz: warm up the low end
 //   - +3 dB @ 220 Hz, +1 dB @ 600 Hz, +1.5 dB @ 4.5 kHz: body, warmth, presence
@@ -137,21 +137,25 @@ function caseInsensitiveIndex(dir) {
 
 function generateLibraryTs(orderedMappings) {
   const lines = orderedMappings.map(({ key, file }) => `    [A.${key}.value]: base + '${file}',`);
-  return `/// <reference types="vite/client" />
-import { TOWER_AUDIO_LIBRARY } from 'ultimatedarktower';
+  return `import { TOWER_AUDIO_LIBRARY } from 'ultimatedarktower';
+import type { SoundPack } from './soundPack';
 
 const A = TOWER_AUDIO_LIBRARY;
 
-function resolveAudioBase(): string {
-  // \`npm run dev:example\` serves \`/example/index.html\` from the project root,
-  // while sample assets are emitted under \`/dist-example/audio/\`.
-  if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.pathname.startsWith('/example/')) {
-    return '/dist-example/audio/';
-  }
-  return \`\${import.meta.env.BASE_URL}audio/\`;
+// Resolved by the consumer's bundler. Vite, webpack 5+, Rollup, esbuild,
+// parcel, and native Node ESM all support \`new URL(rel, import.meta.url)\`
+// for referencing assets bundled next to the JS — the bundler emits the
+// asset and rewrites the URL to point at its final location.
+//
+// The trailing slash on the rel input is sometimes stripped during bundler
+// transformation (Vite serves \`./assets/\` as \`/src/audio/assets\`), so we
+// normalise it back on before string concatenation downstream.
+function withTrailingSlash(s: string): string {
+  return s.endsWith('/') ? s : s + '/';
 }
+const DEFAULT_ASSET_BASE = withTrailingSlash(new URL('./assets/', import.meta.url).href);
 
-function buildFileAudioLibrary(base: string): Record<number, string> {
+function buildSamples(base: string): Record<number, string> {
   // === BEGIN AUTOGEN (scripts/extract-audio.mjs) ===
   return {
 ${lines.join('\n')}
@@ -160,22 +164,44 @@ ${lines.join('\n')}
 }
 
 /**
- * Sample-id → URL map for the example app.
+ * The official-game sound pack bundled with this package. Built from the
+ * Return to Dark Tower app firmware; samples are extracted Ogg Vorbis.
+ * Used as the default by \`TowerDisplay.applyAudioConfig\` when no \`pack\`
+ * is supplied.
  *
- * Generated from the firmware flash image (.local/out.bin) via
- * scripts/extract-audio.mjs. Every UDT sample id (0x01–0x71) is covered.
- *
- * Re-run \`node scripts/extract-audio.mjs\` after updating the firmware blob
- * or audio_metadata.{c,h}.
+ * © Restoration Games, LLC; used with permission.
  */
-export function buildTowerAudioLibrary(): Record<number, string> {
-  return buildFileAudioLibrary(resolveAudioBase());
+export const DEFAULT_TOWER_SOUND_PACK: SoundPack = {
+  name: 'Restoration Games — Official',
+  description: 'Extracted from the Return to Dark Tower app firmware. © Restoration Games, LLC; used with permission.',
+  samples: buildSamples(DEFAULT_ASSET_BASE),
+};
+
+/**
+ * Build a sound pack with the official filenames against a custom base URL.
+ * Useful if you want to self-host the same audio (e.g., behind a CDN or
+ * proxy) without re-typing all 113 filenames.
+ *
+ * @param baseUrl Path or URL prefix to which official filenames are appended
+ *                (e.g., \`'https://cdn.example.com/udt-audio/'\`). A trailing
+ *                slash is expected.
+ */
+export function buildOfficialSoundPack(baseUrl: string): SoundPack {
+  return {
+    name: DEFAULT_TOWER_SOUND_PACK.name,
+    description: DEFAULT_TOWER_SOUND_PACK.description,
+    samples: buildSamples(withTrailingSlash(baseUrl)),
+  };
 }
 
-export function hasTowerAudioAsset(sample: number): boolean {
+/**
+ * True if the given sample ID has an entry in the default pack. \`0\` (silence)
+ * always returns true so callers can suppress "missing asset" warnings for
+ * the no-audio state.
+ */
+export function hasDefaultAudioAsset(sample: number): boolean {
   if (sample === 0) return true;
-  const library = buildTowerAudioLibrary();
-  return typeof library[sample] === 'string';
+  return typeof DEFAULT_TOWER_SOUND_PACK.samples[sample] === 'string';
 }
 `;
 }

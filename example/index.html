@@ -40,29 +40,13 @@
       </div>
     </div>
     <div class="toolbar-group">
-      <span class="toolbar-group-label">Physics</span>
-      <div class="toolbar-group-btns">
-        <button id="btn-drop-skull">Drop Skull</button>
-        <label><input type="checkbox" id="chk-physics-debug" /> Show Colliders</label>
-        <label><input type="checkbox" id="chk-seal-debug" /> Show Seal Colliders</label>
-      </div>
-      <div class="toolbar-group-btns" style="display:flex;flex-direction:column;gap:2px;font-size:12px;align-items:stretch;">
-        <label style="display:flex;gap:6px;align-items:center;" title="Skull sphere radius as a fraction of the tower's bounding radius. Bigger skulls are less likely to wedge in tiny corners between trimesh triangles. Applies on the next Drop Skull (existing skull keeps its size).">Skull size <input type="range" id="rng-skull-radius" min="0.010" max="0.08" step="0.0025" value="0.025" style="flex:1"/> <span id="lbl-skull-radius" style="width:40px;text-align:right;">0.025</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Friction set on the skull body. Matters mainly against the game-board floor (drum / seal / static surfaces use the Min combine rule, so the surface's friction dominates instead). Applies on the next Drop Skull.">Skull μ <input type="range" id="rng-skull-friction" min="0" max="1" step="0.05" value="0.8" style="flex:1"/> <span id="lbl-skull-friction" style="width:40px;text-align:right;">0.80</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Friction on the rotating drum trimeshes (Min combine rule, so this is the effective skull-vs-drum friction). Lower → skull slides off slanted drum-interior features. Above ~0.13 lets a rotating drum drag a resting skull along. Updates live.">Drum μ <input type="range" id="rng-drum-friction" min="0" max="1" step="0.005" value="0.15" style="flex:1"/> <span id="lbl-drum-friction" style="width:40px;text-align:right;">0.15</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Friction on each closed seal-panel trimesh (Min combine rule). Lower → skull slides off slanted seal surfaces / exits. Above ~0.13 lets a closed seal carry a resting skull around during drum rotation. Updates live.">Seal μ <input type="range" id="rng-seal-friction" min="0" max="1" step="0.005" value="0.05" style="flex:1"/> <span id="lbl-seal-friction" style="width:40px;text-align:right;">0.05</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Friction on every static GLB surface — cone funnel at the bottom, tower base, top cap, outer shell between drums (Min combine rule). Lower → skulls roll off slanted parts like the funnel cleanly. Updates live.">Static μ <input type="range" id="rng-static-friction" min="0" max="1" step="0.005" value="0.1" style="flex:1"/> <span id="lbl-static-friction" style="width:40px;text-align:right;">0.10</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Friction on the game-board floor where exiting skulls land (Average combine rule with the skull's friction). Higher → skulls stop where they land. Lower → skulls roll further across the board. Updates live.">Board μ <input type="range" id="rng-board-friction" min="0" max="1" step="0.005" value="0.5" style="flex:1"/> <span id="lbl-board-friction" style="width:40px;text-align:right;">0.50</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Skull bounciness on impact. 0 = sticks where it lands, 1 = perfect bounce. Higher values keep skulls moving after they land, which helps them escape geometric pinch points. Applies on the next Drop Skull.">Restitution <input type="range" id="rng-restitution" min="0" max="1" step="0.05" value="0.2" style="flex:1"/> <span id="lbl-restitution" style="width:40px;text-align:right;">0.20</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Per-second decay on the skull's spin. Rapier has no built-in rolling resistance, so a rolling sphere on a flat surface would spin forever (friction has no slip to act on). Higher → ball stops rolling faster. 0 = ball rolls forever. Updates live.">Ang. damping <input type="range" id="rng-skull-ang-damp" min="0" max="5" step="0.05" value="1.0" style="flex:1"/> <span id="lbl-skull-ang-damp" style="width:40px;text-align:right;">1.00</span></label>
-        <label style="display:flex;gap:6px;align-items:center;" title="Per-second decay on the skull's translational velocity. Use sparingly — too high makes falls feel like slow motion. Mostly useful to take the edge off if Restitution is high. Updates live.">Lin. damping <input type="range" id="rng-skull-lin-damp" min="0" max="5" step="0.05" value="0" style="flex:1"/> <span id="lbl-skull-lin-damp" style="width:40px;text-align:right;">0.00</span></label>
-      </div>
-    </div>
-    <div class="toolbar-group">
       <span class="toolbar-group-label">Light Effects</span>
       <div class="toolbar-group-btns">
         <select id="sel-sequence"></select>
         <button id="btn-trigger-sequence">Trigger</button>
+      </div>
+      <div class="toolbar-group-btns">
+        <label class="toolbar-label"><input type="checkbox" id="chk-tower-audio" checked /> Audio</label>
       </div>
     </div>
     <div class="toolbar-group">
@@ -107,14 +91,60 @@
     </div>
   </div>
 
+  <details class="three-d-options" id="physics-options">
+    <summary>Physics</summary>
+    <div class="three-d-options-row">
+      <button id="btn-drop-skull">Drop Skull</button>
+      <label class="toolbar-label"><input type="checkbox" id="chk-physics-debug" /> Show Colliders</label>
+      <label class="toolbar-label"><input type="checkbox" id="chk-seal-debug" /> Show Seal Colliders</label>
+    </div>
+    <div class="toolbar-group-btns"
+      style="display:flex;flex-direction:column;gap:2px;font-size:12px;align-items:stretch;">
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Skull sphere radius as a fraction of the tower's bounding radius. Bigger skulls are less likely to wedge in tiny corners between trimesh triangles. Applies on the next Drop Skull (existing skull keeps its size).">Skull
+        size <input type="range" id="rng-skull-radius" min="0.010" max="0.08" step="0.0025" value="0.025"
+          style="flex:1" /> <span id="lbl-skull-radius" style="width:40px;text-align:right;">0.025</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Friction set on the skull body. Matters mainly against the game-board floor (drum / seal / static surfaces use the Min combine rule, so the surface's friction dominates instead). Applies on the next Drop Skull.">Skull
+        μ <input type="range" id="rng-skull-friction" min="0" max="1" step="0.05" value="0.8" style="flex:1" /> <span
+          id="lbl-skull-friction" style="width:40px;text-align:right;">0.80</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Friction on the rotating drum trimeshes (Min combine rule, so this is the effective skull-vs-drum friction). Lower → skull slides off slanted drum-interior features. Above ~0.13 lets a rotating drum drag a resting skull along. Updates live.">Drum
+        μ <input type="range" id="rng-drum-friction" min="0" max="1" step="0.005" value="0.15" style="flex:1" /> <span
+          id="lbl-drum-friction" style="width:40px;text-align:right;">0.15</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Friction on each closed seal-panel trimesh (Min combine rule). Lower → skull slides off slanted seal surfaces / exits. Above ~0.13 lets a closed seal carry a resting skull around during drum rotation. Updates live.">Seal
+        μ <input type="range" id="rng-seal-friction" min="0" max="1" step="0.005" value="0.05" style="flex:1" /> <span
+          id="lbl-seal-friction" style="width:40px;text-align:right;">0.05</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Friction on every static GLB surface — cone funnel at the bottom, tower base, top cap, outer shell between drums (Min combine rule). Lower → skulls roll off slanted parts like the funnel cleanly. Updates live.">Static
+        μ <input type="range" id="rng-static-friction" min="0" max="1" step="0.005" value="0.1" style="flex:1" /> <span
+          id="lbl-static-friction" style="width:40px;text-align:right;">0.10</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Friction on the game-board floor where exiting skulls land (Average combine rule with the skull's friction). Higher → skulls stop where they land. Lower → skulls roll further across the board. Updates live.">Board
+        μ <input type="range" id="rng-board-friction" min="0" max="1" step="0.005" value="0.5" style="flex:1" /> <span
+          id="lbl-board-friction" style="width:40px;text-align:right;">0.50</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Skull bounciness on impact. 0 = sticks where it lands, 1 = perfect bounce. Higher values keep skulls moving after they land, which helps them escape geometric pinch points. Applies on the next Drop Skull.">Restitution
+        <input type="range" id="rng-restitution" min="0" max="1" step="0.05" value="0.2" style="flex:1" /> <span
+          id="lbl-restitution" style="width:40px;text-align:right;">0.20</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Per-second decay on the skull's spin. Rapier has no built-in rolling resistance, so a rolling sphere on a flat surface would spin forever (friction has no slip to act on). Higher → ball stops rolling faster. 0 = ball rolls forever. Updates live.">Ang.
+        damping <input type="range" id="rng-skull-ang-damp" min="0" max="5" step="0.05" value="1.0" style="flex:1" />
+        <span id="lbl-skull-ang-damp" style="width:40px;text-align:right;">1.00</span></label>
+      <label style="display:flex;gap:6px;align-items:center;"
+        title="Per-second decay on the skull's translational velocity. Use sparingly — too high makes falls feel like slow motion. Mostly useful to take the edge off if Restitution is high. Updates live.">Lin.
+        damping <input type="range" id="rng-skull-lin-damp" min="0" max="5" step="0.05" value="0" style="flex:1" />
+        <span id="lbl-skull-lin-damp" style="width:40px;text-align:right;">0.00</span></label>
+    </div>
+  </details>
+
   <details class="three-d-options" id="three-d-options">
     <summary>3D Options</summary>
     <div class="three-d-options-row">
       <label class="toolbar-label"><input type="checkbox" id="chk-debug3d" /> Debug</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-ground-disc" checked /> Ground Disc</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-board-disc" checked /> Board Disc</label>
-      <label class="toolbar-label"><input type="checkbox" id="chk-drum-sound" /> Drum Sound</label>
-      <label class="toolbar-label"><input type="checkbox" id="chk-tower-audio" checked /> Tower Audio</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-zoom-to-cursor" checked /> Zoom to Cursor</label>
       <label class="toolbar-label"><input type="checkbox" id="chk-preserve-view-on-side-select" /> Preserve View On
         Direction Select</label>
@@ -181,6 +211,11 @@
     <h3 class="three-d-subhead">Board</h3>
     <div class="sliders-grid">
       <label class="slider-label">
+        Underside Light
+        <input type="range" id="rng-underside-light" min="0" max="1" step="0.01" value="0.15" />
+        <span id="lbl-underside-light">0.15</span>
+      </label>
+      <label class="slider-label">
         Board Size
         <input type="range" id="rng-board-size" min="1.5" max="6" step="0.1" value="3" />
         <span id="lbl-board-size">3.0</span>
@@ -230,6 +265,7 @@
             <option value="state">Tower State</option>
             <option value="lighting" id="opt-lighting" disabled>3D Lighting Config</option>
             <option value="camera" id="opt-camera" disabled>3D Camera Config</option>
+            <option value="audio" id="opt-audio" disabled>3D Audio Config</option>
             <option value="physics" id="opt-physics" disabled>Physics Config</option>
           </select>
           <div class="panel-header-actions">

@@ -12,7 +12,6 @@ import { buildBoardTextureFromImage, getBoardTextureRotation } from './GameBoard
  */
 export class GroundDiscManager {
   private disc: THREE.Mesh | null = null;
-  private undersideLight: THREE.DirectionalLight | null = null;
   private proceduralTexture: THREE.CanvasTexture | null = null;
   private imageTexture: THREE.Texture | null = null;
   private imageLoad: Promise<THREE.Texture | null> | null = null;
@@ -47,11 +46,16 @@ export class GroundDiscManager {
       ? this.ensureBoardTexture(lighting)
       : null;
 
+    const emissive = new THREE.Color(0xffe8c8);
+    const emissiveIntensity = lighting.groundDisc.undersideLightIntensity;
+
     // CylinderGeometry material groups: 0 = side wall, 1 = top cap, 2 = bottom cap
     const sideMat = new THREE.MeshStandardMaterial({
       color: edgeColor,
       roughness: 0.85,
       metalness: 0,
+      emissive,
+      emissiveIntensity,
     });
     const topMat = boardTex
       ? new THREE.MeshStandardMaterial({
@@ -71,6 +75,8 @@ export class GroundDiscManager {
       color: edgeColor,
       roughness: 0.85,
       metalness: 0,
+      emissive,
+      emissiveIntensity,
       opacity: bottomCap ? 1 : 0,
       transparent: !bottomCap,
       depthWrite: bottomCap,
@@ -81,15 +87,6 @@ export class GroundDiscManager {
     mesh.receiveShadow = true;
     this.scene.add(mesh);
     this.disc = mesh;
-
-    // Directional key light pointing straight up (+Y) so the bottom face and
-    // edge ring are evenly illuminated when the camera dips below the board.
-    // A PointLight would create a hot-spot; a DirectionalLight gives uniform fill.
-    // Position is far below so its direction (toward origin) is straight up.
-    const light = new THREE.DirectionalLight(0xffe8c8, 1.5);
-    light.position.set(0, -100, 0);
-    this.scene.add(light);
-    this.undersideLight = light;
   }
 
   /** Toggle disc visibility, building it lazily if it does not yet exist. */
@@ -155,10 +152,13 @@ export class GroundDiscManager {
       topMat.needsUpdate = true;
     }
 
-    // Update side wall and bottom cap colors/transparency
+    // Update side wall and bottom cap colors/transparency/emissive
+    const emissiveIntensity = lighting.groundDisc.undersideLightIntensity;
     sideMat.color.setHex(edgeColor);
+    sideMat.emissiveIntensity = emissiveIntensity;
     sideMat.needsUpdate = true;
     bottomMat.color.setHex(edgeColor);
+    bottomMat.emissiveIntensity = emissiveIntensity;
     bottomMat.opacity = bottomCap ? 1 : 0;
     bottomMat.transparent = !bottomCap;
     bottomMat.depthWrite = bottomCap;
@@ -174,16 +174,9 @@ export class GroundDiscManager {
     );
     this.disc.position.y = modelBottomY - modelRadius * 0.002 - h / 2;
 
-    // Directional light position only affects shadow frustum — direction is
-    // always from position toward target (origin), which stays straight up.
-    // No position update needed when thickness changes.
   }
 
   dispose(): void {
-    if (this.undersideLight) {
-      this.undersideLight.removeFromParent();
-      this.undersideLight = null;
-    }
     if (this.disc) {
       this.disc.geometry?.dispose();
       const mat = this.disc.material;

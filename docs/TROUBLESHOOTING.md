@@ -67,7 +67,7 @@ If you do not import `ultimatedarktowerdisplay/physics`, Rapier is never loaded.
 
 This package never opens a BLE connection. All BLE belongs to [`ultimatedarktower`](https://github.com/ChessMess/ultimatedarktower). The most common confusion: Web Bluetooth's `navigator.bluetooth.requestDevice` must be called from a user gesture (button click), or it throws.
 
-The audio subsystem in `Tower3DView` has the same constraint. Browsers block audio playback until the user clicks something. Wire `setDrumRotationSoundEnabled(true)` and any audio-enabling toggle to a click handler, not to mount or to a state subscription.
+The audio subsystem in `Tower3DView` has the same constraint. Browsers block audio playback until the user clicks something. Wire `applyAudioConfig({ enabled: true })` to a click handler, not to mount or to a state subscription. (See [AUDIO](AUDIO.md) for the full audio API.)
 
 Volume `3` in `TowerState.audio.volume` is the firmware's mute value. If you build a state by hand and audio is silent, check the volume.
 
@@ -110,6 +110,19 @@ The readout's skull-drop highlight fires when `state.beam.count` is greater than
 - **Resets do not fire.** Setting `beam.count` to 0 (or any lower value) does not highlight. Resetting state through `Reset Seals` and `Empty` presets in the example does not trigger the animation.
 - **Equal values do not fire.** Two identical `applyState` calls show no highlight even when `force: true` is passed (force only affects audio dedup).
 - **`dispose()` clears tracking.** A new `TowerDisplay` starts at `beam.count = -Infinity` for tracking purposes, so the first `applyState` with `beam.count > 0` does fire.
+
+## Bundled audio files do not load (404s on `.ogg` requests)
+
+The library locates the bundled audio with `new URL('./assets/', import.meta.url)`. Modern bundlers (Vite, webpack 5+, Rollup, esbuild, parcel, native Node ESM) emit and serve the referenced assets next to the JS, but some toolchains miss the indirect runtime concatenation.
+
+Quick workaround: copy `node_modules/ultimatedarktowerdisplay/dist/audio/assets/` to a static directory in your app and install a re-hosted pack:
+
+```ts
+import { buildOfficialSoundPack } from 'ultimatedarktowerdisplay';
+display.applyAudioConfig({ pack: buildOfficialSoundPack('/audio/') });
+```
+
+See [AUDIO §Bundler compatibility](AUDIO.md#bundler-compatibility).
 
 ## Audio sample does not replay on the same trigger
 

@@ -379,6 +379,7 @@ interface LightingConfig {
     roughness?: number; // 0.92
     metalness?: number; // 0
     radiusFactor?: number; // 3 × modelRadius — also the board size, since the texture fills the disc
+    undersideLightIntensity?: number; // 0.15 — emissive glow on the disc edge/underside; 0 = off
   };
   boardDisc?: {
     enabled?: boolean;                       // true — show the board texture
@@ -459,11 +460,29 @@ Rotation audio is opt-in via `setDrumRotationSoundEnabled(true)`. While enabled,
 
 ##### Tower sample audio
 
-`applyState()` also drives sample playback from `state.audio` (sample id, loop flag, volume). Sample audio is opt-in — call `setSampleAudioEnabled(true)` (or the equivalent on `Tower3DView` directly) to activate it.
+`applyState()` also drives sample playback from `state.audio` (sample id, loop flag, volume). Sample audio is opt-in — call `applyAudioConfig({ enabled: true })` (or the legacy `setTowerAudioEnabled(true)`) from a user gesture to activate it.
 
 Volume is treated as binary: `state.audio.volume === 3` (the firmware's mute value) silences playback; all other volume values play at full gain. No intermediate gain levels are applied.
 
 Pass `force: true` to replay the current sample even if it matches the previously-synced one (use for explicit user triggers; the default `false` preserves dedup for BLE state-mirror callers).
+
+##### Audio configuration
+
+The full audio surface — sound pack, master enable, sequence-to-sample binding, drum-rotation URL — is exposed as a single `AudioConfig` object that mirrors the `LightingConfig` / `CameraConfig` pattern.
+
+```ts
+display.applyAudioConfig({ enabled: true });                    // master toggle
+display.applyAudioConfig({ pack: myCustomSoundPack });           // swap samples
+display.applyAudioConfig({ bindSequenceToSample: true });        // auto-bind sequences
+display.applyAudioConfig({ sequenceMap: { 0x12: 0x33 } });       // per-sequence override
+const resolved = display.getAudioConfig();                       // serialise full state
+```
+
+`applyAudioConfig` sparse-merges — fields that are `undefined` are left alone. `getAudioConfig` returns `Required<AudioConfig>` with every field populated (the `sequenceMap` is the resolved effective map after fallback resolution, so the result round-trips through `applyAudioConfig` cleanly).
+
+The legacy fine-grained methods (`setTowerAudioLibrary`, `setTowerAudioEnabled`, `setDrumRotationSoundUrl`, `setDrumRotationSoundEnabled`) remain as thin shims that call `applyAudioConfig` under the hood. `setTowerAudioLibrary()` with no argument installs the bundled default pack.
+
+The bundled default pack ships in the package — no consumer setup is required for audio to work. See [AUDIO](AUDIO.md) for the full guide, including pack authoring, sequence binding, and bundler-compatibility notes.
 
 ##### LED visualization
 
@@ -688,5 +707,6 @@ This package requires [`ultimatedarktower`](https://www.npmjs.com/package/ultima
 - [RENDERERS](RENDERERS.md) — feature comparison + when to pick which renderer.
 - [ARCHITECTURE](ARCHITECTURE.md) — mental model, data flow, composition, lifecycle.
 - [LIGHTING](LIGHTING.md) — full `LightingConfig` field reference and tuning recipes.
+- [AUDIO](AUDIO.md) — `SoundPack`, `AudioConfig`, custom packs, sequence binding.
 - [PHYSICS](PHYSICS.md) — `TowerPhysicsHooks` and the `attachSkullPhysics` API.
 - [TROUBLESHOOTING](TROUBLESHOOTING.md) — common failure modes for every callback in this doc.
