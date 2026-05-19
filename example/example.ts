@@ -6,7 +6,7 @@ import { initConfigEditor, syncConfigSelectorVisibility } from './configEditor';
 import { initLayoutManager } from './layoutManager';
 import { initPhysicsController, getPhysicsHandle, syncSlidersFromConfig } from './physicsController';
 import { initPopOutController } from './popOutController';
-import { initInspectorTabs } from './inspectorTabs';
+import { initPanelCollapseController } from './panelCollapseController';
 
 const els = queryDom();
 
@@ -34,8 +34,8 @@ initInitialState(getDisplay, getReadout, setLastState, els);
 
 initLayoutManager(els);
 
-initInspectorTabs();
-
 initPopOutController(els);
+
+initPanelCollapseController();
 
 window.__udtdExampleReady = true;

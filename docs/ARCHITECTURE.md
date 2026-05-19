@@ -136,7 +136,7 @@ When the user clicks a side button on the 2D view, `selectSide` fans out: `Tower
 | [src/audio/](../src/audio/) | Web Audio playback + bundled official sound pack | `TowerSampleAudio.ts`, `DrumRotationAudio.ts`, `audioLibrary.ts`, `sequenceAudio.ts`, `soundPack.ts`, `assets/*.ogg` |
 | [src/sequences/](../src/sequences/) | LED sequence player | `SequencePlayer.ts`, `SequenceAnimator.ts`, JSON sequence data |
 | [src/state/](../src/state/) | Headless state merge | `TowerStateController.ts` |
-| [src/physics/](../src/physics/) | Optional Rapier skull physics | `index.ts`, `PhysicsManager.ts`, `ColliderBuilder.ts`, `PhysicsResolver.ts` |
+| [src/physics/](../src/physics/) | Optional Rapier skull physics | `index.ts`, `PhysicsManager.ts`, `PhysicsResolver.ts`, `buildColliders.ts`, `SkullModelLoader.ts`, `SkullSpawner.ts` |
 | [src/shared/](../src/shared/) | Cross-renderer utilities | `SideButtons.ts` |
 
 ## Where physics plugs in
@@ -154,6 +154,8 @@ physics.dropSkull();
 ## Extension points
 
 - **`modelUrl`** — override the bundled GLB. Custom models must keep the drum and seal naming contract (`drum_top`, `seal_north_top`, etc.) or those subsystems become no-ops.
+- **`skull.modelUrl` / `skull.meshFactory`** — drop arbitrary models (or fully custom `Object3D`s) instead of the default sphere. The library loads `.glb` itself (with a `.stl` fallback); consumers wanting full control return their own `Object3D` from `meshFactory`. See [PHYSICS §Skull Appearance](PHYSICS.md#skull-appearance).
+- **`TowerPhysicsHooks.onStateApplied`** — a subscription that fires on every `applyState`. Any add-on (not just skull physics) can use it to react to game-state deltas without owning the state controller.
 - **`dracoDecoderPath`** — host the Draco decoder yourself if you cannot reach gstatic.
 - **`injectStyles: false`** — apply CSS yourself for CSP-constrained environments. Pair with the exported `TOWER_DISPLAY_CSS` constant.
 - **`TowerStateController` as a public export** — drive renderers from a non-DOM store, run them headless in tests, or compose your own multi-renderer layout outside `TowerDisplay`.

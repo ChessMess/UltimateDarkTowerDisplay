@@ -3,7 +3,7 @@ import type * as THREE from 'three';
 import type { LightingConfig, CameraConfig, AudioConfig } from './3d/types';
 import type { SoundPack } from './audio/soundPack';
 
-export type { TowerSide, SealIdentifier };
+export type { TowerState, TowerSide, SealIdentifier };
 export type { LightingConfig };
 export type { CameraConfig };
 export type { AudioConfig };
@@ -30,6 +30,13 @@ export interface TowerPhysicsHooks {
    * broken-seals list. Returns an unsubscribe function.
    */
   onSealsApplied: (cb: (broken: SealIdentifier[]) => void) => () => void;
+  /**
+   * Register a callback that fires after every `applyState` call with the
+   * decoded state. Useful for add-ons that need to react to game-state
+   * deltas (skull-count increases, broken-seal counts, etc.). Returns an
+   * unsubscribe function.
+   */
+  onStateApplied: (cb: (state: TowerState) => void) => () => void;
   /**
    * Register a callback that fires once the GLB model has been loaded and
    * added to the scene. If the model is already loaded when this is called,

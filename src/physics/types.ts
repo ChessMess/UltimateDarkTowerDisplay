@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { DeepRequired } from '../3d/types';
 export type { DeepRequired };
 
@@ -27,6 +28,85 @@ export interface PhysicsConfig {
     angularDamping?: number;
     /** Per-second exponential decay on linear velocity. Live. */
     linearDamping?: number;
+    /**
+     * Maximum number of simultaneous skulls on the board. `dropSkull()` is a
+     * no-op once this many skulls are live; existing skulls remain when this
+     * is lowered (they're not retroactively despawned). Live.
+     */
+    maxCount?: number;
+    /**
+     * URL of a `.glb` model used as the skull's visual mesh. When set,
+     * dropped skulls render as this model instead of the default sphere.
+     * `.stl` URLs are accepted with a `console.warn` recommending the
+     * `npm run preprocess-skulls` pipeline (which decimates the mesh and
+     * emits a hull-point sidecar).
+     *
+     * Loading is async; setting/changing this defers subsequent
+     * `dropSkull()` calls until the new model resolves. A subsequent
+     * change cancels the previous in-flight load. The library caches
+     * resolved templates module-globally — repeated attach/detach cycles
+     * do not re-fetch.
+     *
+     * Ignored when `meshFactory` is also set.
+     *
+     * Applies on next `dropSkull()` (async — drops queued during load).
+     */
+    modelUrl?: string;
+    /**
+     * Physics collider shape. `'sphere'` (default) uses a Rapier ball
+     * collider — preserves the existing physics tuning regardless of the
+     * visual mesh. `'hull'` derives a convex hull from `modelUrl`'s
+     * point cloud; falls back to `'sphere'` with a `console.warn` when
+     * `modelUrl` is unset or the hull is degenerate.
+     *
+     * Hull dynamics may need re-tuning of friction/restitution.
+     *
+     * Applies on next `dropSkull()`.
+     */
+    colliderShape?: 'sphere' | 'hull';
+    /**
+     * Density override for the dynamic body. Only meaningful when
+     * `colliderShape === 'hull'`: the loaded template carries an
+     * auto-computed density that normalizes hull-skull mass to the
+     * equivalent unit sphere, and this overrides it. Ignored for sphere
+     * colliders (which use Rapier's default density of 1.0).
+     *
+     * Applies on next `dropSkull()`.
+     */
+    density?: number;
+    /**
+     * Per-spawn visual override. Receives the physics radius (world units)
+     * and must return an `Object3D` whose local origin matches the body's
+     * center of mass; it is position+quaternion-synced each frame. The
+     * manager only calls `removeFromParent()` on despawn — the factory
+     * owns geometry/material lifecycle and is expected to cache shared
+     * assets across spawns.
+     *
+     * When set, the physics collider stays a sphere regardless of the
+     * mesh's true shape — use `modelUrl` + `colliderShape: 'hull'` if you
+     * need a derived hull collider.
+     *
+     * Note: a function value is silently dropped by `JSON.stringify`, so
+     * `meshFactory` never roundtrips through JSON-paste flows — set it
+     * programmatically via `attachSkullPhysics` or `applyPhysicsConfig`.
+     *
+     * Applies on next `dropSkull()`.
+     */
+    meshFactory?: (radius: number) => THREE.Object3D;
+    /**
+     * When true, the manager auto-calls `dropSkull()` once each time the
+     * tower's `state.beam.count` increases between two consecutive
+     * `applyState` calls. Matches the readout's "💀 Skull Drop!"
+     * highlight trigger. Default `false` — host-driven drops via
+     * `dropSkull()` are unaffected.
+     *
+     * Subscribes via `TowerPhysicsHooks.onStateApplied` and uses strict
+     * `>` for the delta check, so re-feeding the same state does not
+     * trigger a drop. Honors `skull.maxCount` like manual drops.
+     *
+     * Live — toggling takes effect on the next `applyState` callback.
+     */
+    autoDropOnSkullCountIncrease?: boolean;
   };
   /** The three rotating drums (kinematic trimesh per level). */
   drum?: {
@@ -64,10 +144,18 @@ export interface PhysicsConfig {
 }
 
 /**
- * Fully-resolved physics config — every leaf has a value. Used internally
- * by the manager and returned from `getPhysicsConfig()`.
+ * Fully-resolved physics config — every leaf has a value, returned from
+ * `getPhysicsConfig()`. Most leaves drop `undefined` from their type via
+ * `DeepRequired`, but a handful of optional references (e.g. `skull.meshFactory`)
+ * intentionally remain nullable so "unset" is a first-class state.
  */
-export type ResolvedPhysicsConfig = DeepRequired<PhysicsConfig>;
+export type ResolvedPhysicsConfig = Omit<DeepRequired<PhysicsConfig>, 'skull'> & {
+  skull: Omit<DeepRequired<PhysicsConfig>['skull'], 'meshFactory' | 'modelUrl' | 'density'> & {
+    meshFactory: ((radius: number) => THREE.Object3D) | undefined;
+    modelUrl: string | undefined;
+    density: number | undefined;
+  };
+};
 
 /**
  * Handle returned by `attachSkullPhysics`. Use `dropSkull` to spawn (and
@@ -76,10 +164,16 @@ export type ResolvedPhysicsConfig = DeepRequired<PhysicsConfig>;
  */
 export interface SkullPhysicsHandle {
   /**
-   * Spawn a fresh skull above the top opening. Idempotent — if a skull is
-   * already present it is removed before the new one is created.
+   * Add one skull above the top opening. Calls past the current
+   * `skull.maxCount` are no-ops. Calls made before init resolves are
+   * queued and replayed once it does.
    */
   dropSkull(): void;
+  /**
+   * Remove every active skull from the world immediately. Also cancels
+   * any drops queued before init resolved. Safe to call at any time.
+   */
+  clearSkulls(): void;
   /**
    * Get a deep-cloned snapshot of the current fully-resolved physics
    * config. Safe to mutate the result.
@@ -88,10 +182,15 @@ export interface SkullPhysicsHandle {
   /**
    * Apply a partial config on top of the current one. Live-tunable leaves
    * (frictions, damping, debug overlays, board radius) take effect
-   * immediately; skull-body leaves (radius, friction, restitution) take
-   * effect on the next `dropSkull()`; geometry leaves
-   * (drum half-height/inner radius, board thickness, oob depth) are only
-   * honored at attach time and are silently ignored otherwise.
+   * immediately; skull-body leaves (radius, friction, restitution,
+   * collider shape, model URL, mesh factory) take effect on the next
+   * `dropSkull()`; geometry leaves (drum half-height/inner radius, board
+   * thickness, oob depth) are only honored at attach time and are
+   * silently ignored otherwise.
+   *
+   * `skull.modelUrl` changes are async — drops queued during a load are
+   * replayed once the new model resolves. A second change cancels the
+   * previous in-flight load.
    */
   applyPhysicsConfig(partial: PhysicsConfig): void;
   /**

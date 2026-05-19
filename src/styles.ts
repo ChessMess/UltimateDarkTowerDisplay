@@ -44,6 +44,19 @@ const CSS = `
 
 /* ── LED Grid ── */
 
+.tdr-leds h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.tdr-leds-hint {
+  font-size: 0.7rem;
+  color: #888;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .tdr-layer {
   display: flex;
   align-items: center;

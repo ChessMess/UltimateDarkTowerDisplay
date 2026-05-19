@@ -121,7 +121,9 @@ Lift when you want explicit user-triggered effects: `setLedOverride` for one-sho
 
 [`example/physicsController.ts`](../example/physicsController.ts).
 
-A Drop Skull button plus eight sliders (skull radius, friction, restitution, damping, debug colliders, debug skulls). Sliders write into a single `PhysicsConfig` object and call `applyPhysicsConfig(partial)` on the handle returned by `attachSkullPhysics`.
+Drop Skull and Clear Skulls buttons; a Skull Appearance row (Model + Collider dropdowns — Model defaults to Sphere, Collider is disabled until a model is picked); a Triggers row with an Auto-drop checkbox (drops one skull each time `state.beam.count` increases); plus ten sliders (skull radius, max skulls, friction, restitution, angular/linear damping, drum/seal/static/board friction). Drop Skull adds one skull per click up to `skull.maxCount`; Clear Skulls removes every active skull. Dropdowns, checkbox, and sliders all write into a single `PhysicsConfig` object and call `applyPhysicsConfig(partial)` on the handle returned by `attachSkullPhysics`.
+
+The dropdown's skull-model options are populated dynamically at boot via `import.meta.glob('../src/3d/assets/skull_*.glb', { query: '?url' })`. Drop a Draco-compressed glTF (named `skull_<name>.glb`) into [`src/3d/assets/`](../src/3d/assets/) and it appears in the dropdown after the next dev-server restart — Vite handles URL resolution for both dev and the production build. See [PHYSICS §Authoring skull models](PHYSICS.md#authoring-skull-models) for Blender export settings.
 
 The pattern to lift: every tunable is a number; every slider writes one nested path; you never reach into the physics manager. The same pattern works for the lighting and camera panels below.
 

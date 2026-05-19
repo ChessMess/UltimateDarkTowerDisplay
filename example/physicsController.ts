@@ -34,12 +34,6 @@ function readVisualBoardRadius(): number {
 /** Updaters invoked by `syncSlidersFromConfig` to mirror a resolved config into the UI. */
 const sliderSyncers: Array<(cfg: ResolvedPhysicsConfig) => void> = [];
 
-/**
- * Wire a slider input + label pair to a config writer. Clicking the label
- * resets to the default. `read(config)` extracts the current value from a
- * resolved config so `syncSlidersFromConfig` can re-populate the UI when
- * the user pastes a new JSON config.
- */
 function wireSlider(
   rangeId: string,
   labelId: string,
@@ -81,7 +75,7 @@ function applyConfig(partial: PhysicsConfig): void {
   workingConfig = mergePartial(workingConfig, partial);
   handle?.applyPhysicsConfig(partial);
   // Keep the JSON preview in sync if the user is looking at the physics
-  // config tab. No-op otherwise.
+  // config type. No-op otherwise.
   notifyPhysicsConfigChanged();
 }
 
@@ -134,6 +128,11 @@ export function initPhysicsController(): void {
     });
   }
 
+  const btnClear = document.getElementById('btn-clear-skulls') as HTMLButtonElement | null;
+  if (btnClear) {
+    btnClear.addEventListener('click', () => handle?.clearSkulls());
+  }
+
   if (chkDebug) {
     chkDebug.addEventListener('change', () => {
       // The full Rapier debug overlay is built at attach time only, so
@@ -150,10 +149,78 @@ export function initPhysicsController(): void {
     });
   }
 
+  // --- Skull Appearance: Model + Collider dropdowns ---
+  const selModel = document.getElementById('sel-skull-model') as HTMLSelectElement | null;
+  const selCollider = document.getElementById('sel-skull-collider') as HTMLSelectElement | null;
+  if (selModel && selCollider) {
+    // Discover available skull GLBs at build time. import.meta.glob returns
+    // a map of file paths → resolved URL strings (handled by Vite for both
+    // dev and built bundles, so no manual base-URL math is needed). Files
+    // not present in src/3d/assets/ simply don't appear in the dropdown.
+    const skullModules = import.meta.glob<string>('../src/3d/assets/skull_*.glb', {
+      eager: true,
+      query: '?url',
+      import: 'default',
+    });
+    for (const [path, url] of Object.entries(skullModules)) {
+      const filename = path.split('/').pop() ?? '';
+      const stem = filename.replace(/\.glb$/i, '');
+      const label = stem
+        .replace(/^skull_?/i, 'Skull #')
+        .replace(/_/g, ' ');
+      const opt = document.createElement('option');
+      opt.value = url;
+      opt.text = label;
+      selModel.appendChild(opt);
+    }
+
+    const syncColliderEnabled = (): void => {
+      selCollider.disabled = !selModel.value;
+      if (selCollider.disabled) selCollider.value = 'sphere';
+    };
+
+    selModel.addEventListener('change', () => {
+      syncColliderEnabled();
+      applyConfig({ skull: {
+        modelUrl: selModel.value || undefined,
+        colliderShape: selCollider.value as 'sphere' | 'hull',
+      }});
+    });
+
+    selCollider.addEventListener('change', () => {
+      applyConfig({ skull: { colliderShape: selCollider.value as 'sphere' | 'hull' } });
+    });
+
+    syncColliderEnabled();
+
+    // Mirror JSON-paste config edits back into the UI.
+    sliderSyncers.push((cfg) => {
+      selModel.value = cfg.skull.modelUrl ?? '';
+      selCollider.value = cfg.skull.colliderShape ?? 'sphere';
+      syncColliderEnabled();
+    });
+  }
+
+  // --- Triggers: Auto-drop on state skull count ---
+  const chkAutoDrop = document.getElementById('chk-auto-drop-on-state') as HTMLInputElement | null;
+  if (chkAutoDrop) {
+    chkAutoDrop.addEventListener('change', () => {
+      applyConfig({ skull: { autoDropOnSkullCountIncrease: chkAutoDrop.checked } });
+    });
+    sliderSyncers.push((cfg) => {
+      chkAutoDrop.checked = cfg.skull.autoDropOnSkullCountIncrease ?? false;
+    });
+  }
+
   wireSlider(
     'rng-skull-radius', 'lbl-skull-radius', 3, DEFAULT_PHYSICS.skull.radiusFactor,
     (v) => applyConfig({ skull: { radiusFactor: v } }),
     (cfg) => cfg.skull.radiusFactor,
+  );
+  wireSlider(
+    'rng-skull-max', 'lbl-skull-max', 0, DEFAULT_PHYSICS.skull.maxCount,
+    (v) => applyConfig({ skull: { maxCount: v } }),
+    (cfg) => cfg.skull.maxCount,
   );
   wireSlider(
     'rng-skull-friction', 'lbl-skull-friction', 2, DEFAULT_PHYSICS.skull.friction,

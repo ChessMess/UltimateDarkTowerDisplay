@@ -9,6 +9,7 @@ export type {
   DeepRequired,
 } from './types';
 export { DEFAULT_PHYSICS, resolvePhysics } from './PhysicsResolver';
+export type { SkullTemplate } from './SkullModelLoader';
 
 /**
  * Attach physics-driven skulls to a Tower3DView. Returns immediately with a
@@ -37,6 +38,9 @@ export function attachSkullPhysics(
   return {
     dropSkull(): void {
       manager.dropSkull();
+    },
+    clearSkulls(): void {
+      manager.clearSkulls();
     },
     getPhysicsConfig() {
       return manager.getPhysicsConfig();

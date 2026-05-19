@@ -2,7 +2,6 @@ import type { TowerDisplay, TowerStateReadout } from '../src/index';
 import type { LightingConfig, CameraConfig, AudioConfig } from '../src/3d/types';
 import type {
   PhysicsConfig,
-  ResolvedPhysicsConfig,
   SkullPhysicsHandle,
 } from '../src/physics';
 import type { TowerState } from 'ultimatedarktower';
@@ -82,13 +81,8 @@ export function syncConfigSelectorVisibility(getDisplay: () => TowerDisplay, els
   }
 }
 
-/**
- * Module-level pointer to the physics handle getter; set by
- * `initConfigEditor`. Used by `refreshConfigPreview` (which has no params
- * for it) and by the apply handler.
- */
 let physicsHandleGetter: (() => SkullPhysicsHandle | null) | null = null;
-let physicsSyncSliders: ((cfg: ResolvedPhysicsConfig) => void) | null = null;
+let physicsSyncSliders: ((cfg: import('../src/physics').ResolvedPhysicsConfig) => void) | null = null;
 let editorGetDisplay: (() => TowerDisplay) | null = null;
 let editorEls: DomElements | null = null;
 
@@ -100,10 +94,6 @@ let editorEls: DomElements | null = null;
 export function notifyPhysicsConfigChanged(): void {
   if (activeConfigType !== 'physics') return;
   if (!editorGetDisplay || !editorEls) return;
-  // Skip the refresh while the user has unsaved edits in the textarea,
-  // otherwise we'd clobber whatever they were typing. The slider-driven
-  // change still landed in the live physics world; only the visible JSON
-  // lags until they apply or revert.
   if (editorEls.btnApplyConfig && !editorEls.btnApplyConfig.disabled) return;
   refreshConfigPreview(editorGetDisplay, editorEls);
 }
@@ -114,13 +104,14 @@ export function initConfigEditor(
   setLastState: (s: TowerState | null) => void,
   onStateApplied: (state: TowerState) => void,
   getPhysicsHandle: () => SkullPhysicsHandle | null,
-  syncSlidersFromConfig: (cfg: ResolvedPhysicsConfig) => void,
+  syncSlidersFromConfig: (cfg: import('../src/physics').ResolvedPhysicsConfig) => void,
   els: DomElements,
 ): void {
   physicsHandleGetter = getPhysicsHandle;
   physicsSyncSliders = syncSlidersFromConfig;
   editorGetDisplay = getDisplay;
   editorEls = els;
+
   if (els.selConfigType) {
     els.selConfigType.addEventListener('change', () => {
       activeConfigType = els.selConfigType!.value as ConfigType;
@@ -153,9 +144,6 @@ export function initConfigEditor(
         } else if (activeConfigType === 'audio') {
           const parsed = JSON.parse(els.configPreview.value) as AudioConfig;
           getDisplay().applyAudioConfig(parsed);
-          // Keep the toolbar "Audio" checkbox in lockstep with the resolved
-          // enabled flag — applying `{"enabled": true}` ticks the box and vice
-          // versa, so the JSON editor and the checkbox never disagree.
           const resolved = getDisplay().getAudioConfig();
           if (resolved && els.chkTowerAudio) els.chkTowerAudio.checked = resolved.enabled;
           refreshConfigPreview(getDisplay, els);

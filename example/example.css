@@ -22,8 +22,8 @@
   --green-text: #a0d890;
   --gold: #c8a040;
 
-  --sidebar-w: clamp(260px, 22vw, 300px);
-  --inspector-w: clamp(360px, 26vw, 420px);
+  --sidebar-w: clamp(260px, 20vw, 320px);
+  --config-w: clamp(320px, 26vw, 380px);
 
   /* Spacing scale — 4 / 8 / 12 / 20 / 32 / 48 px */
   --sp-1: 0.25rem;
@@ -114,8 +114,14 @@ body::before {
 }
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 h1 {
@@ -159,8 +165,13 @@ p {
   font-size: 0.9rem;
 }
 
-p strong { color: var(--text); font-style: normal; }
-p code { font-style: normal; }
+p strong {
+  color: var(--text);
+  font-style: normal;
+}
+p code {
+  font-style: normal;
+}
 
 code {
   font-family: 'JetBrains Mono', Menlo, monospace;
@@ -174,6 +185,15 @@ code {
   color: var(--text-dim);
 }
 
+.readout-block {
+  display: flex;
+  justify-content: center;
+}
+
+.readout-block .tdr-box {
+  background: transparent;
+}
+
 /* ============================================================
    LAYOUT
    ============================================================ */
@@ -184,11 +204,12 @@ code {
 
 .app-grid {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr var(--inspector-w);
+  grid-template-columns: var(--sidebar-w) 1fr var(--config-w);
   gap: var(--grid-gap);
   padding: var(--grid-pad);
   align-items: stretch;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-sidebar {
@@ -196,6 +217,8 @@ code {
   flex-direction: column;
   gap: var(--sp-4);
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   animation: fadeUp 0.45s 0.05s ease both;
 }
 
@@ -229,19 +252,93 @@ code {
   animation: fadeUp 0.45s 0.1s ease both;
 }
 
-.app-inspector {
+.app-config {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-3);
   min-width: 0;
   min-height: 0;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-gold);
-  border-radius: var(--radius);
-  box-shadow:
-    inset 0 1px 0 rgba(200, 160, 64, 0.07),
-    0 4px 24px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
   animation: fadeUp 0.45s 0.15s ease both;
+}
+
+.config-section {
+  /* Size to content, never grow past it. If combined content exceeds the
+     column, each section shrinks proportionally and gets its own scroll. */
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* When a section contains an expanded panel marked `data-expandable`, let
+   the section absorb any leftover column space so that panel can grow into
+   it. Without this, `flex: 0 1 auto` pins the section to its content height
+   and the expandable panel has nothing extra to claim. */
+.config-section:has(.panel[data-expandable='true']:not([data-collapsed='true'])) {
+  flex: 1 1 auto;
+}
+
+/* Panels inside the config column keep their natural content height — never
+   shrink below it. Combined overflow is handled by `.config-section`'s
+   scrollbar, not by clipping each panel. */
+.config-section > .panel {
+  flex: 0 0 auto;
+}
+
+/* An expandable panel absorbs any leftover space in its section — e.g. when
+   another panel is collapsed, the expandable one grows to fill the gap.
+   When collapsed itself, the [data-collapsed='true'] rule below pins it to
+   header height instead. */
+.config-section > .panel[data-expandable='true']:not([data-collapsed='true']) {
+  flex: 1 1 auto;
+}
+
+/* Collapsible panel headers in the config column. */
+.panel[data-collapse-key] > .panel-row-header {
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.panel[data-collapse-key] > .panel-row-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.panel[data-collapse-key] > .panel-row-header h2::before {
+  content: '▾';
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 0.85em;
+  line-height: 1;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.panel[data-collapse-key] > .panel-row-header:hover h2::before {
+  color: var(--accent);
+}
+
+.panel[data-collapse-key][data-collapsed='true'] > .panel-row-header h2::before {
+  transform: rotate(-90deg);
+}
+
+.panel[data-collapse-key]:not([data-collapsed='true']) > .panel-row-header {
+  margin-bottom: 0.75rem;
+}
+
+.panel[data-collapse-key][data-collapsed='true'] > :not(.panel-row-header) {
+  display: none;
+}
+
+/* Collapsed panels shouldn't try to stretch — pin them to header height,
+   overriding `.panel-editors { height: 100% }` on Camera / Audio. */
+.panel[data-collapse-key][data-collapsed='true'] {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
 }
 
 /* ============================================================
@@ -351,7 +448,9 @@ code {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a5520'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.6rem center;
-  transition: border-color 0.15s, color 0.15s;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
 }
 
 .sidebar-select:hover {
@@ -394,7 +493,10 @@ code {
   color: var(--text-dim);
   cursor: pointer;
   user-select: none;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .toggle-pill:hover {
@@ -440,7 +542,14 @@ code {
   left: 0;
   height: 2px;
   width: calc(100% / 3);
-  background: linear-gradient(90deg, transparent 0%, var(--accent) 20%, var(--ember) 50%, var(--accent) 80%, transparent 100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent) 20%,
+    var(--ember) 50%,
+    var(--accent) 80%,
+    transparent 100%
+  );
   box-shadow: 0 0 10px rgba(224, 136, 56, 0.6);
   transform: translateX(0);
   transition: transform var(--dur-slow) var(--ease-out);
@@ -448,19 +557,32 @@ code {
   z-index: 1;
 }
 
-.view-pills:has(#btn-view-2d.active)::after { transform: translateX(0%); }
-.view-pills:has(#btn-view-3d.active)::after { transform: translateX(100%); }
-.view-pills:has(#btn-view-2d3d.active)::after { transform: translateX(200%); }
+.view-pills:has(#btn-view-2d.active)::after {
+  transform: translateX(0%);
+}
+.view-pills:has(#btn-view-3d.active)::after {
+  transform: translateX(100%);
+}
+.view-pills:has(#btn-view-2d3d.active)::after {
+  transform: translateX(200%);
+}
 
 .view-pill {
   position: relative;
+  flex: 1 1 0;
+  text-align: center;
+  white-space: nowrap;
   border: none;
   border-radius: 0;
   background: transparent;
-  padding: var(--sp-2) var(--sp-4);
+  /* Match the default button vertical padding so .view-pill and .ghost-action
+     (Pop Out) end up the same height. */
+  padding: 0.45rem var(--sp-4);
   margin: 0;
   border-right: 1px solid var(--border-dim);
-  transition: color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out);
+  transition:
+    color var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out);
 }
 
 .view-pill:last-child {
@@ -541,7 +663,6 @@ code {
 
 .panel-editors {
   gap: 0.75rem;
-  height: 100%;
 }
 
 #tower {
@@ -584,67 +705,6 @@ code {
   display: none;
 }
 
-/* ============================================================
-   INSPECTOR
-   ============================================================ */
-
-.inspector-tabs {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--border-gold);
-  background: linear-gradient(180deg, #1a130b 0%, #110d0a 100%);
-  flex-shrink: 0;
-}
-
-.inspector-tab {
-  flex: 1;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  border-right: 1px solid var(--border-dim);
-  margin: 0;
-  padding: 0.65rem 0.4rem;
-  font-family: 'Cinzel', serif;
-  font-size: 0.66rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
-}
-
-.inspector-tab:hover {
-  color: var(--text);
-  background: rgba(200, 112, 32, 0.05);
-  box-shadow: none;
-  border-color: var(--border-dim);
-}
-
-.inspector-tab[aria-selected='true'] {
-  color: var(--lume);
-  background: var(--bg-panel);
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-.inspector-tab:last-of-type {
-  border-right: 1px solid var(--border-dim);
-}
-
-.inspector-panel {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 1rem;
-}
-
-.inspector-panel[hidden] {
-  display: none;
-}
-
-.inspector-panel > .panel {
-  height: 100%;
-}
-
 .opts-block {
   display: flex;
   flex-direction: column;
@@ -672,6 +732,20 @@ code {
 .opts-row-block {
   display: block;
   padding-top: 0.4rem;
+}
+
+/* Side-by-side action buttons (e.g. Drop Skull / Clear Skulls). Overrides
+   the default `width: 100%` on .primary-action / .secondary-action so each
+   button takes half the row. */
+.opts-row-actions {
+  gap: 0.5rem;
+  padding-top: 0.4rem;
+}
+
+.opts-row-actions > .primary-action,
+.opts-row-actions > .secondary-action {
+  flex: 1 1 0;
+  width: auto;
 }
 
 .opts-input-label {
@@ -815,11 +889,22 @@ code {
   box-shadow: 0 0 8px rgba(200, 112, 32, 0.3);
 }
 
-/* Dim the Visual tab when 3D view is hidden. */
+/* Reset Seals: spans only the NESW button columns (skip the row-label col). */
+.seal-toggle-grid .seal-reset {
+  grid-column: 2 / -1;
+  margin-top: 0.3rem;
+  padding: 0.4rem 0;
+  font-size: 0.66rem;
+}
+
+/* Dim 3D-only panels when 3D view is hidden. */
 .three-d-inactive .opts-row,
 .three-d-inactive .opts-subhead,
 .three-d-inactive .sliders-grid,
-.three-d-inactive .opts-input-label {
+.three-d-inactive .opts-input-label,
+.three-d-inactive .physics-slider-list,
+.three-d-inactive .panel-header-actions,
+.three-d-inactive textarea {
   opacity: 0.3;
   pointer-events: none;
 }
@@ -879,7 +964,10 @@ button.active {
   padding: 0.35rem 0.55rem;
   border: 1px solid transparent;
   border-radius: 3px;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .toolbar-label:hover {
@@ -932,26 +1020,40 @@ input[type='range']::-webkit-slider-thumb {
   height: 12px;
   margin-top: -5px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, var(--lume) 0%, var(--accent) 50%, var(--accent-dim) 100%);
+  background: radial-gradient(
+    circle at 30% 30%,
+    var(--lume) 0%,
+    var(--accent) 50%,
+    var(--accent-dim) 100%
+  );
   border: 1px solid var(--border-gold);
   box-shadow:
     0 0 6px rgba(224, 136, 56, 0.45),
     0 1px 2px rgba(0, 0, 0, 0.6);
   cursor: pointer;
-  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 input[type='range']::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, var(--lume) 0%, var(--accent) 50%, var(--accent-dim) 100%);
+  background: radial-gradient(
+    circle at 30% 30%,
+    var(--lume) 0%,
+    var(--accent) 50%,
+    var(--accent-dim) 100%
+  );
   border: 1px solid var(--border-gold);
   box-shadow:
     0 0 6px rgba(224, 136, 56, 0.45),
     0 1px 2px rgba(0, 0, 0, 0.6);
   cursor: pointer;
-  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 input[type='range']:hover::-webkit-slider-thumb {
@@ -983,19 +1085,40 @@ input[type='range']:active::-moz-range-thumb {
 }
 
 /* ============================================================
-   CONFIG EDITOR (JSON tab)
+   CONFIG EDITOR (embedded JSON editors)
    ============================================================ */
 
-.config-editor-header {
+.panel-header-actions {
   display: flex;
+  gap: 0.4rem;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  flex-wrap: wrap;
+}
+
+.panel-header-actions button {
+  font-size: 0.68rem;
+  padding: 0.3rem 0.65rem;
+  margin: 0;
+}
+
+.panel-header-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+  box-shadow: none;
+}
+
+.panel-header-actions button[id^='btn-apply-']:not(:disabled) {
+  background: linear-gradient(180deg, #3a2a0a 0%, #241a04 100%);
+  border-color: var(--accent);
+  color: var(--lume);
+  box-shadow: 0 0 10px rgba(200, 112, 32, 0.3);
+}
+
+.panel-header-actions button[id^='btn-apply-']:not(:disabled):hover {
+  background: linear-gradient(180deg, #4a3a0e 0%, #342808 100%);
 }
 
 #sel-config-type {
+  align-self: flex-start;
   font-family: 'Cinzel', serif;
   font-size: 0.68rem;
   letter-spacing: 0.06em;
@@ -1036,40 +1159,10 @@ input[type='range']:active::-moz-range-thumb {
   opacity: 0.4;
 }
 
-.panel-header-actions {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-#btn-copy-config,
-#btn-apply-config {
-  font-size: 0.68rem;
-  padding: 0.3rem 0.65rem;
-  margin: 0;
-}
-
-#btn-apply-config:disabled {
-  opacity: 0.3;
-  cursor: default;
-  box-shadow: none;
-}
-
-#btn-apply-config:not(:disabled) {
-  background: linear-gradient(180deg, #3a2a0a 0%, #241a04 100%);
-  border-color: var(--accent);
-  color: var(--lume);
-  box-shadow: 0 0 10px rgba(200, 112, 32, 0.3);
-}
-
-#btn-apply-config:not(:disabled):hover {
-  background: linear-gradient(180deg, #4a3a0e 0%, #342808 100%);
-}
-
-#config-preview {
+.config-preview {
   margin: 0;
   flex: 1;
-  min-height: 220px;
+  min-height: 180px;
   resize: none;
   overflow: auto;
   font-family: 'JetBrains Mono', Menlo, monospace;
@@ -1085,7 +1178,7 @@ input[type='range']:active::-moz-range-thumb {
   caret-color: var(--accent);
 }
 
-#config-preview:focus {
+.config-preview:focus {
   outline: 1px solid var(--accent-dim);
   box-shadow: inset 0 0 20px rgba(200, 112, 32, 0.04);
 }
@@ -1160,60 +1253,23 @@ input[type='range']:active::-moz-range-thumb {
    RESPONSIVE
    ============================================================ */
 
-/* Medium: inspector stacks below sidebar+hero row. */
-@media (max-width: 1400px) {
-  .app-grid {
-    grid-template-columns: var(--sidebar-w) 1fr;
-    grid-template-areas:
-      'sidebar hero'
-      'inspector inspector';
-  }
-
-  .app-sidebar { grid-area: sidebar; }
-  .app-hero { grid-area: hero; }
-  .app-inspector {
-    grid-area: inspector;
-    max-height: 60vh;
-  }
-}
-
-/* Small laptop / tablet: sidebar becomes top horizontal strip. */
+/* Small laptop / tablet: single-column stack. */
 @media (max-width: 1024px) {
   .app-grid {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      'sidebar'
-      'hero'
-      'inspector';
     gap: 0.75rem;
     padding: 0.75rem;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .app-sidebar {
-    position: sticky;
-    top: 0;
-    z-index: 40;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    align-items: stretch;
-    gap: 1rem;
-    padding: 0.5rem 0.75rem;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border-dim);
+    overflow-y: visible;
   }
 
-  .app-sidebar > .brand {
-    flex-shrink: 0;
-    border-bottom: none;
-    border-right: 1px solid var(--border-dim);
-    padding-right: 1rem;
-    min-width: 14rem;
-  }
-
-  .app-sidebar > .sidebar-section {
-    flex-shrink: 0;
-    min-width: 14rem;
+  .config-section {
+    max-height: 50vh;
   }
 
   .preset-card-grid {
@@ -1227,17 +1283,6 @@ input[type='range']:active::-moz-range-thumb {
 
 /* Mobile: single-column stack, smaller header. */
 @media (max-width: 640px) {
-  .app-sidebar {
-    flex-direction: column;
-    overflow-x: visible;
-  }
-
-  .app-sidebar > .brand,
-  .app-sidebar > .sidebar-section {
-    border-right: none;
-    min-width: 0;
-  }
-
   h1 {
     font-size: 1.1rem;
   }

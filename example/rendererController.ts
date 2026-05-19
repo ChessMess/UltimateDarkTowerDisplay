@@ -115,10 +115,10 @@ function setActiveViewButton(activeId: ViewButtonId, els: DomElements): void {
   }
 }
 
-function syncToolbar3DState(els: DomElements): void {
-  if (els.threeDOptionsEl) {
-    els.threeDOptionsEl.classList.toggle('three-d-inactive', !is3DViewVisible());
-  }
+function syncToolbar3DState(_els: DomElements): void {
+  const inactive = !is3DViewVisible();
+  const panels = document.querySelectorAll<HTMLElement>('[data-3d-only="true"]');
+  panels.forEach((p) => p.classList.toggle('three-d-inactive', inactive));
 }
 
 // The default sound pack is wired in by Tower3DView's constructor — the

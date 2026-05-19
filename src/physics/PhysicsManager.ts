@@ -1,14 +1,17 @@
 import * as THREE from 'three';
-import type { SealIdentifier, TowerPhysicsHooks } from '../types';
+import type { SealIdentifier, TowerPhysicsHooks, TowerState } from '../types';
 import type { PhysicsConfig, ResolvedPhysicsConfig } from './types';
 import { resolvePhysics } from './PhysicsResolver';
 import { buildStaticColliderSpecs } from './buildColliders';
+import { loadSkullModel, type SkullTemplate } from './SkullModelLoader';
+import { cloneSkullMesh, buildHullColliderDesc } from './SkullSpawner';
 
 // Rapier is dynamic-imported inside init() so the WASM init runs once.
 type RAPIER_NS = typeof import('@dimforge/rapier3d-compat');
 type RapierWorld = import('@dimforge/rapier3d-compat').World;
 type RapierRigidBody = import('@dimforge/rapier3d-compat').RigidBody;
 type RapierCollider = import('@dimforge/rapier3d-compat').Collider;
+type RapierColliderDesc = import('@dimforge/rapier3d-compat').ColliderDesc;
 
 /** Per-frame scratch for sync'ing kinematic drum trimesh poses without alloc. */
 const drumStepScratch = {
@@ -57,7 +60,15 @@ interface SealColliderRef {
 
 interface SkullRef {
   body: RapierRigidBody;
-  mesh: THREE.Mesh;
+  /** Widened from Mesh to Object3D so factory- and template-supplied meshes (Groups, hierarchies) work. */
+  mesh: THREE.Object3D;
+  /**
+   * When true, the geometry and material are exclusively owned by this skull
+   * and are disposed on despawn. Only set for the internal default-sphere
+   * path; factory- or template-supplied meshes share assets with other
+   * spawns, so the manager only calls `removeFromParent()` for those.
+   */
+  ownsAssets: boolean;
 }
 
 function sealKey(level: SealLevel, side: SealSide): string {
@@ -78,6 +89,9 @@ export class PhysicsManager {
   private unsubFrame: () => void = () => { };
   private unsubSeal: () => void = () => { };
   private unsubModel: () => void = () => { };
+  private unsubState: () => void = () => { };
+  /** Last seen `state.beam.count` — used to detect increases for auto-drop. */
+  private prevBeamCount: number | null = null;
 
   private brokenSet: Set<string> = new Set();
   private trimeshCount = 0;
@@ -93,9 +107,17 @@ export class PhysicsManager {
   private boardLipBody: RapierRigidBody | null = null;
   private boardLipCollider: RapierCollider | null = null;
 
-  private skull: SkullRef | null = null;
-  /** True if dropSkull() was called before colliders were built. */
-  private pendingDrop = false;
+  private skulls: SkullRef[] = [];
+  /** Number of dropSkull() calls received before colliders were built. Drained on ready. */
+  private pendingDrops = 0;
+  /** Loaded skull-model template (null until first `modelUrl` resolves, or stays null if unset). */
+  private skullTemplate: SkullTemplate | null = null;
+  /** The URL the current `skullTemplate` came from, used to short-circuit no-op config updates. */
+  private skullTemplateUrl: string | null = null;
+  /** Increments on every `modelUrl` change; stale loads check this before assigning. */
+  private skullLoadGen = 0;
+  /** Aborts an in-flight `loadSkullModel` when the URL changes mid-load. */
+  private skullLoadAbort: AbortController | null = null;
   private disposed = false;
   /** True once `onModelLoaded` has fired and colliders are built. */
   private ready = false;
@@ -133,6 +155,51 @@ export class PhysicsManager {
     this.unsubFrame = this.hooks.onFrame((dt) => this.step(dt));
     this.unsubSeal = this.hooks.onSealsApplied((broken) => this.applyBrokenSeals(broken));
     this.unsubModel = this.hooks.onModelLoaded((info) => this.onModelReady(info));
+    this.unsubState = this.hooks.onStateApplied((state) => this.handleStateApplied(state));
+
+    // If the user supplied a skull modelUrl at attach time, kick the load off
+    // now in parallel with the tower's GLB load. Drops queued before either
+    // resolves stay in pendingDrops and drain when both are ready.
+    if (this.config.skull.modelUrl) {
+      this.startSkullModelLoad(this.config.skull.modelUrl);
+    }
+  }
+
+  /**
+   * Kick off (or restart) a skull-model load. Each call bumps the generation
+   * counter so any in-flight load resolving after a URL change is dropped on
+   * the floor. Drains `pendingDrops` once the template is ready.
+   */
+  private startSkullModelLoad(url: string): void {
+    const gen = ++this.skullLoadGen;
+    this.skullLoadAbort?.abort();
+    const abort = new AbortController();
+    this.skullLoadAbort = abort;
+
+    loadSkullModel(url, abort.signal).then(
+      (template) => {
+        if (this.disposed || gen !== this.skullLoadGen) return;
+        this.skullTemplate = template;
+        this.skullTemplateUrl = url;
+        this.drainPendingDropsIfReady();
+      },
+      (err) => {
+        if (gen !== this.skullLoadGen) return;
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        // eslint-disable-next-line no-console
+        console.error('[ultimatedarktowerdisplay/physics] skull model load failed', err);
+      },
+    );
+  }
+
+  /** Drain queued drops when both the GLB tower and (if configured) the skull template are ready. */
+  private drainPendingDropsIfReady(): void {
+    if (!this.ready) return;
+    if (this.config.skull.modelUrl && !this.config.skull.meshFactory && !this.skullTemplate) return;
+    while (this.pendingDrops > 0) {
+      this.pendingDrops--;
+      this.dropSkull();
+    }
   }
 
   /**
@@ -166,23 +233,27 @@ export class PhysicsManager {
     // Apply seal-debug overlay visibility if it was set before colliders existed.
     this.applySealDebugVisibility();
 
-    if (this.pendingDrop) {
-      this.pendingDrop = false;
-      this.dropSkull();
-    }
+    this.drainPendingDropsIfReady();
   }
 
   /**
-   * Spawn (or respawn) the single skull just above the top of the tower.
-   * If init() hasn't resolved yet, the drop is queued until it does.
+   * Spawn one skull just above the top of the tower. No-op once
+   * `skull.maxCount` is reached. If init() hasn't resolved yet, the drop
+   * is queued until it does.
    */
   dropSkull(): void {
     if (this.disposed) return;
     if (!this.rapier || !this.world || !this.ready) {
-      this.pendingDrop = true;
+      this.pendingDrops++;
       return;
     }
-    this.despawnSkull();
+    // Defer when a model URL is set but the template hasn't resolved yet.
+    // `meshFactory` short-circuits this (it doesn't need a template).
+    if (this.config.skull.modelUrl && !this.config.skull.meshFactory && !this.skullTemplate) {
+      this.pendingDrops++;
+      return;
+    }
+    if (this.skulls.length >= this.config.skull.maxCount) return;
 
     const RAPIER = this.rapier;
     const R = this.bounds.modelRadius;
@@ -205,20 +276,69 @@ export class PhysicsManager {
       .setLinearDamping(this.config.skull.linearDamping);
     const body = this.world.createRigidBody(bodyDesc);
 
-    const colliderDesc = RAPIER.ColliderDesc.ball(r)
-      .setFriction(this.config.skull.friction)
-      .setRestitution(this.config.skull.restitution);
+    // Collider dispatch: hull only when we have a loaded template AND the
+    // user asked for it. Factory mode forces sphere — no model data to hull.
+    let colliderDesc: RapierColliderDesc | null = null;
+    if (
+      !this.config.skull.meshFactory
+      && this.skullTemplate
+      && this.config.skull.colliderShape === 'hull'
+    ) {
+      const density = this.config.skull.density ?? this.skullTemplate.density;
+      colliderDesc = buildHullColliderDesc(
+        RAPIER,
+        this.skullTemplate.hullPoints,
+        r,
+        this.config.skull.friction,
+        this.config.skull.restitution,
+        density,
+      );
+      if (!colliderDesc) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[ultimatedarktowerdisplay/physics] convex hull degenerate, falling back to ball',
+        );
+      }
+    }
+    if (!colliderDesc) {
+      colliderDesc = RAPIER.ColliderDesc.ball(r)
+        .setFriction(this.config.skull.friction)
+        .setRestitution(this.config.skull.restitution);
+      if (this.config.skull.density !== undefined) {
+        colliderDesc.setDensity(this.config.skull.density);
+      }
+    }
     this.world.createCollider(colliderDesc, body);
 
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(r, 16, 12),
-      new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.6, metalness: 0.1 }),
-    );
+    let mesh: THREE.Object3D;
+    let ownsAssets = false;
+    if (this.config.skull.meshFactory) {
+      mesh = this.config.skull.meshFactory(r);
+    } else if (this.skullTemplate) {
+      mesh = cloneSkullMesh(this.skullTemplate.template, r);
+    } else {
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 16, 12),
+        new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.6, metalness: 0.1 }),
+      );
+      sphere.castShadow = true;
+      ownsAssets = true;
+      mesh = sphere;
+    }
     mesh.position.set(spawnX, spawnY, spawnZ);
-    mesh.castShadow = true;
     this.hooks.scene.add(mesh);
 
-    this.skull = { body, mesh };
+    this.skulls.push({ body, mesh, ownsAssets });
+  }
+
+  /**
+   * Remove every active skull from the world and cancel any queued drops.
+   * Safe to call before init resolves.
+   */
+  clearSkulls(): void {
+    if (this.disposed) return;
+    this.pendingDrops = 0;
+    this.despawnAllSkulls();
   }
 
   /** Tear down the Rapier world and release all references. Safe to re-call. */
@@ -229,11 +349,15 @@ export class PhysicsManager {
     this.unsubFrame();
     this.unsubSeal();
     this.unsubModel();
+    this.unsubState();
     this.unsubFrame = () => { };
     this.unsubSeal = () => { };
     this.unsubModel = () => { };
+    this.unsubState = () => { };
+    this.skullLoadAbort?.abort();
+    this.skullLoadAbort = null;
 
-    this.despawnSkull();
+    this.despawnAllSkulls();
 
     if (this.debugLines) {
       this.debugLines.removeFromParent();
@@ -582,16 +706,15 @@ export class PhysicsManager {
     void dt;
     this.world.step();
 
-    if (this.skull) {
-      const t = this.skull.body.translation();
-      this.skull.mesh.position.set(t.x, t.y, t.z);
-      const r = this.skull.body.rotation();
-      this.skull.mesh.quaternion.set(r.x, r.y, r.z, r.w);
-
-      // OOB despawn: if the skull falls below the safety net Y, remove it.
-      if (t.y < this.bounds.modelBottomY - R * 4) {
-        this.despawnSkull();
-      }
+    // Reverse iteration so OOB-driven splices don't perturb the walk.
+    const oobY = this.bounds.modelBottomY - R * 4;
+    for (let i = this.skulls.length - 1; i >= 0; i--) {
+      const s = this.skulls[i];
+      const t = s.body.translation();
+      s.mesh.position.set(t.x, t.y, t.z);
+      const r = s.body.rotation();
+      s.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+      if (t.y < oobY) this.despawnSkullAt(i);
     }
 
     if (this.debugLines) this.updateDebugOverlay();
@@ -679,13 +802,35 @@ export class PhysicsManager {
       }
     }
     if (this.config.skull.angularDamping !== prev.skull.angularDamping) {
-      this.skull?.body.setAngularDamping(this.config.skull.angularDamping);
+      for (const s of this.skulls) s.body.setAngularDamping(this.config.skull.angularDamping);
     }
     if (this.config.skull.linearDamping !== prev.skull.linearDamping) {
-      this.skull?.body.setLinearDamping(this.config.skull.linearDamping);
+      for (const s of this.skulls) s.body.setLinearDamping(this.config.skull.linearDamping);
     }
     if (this.config.debug.sealColliders !== prev.debug.sealColliders) {
       this.applySealDebugVisibility();
+    }
+    if (this.config.skull.modelUrl !== prev.skull.modelUrl) {
+      // URL changed: cancel any in-flight load, drop the old template, and
+      // either start a new load or leave the manager in sphere-default mode.
+      this.skullLoadAbort?.abort();
+      this.skullLoadAbort = null;
+      this.skullTemplate = null;
+      this.skullTemplateUrl = null;
+      if (this.config.skull.modelUrl) {
+        this.startSkullModelLoad(this.config.skull.modelUrl);
+      }
+    }
+    if (
+      this.config.skull.colliderShape === 'hull'
+      && !this.config.skull.modelUrl
+      && prev.skull.colliderShape !== 'hull'
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[ultimatedarktowerdisplay/physics] colliderShape: "hull" requires a modelUrl — ' +
+        'next drop will fall back to a ball collider.',
+      );
     }
     // Note: `debug.colliders` toggles the full Rapier debug overlay. We
     // build it lazily at attach time only — flipping it on later would
@@ -698,6 +843,24 @@ export class PhysicsManager {
     for (const [, ref] of this.sealColliders) {
       ref.wireframe.visible = visible;
     }
+  }
+
+  /**
+   * Fires on every host `applyState`. When `skull.autoDropOnSkullCountIncrease`
+   * is enabled, a strict increase in `state.beam.count` triggers one
+   * `dropSkull()`. Tracks `prevBeamCount` even when the flag is off so a
+   * stale delta doesn't fire spuriously after re-enabling.
+   */
+  private handleStateApplied(state: TowerState): void {
+    const count = state.beam.count;
+    if (
+      this.config.skull.autoDropOnSkullCountIncrease
+      && this.prevBeamCount !== null
+      && count > this.prevBeamCount
+    ) {
+      this.dropSkull();
+    }
+    this.prevBeamCount = count;
   }
 
   /** Apply broken-seal updates by toggling seal collider enablement. */
@@ -716,18 +879,32 @@ export class PhysicsManager {
     this.brokenSet = newBroken;
   }
 
-  private despawnSkull(): void {
-    if (!this.skull || !this.world) return;
-    this.world.removeRigidBody(this.skull.body);
-    this.skull.mesh.removeFromParent();
-    this.skull.mesh.geometry.dispose();
-    const mat = this.skull.mesh.material;
-    if (Array.isArray(mat)) {
-      for (const m of mat) m.dispose();
-    } else {
-      (mat as THREE.Material).dispose();
+  private despawnSkullAt(index: number): void {
+    if (!this.world) return;
+    const skull = this.skulls[index];
+    if (!skull) return;
+    this.world.removeRigidBody(skull.body);
+    skull.mesh.removeFromParent();
+    if (skull.ownsAssets) {
+      skull.mesh.traverse((obj) => {
+        const m = obj as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.geometry.dispose();
+        const mat = m.material;
+        if (Array.isArray(mat)) {
+          for (const x of mat) x.dispose();
+        } else {
+          mat.dispose();
+        }
+      });
     }
-    this.skull = null;
+    this.skulls.splice(index, 1);
+  }
+
+  private despawnAllSkulls(): void {
+    for (let i = this.skulls.length - 1; i >= 0; i--) {
+      this.despawnSkullAt(i);
+    }
   }
 }
 

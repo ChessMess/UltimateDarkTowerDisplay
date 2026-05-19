@@ -64,4 +64,46 @@ describe('resolvePhysics', () => {
     resolvePhysics({ board: { friction: 0.9 } });
     expect(JSON.stringify(DEFAULT_PHYSICS)).toBe(before);
   });
+
+  it('defaults skull.meshFactory to undefined', () => {
+    expect(DEFAULT_PHYSICS.skull.meshFactory).toBeUndefined();
+    expect(resolvePhysics({}).skull.meshFactory).toBeUndefined();
+  });
+
+  it('carries skull.meshFactory by reference', () => {
+    const fn = (_r: number): unknown => ({});
+    const out = resolvePhysics({ skull: { meshFactory: fn as never } });
+    expect(out.skull.meshFactory).toBe(fn);
+  });
+
+  it('defaults skull.modelUrl to undefined and skull.colliderShape to "sphere"', () => {
+    expect(DEFAULT_PHYSICS.skull.modelUrl).toBeUndefined();
+    expect(DEFAULT_PHYSICS.skull.colliderShape).toBe('sphere');
+    const out = resolvePhysics({});
+    expect(out.skull.modelUrl).toBeUndefined();
+    expect(out.skull.colliderShape).toBe('sphere');
+  });
+
+  it('carries skull.modelUrl and leaves colliderShape at default', () => {
+    const out = resolvePhysics({ skull: { modelUrl: '/foo.glb' } });
+    expect(out.skull.modelUrl).toBe('/foo.glb');
+    expect(out.skull.colliderShape).toBe('sphere');
+  });
+
+  it('honors a colliderShape override', () => {
+    const out = resolvePhysics({ skull: { modelUrl: '/foo.glb', colliderShape: 'hull' } });
+    expect(out.skull.colliderShape).toBe('hull');
+  });
+
+  it('defaults skull.density to undefined and carries an override', () => {
+    expect(DEFAULT_PHYSICS.skull.density).toBeUndefined();
+    const out = resolvePhysics({ skull: { density: 2.5 } });
+    expect(out.skull.density).toBe(2.5);
+  });
+
+  it('defaults skull.autoDropOnSkullCountIncrease to false and carries an override', () => {
+    expect(DEFAULT_PHYSICS.skull.autoDropOnSkullCountIncrease).toBe(false);
+    const out = resolvePhysics({ skull: { autoDropOnSkullCountIncrease: true } });
+    expect(out.skull.autoDropOnSkullCountIncrease).toBe(true);
+  });
 });

@@ -239,9 +239,13 @@ export class TowerStateReadout implements ITowerDisplay {
       ? `<div class="tdr-led-seq">LED Sequence: ${esc(seqLabel)}</div>`
       : '';
 
+    const ledsHint = this._clickToToggleLeds
+      ? '<span class="tdr-leds-hint">click to change</span>'
+      : '';
+
     this.container.innerHTML = `
       <div class="tdr-box">
-        <div class="tdr-section tdr-leds"><h3>LEDs</h3>${ledRows}</div>
+        <div class="tdr-section tdr-leds"><h3>LEDs${ledsHint}</h3>${ledRows}</div>
         <div class="tdr-section tdr-drums"><h3>Drums</h3>${drumRows}</div>
         ${this.renderSealsSection()}
         <div class="tdr-section tdr-info">

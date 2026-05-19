@@ -12,7 +12,7 @@ It does **not** affect game state. Skulls are purely a visual layer driven by th
 
 MVP scope:
 
-- One skull at a time (`dropSkull()` despawns the previous before spawning).
+- Up to `skull.maxCount` simultaneous skulls (default 10). Each `dropSkull()` adds one; the call is a no-op once the cap is reached. `clearSkulls()` removes every active skull.
 - User-triggered. No state event or sequence currently spawns skulls automatically.
 - No skull-impact audio yet.
 
@@ -94,12 +94,51 @@ If a skull is resting on a seal when that seal breaks, the collider is disabled 
 
 The skull is a Rapier dynamic rigid body with:
 
-- A sphere collider (radius = `skull.radiusFactor × modelRadius`).
+- A sphere collider by default (radius = `skull.radiusFactor × modelRadius`), or a convex hull derived from `skull.modelUrl` when `skull.colliderShape === 'hull'`.
 - **CCD enabled** to reduce tunneling during fast motion.
-- Tunable friction/restitution.
+- Tunable friction/restitution (hull dynamics may need separate tuning).
 - Tunable angular/linear damping.
 
-It is paired with a Three.js sphere mesh; each frame after `world.step()` the mesh position and quaternion are copied from the body.
+The **visual** mesh is a Three.js sphere by default, or a clone of the `skull.modelUrl` template, or whatever `skull.meshFactory` returns. Visual mesh and physics collider are independent — see the [Skull Appearance](#skull-appearance) cheatsheet below.
+
+Each frame after `world.step()` the mesh position and quaternion are copied from the body.
+
+### Skull Appearance
+
+| Visual | Collider | How |
+| --- | --- | --- |
+| Default sphere | Ball | (default — no extra config) |
+| GLB model | Ball | `skull: { modelUrl: '/foo.glb' }` |
+| GLB model | Convex hull | `skull: { modelUrl: '/foo.glb', colliderShape: 'hull' }` |
+| Custom `Object3D` | Ball (forced) | `skull: { meshFactory: (r) => myObj }` |
+
+`meshFactory` overrides `modelUrl` when both are set. Hull collider requires `modelUrl` — falls back to ball with a console warn otherwise.
+
+### Authoring skull models
+
+The library accepts any Draco-compressed `.glb` via `skull.modelUrl`. The example app discovers files in [`src/3d/assets/`](../src/3d/assets/) matching `skull_*.glb` and populates its dropdown from that glob — drop a new file in, restart the dev server, and it shows up.
+
+**Blender export workflow (recommended):**
+
+1. **File → Import → STL** — pick your source mesh.
+2. *(Optional but recommended for high-poly STLs.)* Add a **Decimate** modifier in the Properties panel → set Ratio between `0.05` and `0.10` → **Apply**. Target ~5–10k triangles for crisp visuals at typical skull sizes.
+3. **Edit Mode → A → Mesh → Normals → Recalculate Outside** to fix any flipped triangles.
+4. **Object Mode → File → Export → glTF 2.0 (.glb)**.
+5. In the export sidebar:
+   - **Format**: `glTF Binary (.glb)`
+   - **Geometry → Compression**: enable Draco. Compression level `6`, position `14`, normal `10`, generic `12` (Blender defaults).
+   - **Transform**: leave at defaults (`+Y up`).
+6. Save as `src/3d/assets/skull_<name>.glb` (e.g. `skull_1.glb`).
+
+Expected size: 200 KB – 1 MB for a 5–10k-tri mesh with Draco. The library decodes Draco using the same gstatic decoder URL as the tower model (override via the host's `dracoDecoderPath` if you self-host).
+
+**Hull-point cloud:** automatic — the library samples up to 300 stride-spaced positions from the loaded mesh and feeds them to Rapier's convex-hull builder. No sidecar files needed.
+
+### State-driven triggers
+
+The physics manager subscribes to `TowerPhysicsHooks.onStateApplied`, which fires after every `applyState` on the host `Tower3DView`. When `skull.autoDropOnSkullCountIncrease` is enabled, an increase in `state.beam.count` between two consecutive calls triggers exactly one `dropSkull()` (mirroring the readout's "💀 Skull Drop!" highlight).
+
+The subscription is permanent regardless of the flag; toggling is live and doesn't reset the previous count, so a stale delta won't trigger a spurious drop after re-enabling.
 
 ### Where physics runs in the render loop
 
@@ -136,6 +175,12 @@ A deeply-nested partial. Every field is optional; missing leaves fall back to `D
 | `skull.restitution`        | `number`  | `0.2`   | Next drop      | Bounciness of the skull body. `0` = stick, `1` = perfect bounce.       |
 | `skull.angularDamping`     | `number`  | `1.0`   | Live           | Exponential decay on angular velocity (rolling resistance proxy).      |
 | `skull.linearDamping`      | `number`  | `0.0`   | Live           | Exponential decay on linear velocity. Use sparingly.                   |
+| `skull.maxCount`           | `number`  | `10`    | Live           | Maximum simultaneous skulls. Drops past the cap are no-ops; lowering this does not remove existing skulls. |
+| `skull.modelUrl`           | `string`  | `undefined` | Next drop (async) | URL to a Draco-compressed `.glb` used as the visual mesh. `.stl` is accepted with a warn (heavier, slower); export to Draco GLB from Blender for production. Library caches loaded templates module-globally — repeated attach/detach cycles never re-fetch. See [Authoring skull models](#authoring-skull-models) for the recommended workflow. |
+| `skull.colliderShape`      | `'sphere' \| 'hull'` | `'sphere'` | Next drop | Collider shape. `'hull'` derives a convex hull from `modelUrl`'s point cloud; falls back to sphere when `modelUrl` is unset or the hull is degenerate. May need re-tuning of friction/restitution. |
+| `skull.meshFactory`        | `(r: number) => Object3D` | `undefined` | Next drop | Per-spawn visual override. Forces `colliderShape` to `'sphere'`. The consumer owns asset lifecycle — the manager only calls `removeFromParent()` on despawn. Not JSON-serializable (function). |
+| `skull.density`            | `number`  | `undefined` | Next drop | Density override. Only meaningful for hull colliders, where the template carries an auto-computed density that normalizes hull mass to the equivalent sphere. |
+| `skull.autoDropOnSkullCountIncrease` | `boolean` | `false` | Live | When true, auto-calls `dropSkull()` each time `state.beam.count` increases between consecutive `applyState` calls. Mirrors the readout's "💀 Skull Drop!" highlight. Honors `skull.maxCount` like manual drops. |
 | `drum.innerRadiusFactor`   | `number`  | `0.30`  | World rebuild  | Used for drop-jitter heuristics and (future) parametric drum walls.    |
 | `drum.halfHeightFactor`    | `number`  | `0.15`  | World rebuild  | Drum interior half-height as a fraction of `modelRadius`.              |
 | `drum.friction`            | `number`  | `0.15`  | Live           | Friction on kinematic drum trimeshes (Min combine rule).               |
@@ -157,16 +202,18 @@ A deeply-nested partial. Every field is optional; missing leaves fall back to `D
 ```ts
 interface SkullPhysicsHandle {
   dropSkull(): void;
+  clearSkulls(): void;
   getPhysicsConfig(): ResolvedPhysicsConfig;
   applyPhysicsConfig(partial: PhysicsConfig): void;
   dispose(): void;
 }
 ```
 
-- `dropSkull()` — Spawn a fresh skull just above `modelTopY`. Idempotent: respawns if one already exists.
+- `dropSkull()` — Add one skull just above `modelTopY`. No-op once `skull.maxCount` simultaneous skulls are live; calls made before init resolves are queued and replayed once it does.
+- `clearSkulls()` — Remove every active skull immediately and cancel any queued drops. Safe to call before init resolves.
 - `getPhysicsConfig()` — Deep-cloned snapshot of the fully-resolved config. Safe to mutate.
 - `applyPhysicsConfig(partial)` — Merge a partial config on top of the current one. See lifecycle semantics above.
-- `dispose()` — Tear down the Rapier world, remove the skull, and unsubscribe from frame and seal-state callbacks. Safe to call multiple times.
+- `dispose()` — Tear down the Rapier world, remove every skull, and unsubscribe from frame and seal-state callbacks. Safe to call multiple times.
 
 ### `DEFAULT_PHYSICS` and `resolvePhysics`
 
@@ -186,7 +233,7 @@ Copy-paste into an editor (or the example app's "Physics" config tab) to see eve
 ```json
 {
   "debug":  { "colliders": false, "sealColliders": false },
-  "skull":  { "radiusFactor": 0.025, "friction": 0.8, "restitution": 0.2, "angularDamping": 1.0, "linearDamping": 0.0 },
+  "skull":  { "radiusFactor": 0.025, "friction": 0.8, "restitution": 0.2, "angularDamping": 1.0, "linearDamping": 0.0, "maxCount": 10, "modelUrl": null, "colliderShape": "sphere", "density": null, "autoDropOnSkullCountIncrease": false },
   "drum":   { "innerRadiusFactor": 0.30, "halfHeightFactor": 0.15, "friction": 0.15 },
   "seal":   { "friction": 0.05 },
   "static": { "friction": 0.1 },
@@ -208,24 +255,30 @@ Turn on `debug.sealColliders` (seal-only) or `debug.colliders` (world) and inspe
 | Skull tunnels through closed geometry at high rotation speed. | Verify CCD is still enabled, and avoid teleport-style drum updates where possible.             |
 | Skull falls off the visual board edge.                        | Increase `board.radiusFactor`; floor and lip are intentionally decoupled from board visibility.|
 | Skull rolls for too long after landing.                       | Increase `skull.angularDamping` (and optionally `skull.linearDamping`).                        |
+| Hull-collider skulls feel floaty or settle wrong.             | Set `skull.density` explicitly (default heuristic normalizes to sphere-equivalent mass; precise tuning needs your hull's true volume). |
+| Switching to a GLB model wedged a skull in the geometry.      | Set `colliderShape: 'sphere'` for the affected model — visual stays, physics reverts to the proven sphere tuning. |
+| Auto-drop triggers on every state apply, not just count increases. | Verify `state.beam.count` is actually increasing — the delta-check uses strict `>`. Snapshot-replay tools that re-feed identical states won't trigger drops. |
 
 ## Limitations (MVP)
 
-- **One skull at a time.** Subsequent `dropSkull()` calls replace the existing skull.
 - **No skull-impact audio.** A future version could feed contact events into the existing `TowerSampleAudio` for clatter sounds.
 - **Re-enabling a seal mid-fall can cause penetration.** If you break a seal under a resting skull, then restore the seal before the skull falls clear, the collider may re-enable inside the skull's volume. Rapier resolves this with a snap-out, which can look jumpy.
 - **Snap-mode drum updates can fling skulls.** `Tower3DView.applyDrums(state, { animate: false })` writes a teleport into `rotation.y`. The kinematic body infers a single-frame angular velocity from that teleport, which can launch resting skulls. The MVP doesn't filter snap pulses.
 - **Gravity is unitless.** Set to `-9.81 × modelRadius` so it feels right at the model's scale. Not adjustable in MVP.
 - **`debug.colliders` is attach-time only.** Toggling it on after attach requires a full re-attach (`dispose` + `attachSkullPhysics`); the host application is responsible for that flow.
+- **Hull dynamics need re-tuning.** The bundled friction/restitution defaults are tuned for sphere skulls. Convex-hull skulls roll differently — expect to revisit `drum.friction`, `skull.restitution`, and `skull.density` per model.
+- **`meshFactory` is not JSON-serializable.** Functions are silently dropped by `JSON.stringify`, so they never appear in the example app's JSON-paste flow. Set programmatically only.
+- **Auto-drop uses `>` not `>=`.** A `beam.count` that ticks back down then up to the same value triggers a drop only on the second up-tick. Designed-as-intended (matches the readout highlight).
 
 ## Roadmap
 
 Non-goals for this MVP, in rough order of value:
 
-1. **Multi-skull support** with a small object pool (~10 simultaneous).
-2. **Impact audio** — short clatter samples on collider-vs-skull contacts.
-3. **State-event triggers** — wire `dropSkull()` to specific game-state transitions if the host wants automatic skulls.
-4. **Snap-mode filtering** — detect teleport-style drum updates and momentarily decouple kinematic colliders so resting skulls don't get flung.
+1. **Impact audio** — short clatter samples on collider-vs-skull contacts.
+2. **State-event triggers** — wire `dropSkull()` to specific game-state transitions if the host wants automatic skulls.
+3. **Snap-mode filtering** — detect teleport-style drum updates and momentarily decouple kinematic colliders so resting skulls don't get flung.
+4. **More state-driven triggers** — `autoDropOnSkullCountIncrease` is the first; future versions could expose `autoDropOnBrokenSeal`, `autoSpinDrumsOnPing`, etc., all sharing the `onStateApplied` subscription.
+5. **Consumer-overridable `dracoDecoderPath`** — `attachSkullPhysics` currently uses the same gstatic CDN as the tower. A `skull.dracoDecoderPath` config leaf would let self-hosted setups point at their own copy.
 
 ## Verification reference
 

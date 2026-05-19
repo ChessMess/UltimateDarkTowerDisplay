@@ -1,9 +1,11 @@
 import type { SoundPack } from '../audio/soundPack';
 
-/** Recursively make every property of `T` required. */
-export type DeepRequired<T> = T extends object
-  ? { [K in keyof T]-?: DeepRequired<T[K]> }
-  : T;
+/** Recursively make every property of `T` required. Functions pass through unchanged. */
+export type DeepRequired<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends object
+    ? { [K in keyof T]-?: DeepRequired<T[K]> }
+    : T;
 
 /** RGB hex as a single number (e.g. `0xff2020`). */
 export type HexColor = number;

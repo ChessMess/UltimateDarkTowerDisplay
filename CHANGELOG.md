@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-skull physics.** `dropSkull()` now accumulates up to `skull.maxCount` (default `10`) simultaneous skulls on the board instead of replacing the previous one. New `clearSkulls()` method on `SkullPhysicsHandle` removes every active skull and cancels any drops queued before init resolved. The example app's Physics panel gains a Clear Skulls button and a Max skulls slider.
+- **Optional skull models + state-driven auto-drop.** `PhysicsConfig.skull` gains five new fields:
+  - `modelUrl` — URL of a `.glb` to use as the skull's visual mesh. The library loads the GLB once and caches it module-globally; `.stl` is also supported with a console warn.
+  - `colliderShape` — `'sphere'` (default) preserves all current tuning regardless of visual; `'hull'` derives a convex hull from `modelUrl`'s point cloud.
+  - `meshFactory` — per-spawn `Object3D` callback for full visual control. Forces sphere collider.
+  - `density` — optional override for hull-collider mass.
+  - `autoDropOnSkullCountIncrease` — when true, drops one skull automatically each time `state.beam.count` increases between consecutive `applyState` calls (mirrors the readout's "💀 Skull Drop!" highlight).
+
+  `TowerPhysicsHooks` gains a new `onStateApplied(cb)` subscription — symmetric to the existing `onSealsApplied`. Add-ons (not just skull physics) can use it to react to game-state deltas. The library's `/physics` subpath gains `GLTFLoader` + `DRACOLoader` (defaulting to the same gstatic decoder URL as the tower model) plus a dynamic-imported `STLLoader` fallback path; the main `dist/index.esm.js` bundle is unchanged. The example app's Physics panel gains a Skull Appearance row (Model + Collider dropdowns) and a Triggers row (Auto-drop checkbox); the existing JSON-paste flow roundtrips the new leaves (except `meshFactory`, which is intentionally function-only). The dropdown discovers skull GLBs via `import.meta.glob('../src/3d/assets/skull_*.glb')` — drop a Draco-compressed `.glb` (Blender → File → Export → glTF 2.0 with Geometry Compression) into `src/3d/assets/` and it shows up after a dev-server restart. See [PHYSICS §Authoring skull models](docs/PHYSICS.md#authoring-skull-models) for the recommended export pipeline.
+
 ## [0.5.0]
 
 ### Added

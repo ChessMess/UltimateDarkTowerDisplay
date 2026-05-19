@@ -1,7 +1,7 @@
 import type { TowerDisplay } from '../src/index';
 import type { ResolvedLightingConfig } from '../src/3d/types';
 import type { DomElements } from './dom';
-import { is3DViewVisible, getSceneLights } from './rendererController';
+import { getSceneLights, is3DViewVisible } from './rendererController';
 import { getActiveConfigType, refreshConfigPreview } from './configEditor';
 
 function syncSceneLightControls(lighting: ResolvedLightingConfig, els: DomElements): void {
@@ -56,7 +56,7 @@ function bindLightSlider(
   apply: (v: number) => void,
   getDisplay: () => TowerDisplay,
   els: DomElements,
-  decimals = 2
+  decimals = 2,
 ): void {
   if (!rng) return;
   rng.addEventListener('input', () => {

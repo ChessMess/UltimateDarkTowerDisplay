@@ -7,7 +7,6 @@ export interface DomElements {
   towerContainer: HTMLElement;
   readoutContainer: HTMLElement;
   stateBadge: HTMLElement | null;
-  threeDOptionsEl: HTMLElement | null;
   rngHemi: HTMLInputElement | null;
   rngKey: HTMLInputElement | null;
   rngFill: HTMLInputElement | null;
@@ -85,7 +84,6 @@ export function queryDom(): DomElements {
     towerContainer,
     readoutContainer,
     stateBadge: document.getElementById('state-badge'),
-    threeDOptionsEl: document.getElementById('three-d-options'),
     rngHemi: document.getElementById('rng-hemi') as HTMLInputElement | null,
     rngKey: document.getElementById('rng-key') as HTMLInputElement | null,
     rngFill: document.getElementById('rng-fill') as HTMLInputElement | null,

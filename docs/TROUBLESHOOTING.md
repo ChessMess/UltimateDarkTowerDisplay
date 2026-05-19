@@ -63,6 +63,35 @@ The physics subpath loads Rapier's WebAssembly module on first `attachSkullPhysi
 
 If you do not import `ultimatedarktowerdisplay/physics`, Rapier is never loaded. The main package entry never references it.
 
+## Skull model not appearing
+
+Symptoms: the skull dropdown is set to a model, but `Drop Skull` produces a default white sphere.
+
+- Confirm a Draco-compressed GLB exists at the URL you passed. The example app discovers GLBs at boot via `import.meta.glob('../src/3d/assets/skull_*.glb')` — if you added a new file, restart `npm run dev:example` (Vite caches glob results until restart).
+- Open DevTools Network: the GLB should return 200 with `Content-Type: model/gltf-binary` (or `application/octet-stream`).
+- Inspect the console for `skull model load failed` — that path logs the loader error verbatim. The most common failure is a missing/inaccessible Draco decoder: the library defaults to `https://www.gstatic.com/draco/versioned/decoders/1.5.6/`; on networks that block gstatic, self-host the decoder.
+
+## `convex hull degenerate, falling back to ball` warning
+
+The convex-hull builder rejected the supplied point cloud. Causes:
+
+- The mesh has fewer than 4 non-coplanar vertices (extremely flat or degenerate input).
+- The mesh's bounding sphere has zero radius (empty geometry).
+
+Fallback is automatic — the dropped skull uses a ball collider with the configured visual. Re-export the model from Blender with normals recalculated and any degenerate triangles removed.
+
+## STL loaded directly instead of the GLB
+
+The lib logs a warning when an `.stl` URL is supplied. STLs work but are large (no compression, no index reuse) and skip the Blender export's silhouette-preserving decimation. Re-export to a Draco-compressed `.glb` (Blender → File → Export → glTF 2.0, enable Geometry Compression) for ~10× smaller downloads.
+
+## Auto-drop checkbox is enabled but no skull falls
+
+`skull.autoDropOnSkullCountIncrease` only triggers on a strict `state.beam.count` *increase*. Verify:
+
+- The state actually has a higher `beam.count` than the previous `applyState` call (DevTools: inspect `getPhysicsConfig()` and the input state).
+- `skull.maxCount` isn't already reached — at the cap, both manual and auto-drops are no-ops.
+- Physics is attached (`getPhysicsHandle()` non-null). The 2D renderer doesn't run physics; `applyState` deltas are tracked only in the 3D view.
+
 ## Web Bluetooth and user-gesture requirements
 
 This package never opens a BLE connection. All BLE belongs to [`ultimatedarktower`](https://github.com/ChessMess/ultimatedarktower). The most common confusion: Web Bluetooth's `navigator.bluetooth.requestDevice` must be called from a user gesture (button click), or it throws.

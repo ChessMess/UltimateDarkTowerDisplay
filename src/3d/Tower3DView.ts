@@ -148,6 +148,11 @@ export class Tower3DView implements ITowerDisplay {
   private groundDiscManager: GroundDiscManager | null = null;
   private skyboxManager: SkyboxManager | null = null;
   private sealManager: SealManager = new SealManager();
+  /**
+   * Subscribers registered via `TowerPhysicsHooks.onStateApplied`. Fired
+   * after every `applyState` call.
+   */
+  private stateAppliedListeners: Array<(state: TowerState) => void> = [];
   private drumAudio: DrumRotationAudio = new DrumRotationAudio();
   private towerSampleAudio: TowerSampleAudio = new TowerSampleAudio();
   // Resolved audio state. `sequenceMapOverride` holds the user-supplied
@@ -278,6 +283,10 @@ export class Tower3DView implements ITowerDisplay {
       if (mapped !== undefined) effectiveSample = mapped;
     }
     this.towerSampleAudio.sync(effectiveSample, state.audio.loop, state.audio.volume, force);
+
+    // Fire `onStateApplied` subscribers (physics auto-drop, etc.) after every
+    // state-driven write. Listeners see the post-apply view.
+    for (const cb of this.stateAppliedListeners) cb(state);
   }
 
   private activeSequenceMap(): Record<number, number> {
@@ -311,6 +320,13 @@ export class Tower3DView implements ITowerDisplay {
         return () => { this.physicsFrameListeners.delete(cb); };
       },
       onSealsApplied: (cb) => this.sealManager.onSealsApplied(cb),
+      onStateApplied: (cb) => {
+        this.stateAppliedListeners.push(cb);
+        return () => {
+          const i = this.stateAppliedListeners.indexOf(cb);
+          if (i >= 0) this.stateAppliedListeners.splice(i, 1);
+        };
+      },
       onModelLoaded: (cb) => {
         this.physicsModelLoadListeners.add(cb);
         // Fire immediately if the model is already loaded.
@@ -608,6 +624,7 @@ export class Tower3DView implements ITowerDisplay {
     this.drumManager.dispose();
     this.physicsFrameListeners.clear();
     this.physicsModelLoadListeners.clear();
+    this.stateAppliedListeners = [];
     this.drumAudio.dispose();
     this.towerSampleAudio.dispose();
     if (this.model) {

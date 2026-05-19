@@ -20,6 +20,12 @@ export const DEFAULT_PHYSICS: ResolvedPhysicsConfig = {
     // skull in a couple of seconds without affecting falls/slides.
     angularDamping: 1.0,
     linearDamping: 0.0,
+    maxCount: 10,
+    modelUrl: undefined,
+    colliderShape: 'sphere',
+    density: undefined,
+    meshFactory: undefined,
+    autoDropOnSkullCountIncrease: false,
   },
   drum: {
     innerRadiusFactor: 0.30,
@@ -70,6 +76,13 @@ export function resolvePhysics(
       restitution: user?.skull?.restitution ?? base.skull.restitution,
       angularDamping: user?.skull?.angularDamping ?? base.skull.angularDamping,
       linearDamping: user?.skull?.linearDamping ?? base.skull.linearDamping,
+      maxCount: user?.skull?.maxCount ?? base.skull.maxCount,
+      modelUrl: user?.skull?.modelUrl ?? base.skull.modelUrl,
+      colliderShape: user?.skull?.colliderShape ?? base.skull.colliderShape,
+      density: user?.skull?.density ?? base.skull.density,
+      meshFactory: user?.skull?.meshFactory ?? base.skull.meshFactory,
+      autoDropOnSkullCountIncrease:
+        user?.skull?.autoDropOnSkullCountIncrease ?? base.skull.autoDropOnSkullCountIncrease,
     },
     drum: {
       innerRadiusFactor: user?.drum?.innerRadiusFactor ?? base.drum.innerRadiusFactor,
