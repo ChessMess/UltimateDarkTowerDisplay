@@ -8,3 +8,4 @@ coverage/
 /.fallow
 src/audio/assets/
 .local/
+/.playwright-mcp
