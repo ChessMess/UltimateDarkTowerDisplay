@@ -136,32 +136,36 @@ function caseInsensitiveIndex(dir) {
 }
 
 function generateLibraryTs(orderedMappings) {
-  const lines = orderedMappings.map(({ key, file }) => `    [A.${key}.value]: base + '${file}',`);
+  const fileLines = orderedMappings.map(({ key, file }) => `  [A.${key}.value]: '${file}',`);
+  const urlLines = orderedMappings.map(
+    ({ key, file }) => `  [A.${key}.value]: new URL('./assets/${file}', import.meta.url).href,`
+  );
   return `import { TOWER_AUDIO_LIBRARY } from 'ultimatedarktower';
 import type { SoundPack } from './soundPack';
 
 const A = TOWER_AUDIO_LIBRARY;
 
-// Resolved by the consumer's bundler. Vite, webpack 5+, Rollup, esbuild,
-// parcel, and native Node ESM all support \`new URL(rel, import.meta.url)\`
-// for referencing assets bundled next to the JS — the bundler emits the
-// asset and rewrites the URL to point at its final location.
+// Per-file \`new URL('./assets/<literal>.ogg', import.meta.url)\` is the
+// canonical pattern recognised by every major bundler (Vite, esbuild,
+// webpack 5+, Rollup, Parcel) and by native Node ESM. Each bundler detects
+// the literal filename at build time, emits the asset to its output, and
+// rewrites the expression to a literal URL string — no runtime evaluation
+// of \`import.meta.url\` is needed, so the pattern survives IIFE/CJS targets
+// where \`import.meta\` is stripped.
 //
-// The trailing slash on the rel input is sometimes stripped during bundler
-// transformation (Vite serves \`./assets/\` as \`/src/audio/assets\`), so we
-// normalise it back on before string concatenation downstream.
-function withTrailingSlash(s: string): string {
-  return s.endsWith('/') ? s : s + '/';
-}
-const DEFAULT_ASSET_BASE = withTrailingSlash(new URL('./assets/', import.meta.url).href);
+// OFFICIAL_AUDIO_FILES is the shared source of truth: \`buildOfficialSoundPack\`
+// uses it to compose URLs against a custom base, while \`samples\` below
+// references each filename inline so bundler asset detection works.
 
-function buildSamples(base: string): Record<number, string> {
+const OFFICIAL_AUDIO_FILES: Record<number, string> = {
   // === BEGIN AUTOGEN (scripts/extract-audio.mjs) ===
-  return {
-${lines.join('\n')}
-  };
+${fileLines.join('\n')}
+};
+
+const samples: Record<number, string> = {
+${urlLines.join('\n')}
   // === END AUTOGEN ===
-}
+};
 
 /**
  * The official-game sound pack bundled with this package. Built from the
@@ -174,7 +178,7 @@ ${lines.join('\n')}
 export const DEFAULT_TOWER_SOUND_PACK: SoundPack = {
   name: 'Restoration Games — Official',
   description: 'Extracted from the Return to Dark Tower app firmware. © Restoration Games, LLC; used with permission.',
-  samples: buildSamples(DEFAULT_ASSET_BASE),
+  samples,
 };
 
 /**
@@ -184,13 +188,18 @@ export const DEFAULT_TOWER_SOUND_PACK: SoundPack = {
  *
  * @param baseUrl Path or URL prefix to which official filenames are appended
  *                (e.g., \`'https://cdn.example.com/udt-audio/'\`). A trailing
- *                slash is expected.
+ *                slash is added if missing.
  */
 export function buildOfficialSoundPack(baseUrl: string): SoundPack {
+  const base = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
+  const out: Record<number, string> = {};
+  for (const [id, file] of Object.entries(OFFICIAL_AUDIO_FILES)) {
+    out[Number(id)] = base + file;
+  }
   return {
     name: DEFAULT_TOWER_SOUND_PACK.name,
     description: DEFAULT_TOWER_SOUND_PACK.description,
-    samples: buildSamples(withTrailingSlash(baseUrl)),
+    samples: out,
   };
 }
 

@@ -98,7 +98,7 @@ Light sequences and audio samples are **decoupled by default** — you control t
 display.applyAudioConfig({ bindSequenceToSample: true });
 ```
 
-Now applying a state with `led_sequence` set but `audio.sample = 0` plays the mapped sample. The default binding (`DEFAULT_SEQUENCE_AUDIO_MAP`) matches the official-game cues. Override per pack or per call:
+Now applying a state with `led_sequence` set but `audio.sample = 0` plays the mapped sample. **Also affects [`playSequence`](API.md#one-shot-transient-led-sequence-playsequence--070) (0.7.0+)** — when `bindSequenceToSample` is true, `playSequence(id)` also fires the bound sample via `playSampleOneShot`, matching the real tower's firmware behavior of playing both light and sound for every light-override command. The default binding (`DEFAULT_SEQUENCE_AUDIO_MAP`) matches the official-game cues. Override per pack or per call:
 
 ```ts
 import { buildSequenceAudioMap } from 'ultimatedarktowerdisplay';
@@ -110,20 +110,70 @@ const map = buildSequenceAudioMap({
 display.applyAudioConfig({ sequenceMap: map, bindSequenceToSample: true });
 ```
 
+## One-shot transient playback (`playSample`)
+
+The default audio path is **state-driven**: `applyState(state)` reads `state.audio.sample` and `TowerSampleAudio` syncs playback to it, including a `lastSample` dedup so identical successive packets do not restart playback. This is correct for BLE state-mirror consumers and for the example app's "Trigger Sequence" buttons (which pass `force=true` to re-fire on the same sample).
+
+It is **not** correct for consumers driving the display from fire-and-forget command events. The clearest example: the `ultimatedarktower` framework treats audio as transient — `playSoundStateful(N)` sends BLE bytes but does not persist `audio` in tower state, and the response handler explicitly resets `audio.sample = 0`. A consumer that posts that state to the display would see `sync(N)` then `sync(0)` ~50ms later, which `stop()`s the just-started sample (~80ms fade).
+
+For that use case, call `playSample` directly:
+
+```ts
+// On every fire-and-forget audio command from the framework:
+display.playSample(sampleId, { loop: false, volume: 0 });
+```
+
+`playSample` is available on `TowerRenderView`, `TowerDisplay`, and `Tower3DView`. It bypasses `sync()` / `stop()` entirely — each call allocates its own `AudioBufferSourceNode` independent of the sync-managed source, so subsequent state-driven `sync(0)` calls only affect sync-initiated plays.
+
+### Trade-offs
+
+- **Polyphony**: two `playSample` calls in quick succession play in parallel. Use the state-driven path if you want monophonic behavior.
+- **Looped one-shots**: pass `{ loop: true }` and retain the returned `{ stop }` handle — there is no automatic stop. For unbounded loops, prefer the state-driven path.
+- **Master volume / mute still apply**: per-shot gain feeds into the same master gain node the sync() path uses, so `applyAudioConfig` mute/volume changes affect both.
+- **Dedup does not apply**: `playSample(N)` followed by `playSample(N)` plays the sample twice (sequence-binding and `lastSample` are untouched).
+
+### When to use which
+
+| Driver | API |
+| --- | --- |
+| BLE state-mirror notification carrying `audio.sample` | `applyState(state)` |
+| App preset or "trigger sequence" button (re-fire same sample) | `applyState(state, true)` (force=true) |
+| Auto-derive sample from `state.led_sequence` | `applyAudioConfig({ bindSequenceToSample: true })` then `applyState` |
+| Fire-and-forget command event (emulator, framework, custom UI) | `display.playSample(id, opts?)` |
+| Fire-and-forget light-override command (also auto-plays bound audio when `bindSequenceToSample`) | `display.playSequence(id, opts?)` — see [API.md](API.md#one-shot-transient-led-sequence-playsequence--070) |
+
+`playSample` still requires `applyAudioConfig({ enabled: true })` from a user gesture (browsers' autoplay policy). The eager AudioContext creation on `setEnabled(true)` captures that gesture so subsequent `playSample` calls from non-gesture contexts (e.g. postMessage handlers) work correctly.
+
 ## Autoplay policy
 
 Browsers block AudioContext until a user gesture (click, key, touch). Set `enabled: true` from a click/keydown handler — not on page load. The example app does this via the toolbar **Audio** checkbox.
 
+Since v0.6.0, `applyAudioConfig({ enabled: true })` eagerly creates and resumes the AudioContext during the call itself, capturing the gesture activation immediately. This matters if your consumer code calls `playSample` later from a non-gesture context (e.g. a `postMessage` or WebSocket handler) — without the eager creation, the AudioContext could be lazily created at that point in a suspended state with no gesture available to resume it.
+
 ## Bundler compatibility
 
-The library uses `new URL('./assets/', import.meta.url)` to locate the bundled `.ogg` files at runtime. This is the standard ESM pattern and works in:
+The library references each `.ogg` via its own literal `new URL('./assets/<filename>.ogg', import.meta.url)` expression. Most modern bundlers detect this pattern at build time and emit the asset alongside their output, rewriting the expression to point at the emitted file.
 
-- Vite (dev and build)
-- Webpack 5+ (with default config)
-- Rollup, esbuild, parcel (modern versions)
-- Native Node ESM
+### Bundlers that detect the pattern automatically
 
-If your bundler doesn't track this pattern and the audio fails to load, copy `node_modules/ultimatedarktowerdisplay/dist/audio/assets/` into your app's public asset directory and use `buildOfficialSoundPack('/your-public-path/')` instead of the default pack.
+| Bundler | Setup |
+| --- | --- |
+| **Vite** | Nothing — the published dist already resolves URLs via Vite's lib build. Consumers using Vite themselves see emitted .ogg files in their build. |
+| **Webpack 5+** | Add a rule: `{ test: /\.ogg$/, type: 'asset/resource' }`. |
+| **Rollup** | Use `@rollup/plugin-url` (or equivalent) and include `.ogg` in its match list. |
+| **Parcel** | Works out of the box. |
+
+### esbuild
+
+esbuild does **not** detect `new URL(literal, import.meta.url)` patterns at build time and does not emit assets for them. The pattern is preserved verbatim and resolved at runtime against `import.meta.url`, which means:
+
+- **ESM target**: `import.meta.url` resolves to the bundle's URL at runtime. Audio URLs resolve correctly if you ship `dist/audio/assets/` (from the package) alongside your bundle output at the matching relative path.
+- **CJS target**: esbuild stubs `import.meta`, so URLs break. Configure `define: { 'import.meta.url': '__filename' }` in your esbuild config, and host the audio at a path resolvable from the bundle file.
+- **IIFE target**: `import.meta` is unavailable in IIFE entirely. Either configure `define` to point `import.meta.url` at a runtime value (e.g. `'document.currentScript.src'`) and host the audio at the matching base URL, **or** use the [self-hosting fallback](#self-hosting-fallback) below — this is usually the simplest path.
+
+### Self-hosting fallback
+
+If you'd rather host the audio yourself (CDN, custom asset pipeline, etc.) — or if you're in an environment where bundler asset emission isn't an option — copy `node_modules/ultimatedarktowerdisplay/dist/audio/assets/` into your app's public asset directory and use `buildOfficialSoundPack('/your-public-path/')` instead of the default pack. The dist filenames are stable (unhashed) so paths stay predictable across package upgrades.
 
 ## Audio Sample Catalog
 

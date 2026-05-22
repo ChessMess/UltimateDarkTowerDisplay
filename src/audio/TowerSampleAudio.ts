@@ -40,6 +40,12 @@ export class TowerSampleAudio {
    * Enable or disable playback. Disabled by default. Toggling on while a
    * non-silent sample is the current state will re-play it (so users who
    * enable audio mid-loop hear the loop without waiting for the next state).
+   *
+   * Eagerly creates and resumes the AudioContext on enable so the consumer's
+   * current user-gesture activation is captured. Without this, the first
+   * AudioContext creation can happen later in a non-gesture context (e.g.
+   * a postMessage handler that calls `playSampleOneShot`), where it may
+   * start suspended and never resume.
    */
   setEnabled(enabled: boolean): void {
     if (this.enabled === enabled) return;
@@ -48,6 +54,7 @@ export class TowerSampleAudio {
       this.stop();
       return;
     }
+    this.ensureCtx(true);
     if (this.lastSample !== null && this.lastSample !== 0) {
       void this.play(this.lastSample, this.lastLoop ?? false, this.lastVolume ?? 0);
     }
@@ -82,6 +89,99 @@ export class TowerSampleAudio {
     } else if (volumeChanged) {
       this.applyGain(volume);
     }
+  }
+
+  /**
+   * Fire a one-shot sample play, independent of the state-driven sync()
+   * pipeline. Each call allocates its own AudioBufferSourceNode that is
+   * NOT tracked by `this.source`, so `sync(0)`/`stop()` from a subsequent
+   * state update won't interrupt it. Use this for transient command-style
+   * audio events (e.g. echoing a fire-and-forget BLE sound command); use
+   * `sync()` / `applyState()` for state-mirror playback.
+   *
+   * Side effects:
+   * - Polyphony is possible — calling this twice in quick succession plays
+   *   both samples in parallel.
+   * - For `loop: true`, retain the returned handle and call `stop()` when
+   *   done. Looped one-shots have no automatic stop.
+   * - Honors the master `enabled` flag and the master `this.gain` for
+   *   mute/volume, so the existing volume/mute model still applies.
+   *
+   * Browser autoplay policy: requires that `setEnabled(true)` was called
+   * earlier from a user gesture (which warms the AudioContext via the
+   * eager `ensureCtx(true)` there).
+   */
+  playSampleOneShot(
+    sample: number,
+    loop: boolean = false,
+    volume: number = 0,
+  ): { stop: () => void } {
+    const noop = { stop: () => { /* no-op */ } };
+    if (!this.enabled) return noop;
+    if (sample === 0) return noop;
+
+    const url = this.library[sample];
+    if (!url) {
+      if (!this.warned.has(sample)) {
+        this.warned.add(sample);
+        // eslint-disable-next-line no-console
+        console.warn(`[TowerSampleAudio] no asset mapped for sample 0x${sample.toString(16)}`);
+      }
+      return noop;
+    }
+
+    const ctx = this.ensureCtx(true);
+    let stopped = false;
+    let src: AudioBufferSourceNode | null = null;
+    const handle = {
+      stop: () => {
+        stopped = true;
+        if (src) {
+          try { src.stop(); } catch { /* already stopped */ }
+        }
+      },
+    };
+
+    void (async () => {
+      let buffer = this.buffers.get(sample);
+      if (!buffer) {
+        try {
+          const res = await fetch(url);
+          const arr = await res.arrayBuffer();
+          buffer = await ctx.decodeAudioData(arr);
+          this.buffers.set(sample, buffer);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[TowerSampleAudio] one-shot failed to load', url, err);
+          return;
+        }
+      }
+      if (stopped) return;
+
+      if (!this.gain) {
+        this.gain = ctx.createGain();
+        this.gain.connect(ctx.destination);
+      }
+      const target = volume === 3 ? 0.0 : DEFAULT_GAIN;
+      // Per-shot gain so simultaneous shots don't fight over the master gain's
+      // schedule (sync()'s fades operate on this.gain directly).
+      const shotGain = ctx.createGain();
+      shotGain.gain.value = target;
+      shotGain.connect(this.gain);
+
+      src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = loop;
+      src.connect(shotGain);
+      src.start();
+      // Detach: don't store on this.source. Clean up the per-shot gain when
+      // playback ends so we don't leak audio graph nodes.
+      src.onended = () => {
+        try { shotGain.disconnect(); } catch { /* */ }
+      };
+    })();
+
+    return handle;
   }
 
   /** Hard stop with a short fade. Safe to call when nothing is playing. */

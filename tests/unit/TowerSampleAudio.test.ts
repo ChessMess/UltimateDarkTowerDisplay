@@ -101,10 +101,14 @@ describe('TowerSampleAudio', () => {
     expect(createdBufferSources).toHaveLength(0);
   });
 
-  it('first sync lazily creates an AudioContext and starts a buffer source', async () => {
+  it('first sync after enable starts a buffer source (context created eagerly on enable)', async () => {
     const audio = new TowerSampleAudio();
     audio.setLibrary(LIB);
     audio.setEnabled(true);
+    // setEnabled now creates the AudioContext eagerly so the consumer's
+    // user-gesture activation is captured. sync() reuses the same context.
+    expect(createdContexts).toHaveLength(1);
+
     audio.sync(0x25, false, 0);
     await flush();
 
@@ -299,19 +303,23 @@ describe('TowerSampleAudio', () => {
     expect(createdContexts).toHaveLength(0);
   });
 
-  it('resumes a suspended AudioContext on first play', async () => {
-    const audio = new TowerSampleAudio();
-    audio.setLibrary(LIB);
-    audio.setEnabled(true);
-
-    ContextSpy.mockImplementationOnce(() => {
+  it('resume is attempted again on subsequent play if context is still suspended', async () => {
+    // Make every context start suspended — even after setEnabled's eager
+    // ensureCtx + resume, the mock will stay suspended (real browsers behave
+    // this way when no user gesture is available yet).
+    ContextSpy.mockImplementation(() => {
       const ctx = new MockAudioContext();
       ctx.state = 'suspended';
       createdContexts.push(ctx);
       return ctx;
     });
 
-    audio.sync(0x25, false, 0);
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true); // eager resume attempt #1
+    createdContexts[0].resume.mockClear();
+
+    audio.sync(0x25, false, 0); // play() → ensureCtx → resume attempt #2
     await flush();
     expect(createdContexts[0].resume).toHaveBeenCalled();
   });
@@ -328,5 +336,176 @@ describe('TowerSampleAudio', () => {
     // Only the newest sample should result in an active source.
     const activeSources = createdBufferSources.filter((s) => s.startCalls > 0);
     expect(activeSources).toHaveLength(1);
+  });
+
+  // ───── setEnabled eager-context behavior ──────────────────────────────────
+
+  it('setEnabled(true) eagerly creates an AudioContext (captures user-gesture activation)', () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    expect(createdContexts).toHaveLength(0);
+
+    audio.setEnabled(true);
+    // Context is created during the setEnabled call itself, before any sync.
+    expect(createdContexts).toHaveLength(1);
+  });
+
+  it('setEnabled(true) resumes a suspended context eagerly', () => {
+    ContextSpy.mockImplementationOnce(() => {
+      const ctx = new MockAudioContext();
+      ctx.state = 'suspended';
+      createdContexts.push(ctx);
+      return ctx;
+    });
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+    expect(createdContexts[0].resume).toHaveBeenCalled();
+  });
+
+  // ───── playSampleOneShot ──────────────────────────────────────────────────
+
+  it('playSampleOneShot does not mutate lastSample (state-driven dedup unaffected)', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+
+    // Prime lastSample via sync to a known value.
+    audio.sync(0x25, false, 0);
+    await flush();
+    expect(createdBufferSources).toHaveLength(1);
+    audio.sync(0, false, 0); // stop, lastSample now 0
+    expect(createdBufferSources[0].stopCalls).toBe(1);
+
+    // One-shot a different sample — must not change lastSample to that id.
+    audio.playSampleOneShot(0x6E, false, 0);
+    await flush();
+
+    // Now re-syncing 0x25 (which differs from lastSample === 0) MUST trigger a
+    // fresh play. If playSampleOneShot had clobbered lastSample to 0x6E, then
+    // a sync(0x25) would still differ from 0x6E and play — same observable.
+    // To distinguish, instead re-sync to 0 (silence) then back to 0x6E: if
+    // lastSample was clobbered to 0x6E, sampleChanged=false (no play); if it
+    // stayed 0, sampleChanged=true and a sync-driven source is created.
+    audio.sync(0, false, 0);
+    audio.sync(0x6E, false, 0);
+    await flush();
+
+    // The sync-driven source for 0x6E must exist (lastSample was 0, not 0x6E).
+    const syncSourcesFor6E = createdBufferSources.filter(
+      (s) => s.buffer && s.startCalls > 0,
+    );
+    expect(syncSourcesFor6E.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('sync(0) after playSampleOneShot does NOT cancel the one-shot', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+
+    audio.playSampleOneShot(0x25, false, 0);
+    await flush();
+
+    // Find the one-shot's source. It's the only one created so far.
+    expect(createdBufferSources).toHaveLength(1);
+    const oneShotSrc = createdBufferSources[0];
+    expect(oneShotSrc.startCalls).toBe(1);
+    expect(oneShotSrc.stopCalls).toBe(0);
+
+    // Now a state-driven sync(0) fires (the framework's audio-reset pattern).
+    // It must NOT touch the one-shot source.
+    audio.sync(0, false, 0);
+    expect(oneShotSrc.stopCalls).toBe(0);
+
+    // Even a follow-up sync to a different sample (which would stop this.source
+    // if it were tracked) must not touch the one-shot.
+    audio.sync(0x6E, false, 0);
+    await flush();
+    expect(oneShotSrc.stopCalls).toBe(0);
+  });
+
+  it('two playSampleOneShot calls produce two simultaneously-running sources (polyphony)', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+
+    audio.playSampleOneShot(0x25, false, 0);
+    audio.playSampleOneShot(0x6E, false, 0);
+    await flush();
+
+    expect(createdBufferSources).toHaveLength(2);
+    expect(createdBufferSources[0].startCalls).toBe(1);
+    expect(createdBufferSources[1].startCalls).toBe(1);
+    // Neither was stopped to make room for the other.
+    expect(createdBufferSources[0].stopCalls).toBe(0);
+    expect(createdBufferSources[1].stopCalls).toBe(0);
+  });
+
+  it('playSampleOneShot is a no-op when disabled (no fetch, no source)', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    // Don't enable.
+    const handle = audio.playSampleOneShot(0x25, false, 0);
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(createdBufferSources).toHaveLength(0);
+    // Handle's stop() must be safe to call even when nothing started.
+    expect(() => handle.stop()).not.toThrow();
+  });
+
+  it('playSampleOneShot is a no-op for sample 0', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+    audio.playSampleOneShot(0, false, 0);
+    await flush();
+    expect(fetchCalls).toHaveLength(0);
+    expect(createdBufferSources).toHaveLength(0);
+  });
+
+  it('playSampleOneShot warns once for an unknown sample id', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => { });
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+
+    audio.playSampleOneShot(0x99, false, 0);
+    audio.playSampleOneShot(0x99, false, 0);
+    await flush();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('0x99');
+    expect(createdBufferSources).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('playSampleOneShot handle.stop() stops the one-shot source if called after start', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+
+    const handle = audio.playSampleOneShot(0x25, true, 0); // looping
+    await flush();
+    expect(createdBufferSources).toHaveLength(1);
+    const src = createdBufferSources[0];
+    expect(src.startCalls).toBe(1);
+
+    handle.stop();
+    expect(src.stopCalls).toBe(1);
+  });
+
+  it('playSampleOneShot honors volume=3 mute via per-shot gain', async () => {
+    const audio = new TowerSampleAudio();
+    audio.setLibrary(LIB);
+    audio.setEnabled(true);
+
+    audio.playSampleOneShot(0x25, false, 3); // mute
+    await flush();
+
+    // Two gains created: master (this.gain) + per-shot (shotGain).
+    expect(createdGains.length).toBeGreaterThanOrEqual(2);
+    const shotGain = createdGains[createdGains.length - 1];
+    expect(shotGain.gain.value).toBeCloseTo(0.0);
   });
 });

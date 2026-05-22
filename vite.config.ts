@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
-import { resolve } from 'path';
-import { copyFileSync, mkdirSync, readdirSync, existsSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { copyFileSync, mkdirSync, readFileSync } from 'fs';
 
 function redirectExamplePath(): Plugin {
   const redirect = (req: { url?: string }, res: { statusCode: number; setHeader(name: string, value: string): void; end(): void }, next: () => void) => {
@@ -49,30 +49,55 @@ function copyTowerAsset(): Plugin {
   };
 }
 
-// Copies every .ogg under src/audio/assets/ into dist/audio/assets/ so the
-// bundled default sound pack ships with the package. The source URLs in
-// audioLibrary.ts use `new URL('./assets/...', import.meta.url)` which
-// resolves relative to the published JS module — assets must sit next to it.
-function copyAudioAssets(): Plugin {
+// Vite lib mode unconditionally inlines `new URL(literal, import.meta.url)`
+// assets as base64 data URIs (ignoring assetsInlineLimit). For the 113 .ogg
+// files in audioLibrary.ts that would mean a 41 MB JS bundle. This plugin
+// runs *before* Vite's asset processor, intercepts each per-file new URL
+// expression, emits the .ogg as a separate Rollup asset, and substitutes a
+// ROLLUP_FILE_URL_ placeholder so the bundle references the emitted file by
+// relative path instead of inlining its bytes.
+//
+// The source pattern in audioLibrary.ts remains the canonical
+// `new URL('./assets/<file>.ogg', import.meta.url)` shape so esbuild,
+// webpack 5+, Rollup, and Parcel still detect and emit the assets on the
+// consumer side (each runs its own detector independently of Vite).
+function emitOggsAsFiles(): Plugin {
+  // Match the full `new URL('./assets/<file>.ogg', import.meta.url).href`
+  // expression so the .href is part of what gets substituted — Rollup's
+  // ROLLUP_FILE_URL_ placeholder already expands to a `.href` string, so
+  // capturing .href in the match avoids a redundant double-wrap.
+  const URL_RE = /new URL\(\s*['"]\.\/assets\/([A-Za-z0-9_.-]+\.ogg)['"]\s*,\s*import\.meta\.url\s*\)\.href/g;
   return {
-    name: 'copy-audio-assets',
+    name: 'emit-oggs-as-files',
     apply: 'build',
-    closeBundle() {
-      const srcDir = resolve(__dirname, 'src/audio/assets');
-      const destDir = resolve(__dirname, 'dist/audio/assets');
-      if (!existsSync(srcDir)) return;
-      mkdirSync(destDir, { recursive: true });
-      for (const file of readdirSync(srcDir)) {
-        if (file.endsWith('.ogg')) {
-          copyFileSync(resolve(srcDir, file), resolve(destDir, file));
-        }
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.endsWith('/audio/audioLibrary.ts')) return null;
+      const assetsDir = resolve(dirname(id), 'assets');
+      const segments: string[] = [];
+      let last = 0;
+      let match: RegExpExecArray | null;
+      URL_RE.lastIndex = 0;
+      while ((match = URL_RE.exec(code))) {
+        const filename = match[1];
+        const refId = this.emitFile({
+          type: 'asset',
+          name: filename,
+          source: readFileSync(resolve(assetsDir, filename)),
+        });
+        segments.push(code.slice(last, match.index));
+        segments.push(`import.meta.ROLLUP_FILE_URL_${refId}`);
+        last = match.index + match[0].length;
       }
+      if (segments.length === 0) return null;
+      segments.push(code.slice(last));
+      return { code: segments.join(''), map: null };
     },
   };
 }
 
 export default defineConfig({
-  plugins: [redirectExamplePath(), copyTowerAsset(), copyAudioAssets()],
+  plugins: [redirectExamplePath(), copyTowerAsset(), emitOggsAsFiles()],
   resolve: {
     alias: {
       // The ESM build of ultimatedarktower uses createRequire which is not
@@ -107,6 +132,16 @@ export default defineConfig({
         'gsap',
         '@dimforge/rapier3d-compat',
       ],
+      output: {
+        // Keep .ogg filenames stable under dist/audio/assets/ so consumers
+        // using `buildOfficialSoundPack` to self-host from the package's
+        // dist tree get predictable paths. Other assets (GLB) keep Vite's
+        // default hashed names for cache-busting.
+        assetFileNames: (asset) => {
+          if (asset.name?.endsWith('.ogg')) return 'audio/assets/[name][extname]';
+          return 'assets/[name]-[hash][extname]';
+        },
+      },
     },
     sourcemap: true,
   },

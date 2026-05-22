@@ -21,8 +21,14 @@ module.exports = {
   },
   moduleNameMapper: {
     '^ultimatedarktower$': '<rootDir>/node_modules/ultimatedarktower/dist/src/index.js',
+    // The real audioLibrary.ts uses `import.meta.url` per asset which Jest's
+    // CJS transformer can't parse. Tests don't exercise the bundled samples
+    // (TowerSampleAudio.test.ts uses its own inline library), so a stub is
+    // sufficient.
+    '.*/audio/audioLibrary$': '<rootDir>/tests/__mocks__/audioLibrary.js',
     '\\.svg\\?raw$': '<rootDir>/tests/__mocks__/svgRaw.js',
     '\\.glb\\?url$': '<rootDir>/tests/__mocks__/glbUrl.js',
+    '\\.png$': '<rootDir>/tests/__mocks__/pngUrl.js',
     '^three$': '<rootDir>/tests/__mocks__/three.js',
     '^three/examples/jsm/controls/OrbitControls\\.js$':
       '<rootDir>/tests/__mocks__/orbitControls.js',
