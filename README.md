@@ -36,28 +36,43 @@ npm install ultimatedarktowerdisplay ultimatedarktower
 
 ## Quick start
 
+The recommended entry point is `TowerRenderView` — a single class that wraps a `TowerDisplay` with sensible 3D defaults and optional header chrome (title, subtitle, status badges, action row).
+
 ```ts
-import { TowerDisplay } from 'ultimatedarktowerdisplay';
+import { TowerRenderView } from 'ultimatedarktowerdisplay';
+import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb?url';
 import { createDefaultTowerState } from 'ultimatedarktower';
 
 const container = document.getElementById('tower');
 if (!container) throw new Error('Missing #tower container');
 
-const display = new TowerDisplay({ container });
-display.applyState(createDefaultTowerState());
+const view = new TowerRenderView({ container, modelUrl: towerModelUrl });
+view.applyState(createDefaultTowerState());
 
 // Later, when a new state arrives:
-// display.applyState(nextState);
+// view.applyState(nextState);
 
 // Tear down:
-// display.dispose();
+// view.dispose();
 ```
 
 ```html
 <div id="tower"></div>
 ```
 
-That renders the default composition: a text readout plus a 2D side view. Add `'3d-view'` to the `renderers` option for the full 3D model.
+`TowerRenderView` accepts every `TowerDisplay` option (renderers, lighting, camera, audio, callbacks). Advanced 3D config that isn't forwarded on the facade is reachable via `view.display.*` and `view.view3D`. The default renderer is `'3d-view'`; pass `renderers: ['readout', 'side-view']` (or any subset) to opt out of the 3D pipeline.
+
+### Composable alternative
+
+If you'd rather wire renderers yourself — or skip the `.trv-root` wrapper entirely — instantiate `TowerDisplay` directly:
+
+```ts
+import { TowerDisplay } from 'ultimatedarktowerdisplay';
+const display = new TowerDisplay({ container });
+display.applyState(createDefaultTowerState());
+```
+
+That renders the default composition: a text readout plus a 2D side view.
 
 ## Renderers
 
@@ -73,7 +88,7 @@ That renders the default composition: a text readout plus a 2D side view. Add `'
 | Animations | None | LED tweens | Full (LEDs, drums, bloom) |
 | Bundle cost (rough) | <5 KB gzip | <10 KB gzip | ~150 KB gzip + 22 MB GLB + 20 MB audio |
 
-`TowerDisplay` accepts any subset of `['readout', 'side-view', '3d-view']` via the `renderers` option. Default is `['readout', 'side-view']`. Full comparison and per-renderer details in [docs/RENDERERS.md](docs/RENDERERS.md).
+Both `TowerRenderView` and `TowerDisplay` accept any subset of `['readout', 'side-view', '3d-view']` via the `renderers` option. `TowerRenderView` defaults to `'3d-view'`; `TowerDisplay` defaults to `['readout', 'side-view']`. Full comparison and per-renderer details in [docs/RENDERERS.md](docs/RENDERERS.md).
 
 ## Where to go next
 

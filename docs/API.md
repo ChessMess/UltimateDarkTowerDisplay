@@ -10,6 +10,7 @@ This document covers the public API exported by `ultimatedarktowerdisplay`.
 
 ```ts
 import {
+  TowerRenderView,
   TowerDisplay,
   TowerStateReadout,
   TowerSideView,
@@ -17,6 +18,9 @@ import {
   TowerStateController,
 } from 'ultimatedarktowerdisplay';
 import type {
+  TowerRenderViewOptions,
+  TowerRenderViewBadge,
+  TowerRenderViewBadgeTone,
   TowerDisplayOptions,
   Tower3DViewOptions,
   TowerStateControllerOptions,
@@ -32,9 +36,104 @@ import type {
 
 ## Classes
 
+### `TowerRenderView`
+
+All-in-one render facade. Wraps a `TowerDisplay` with optional polished chrome (title, subtitle, status badges, action row) and forwards the common state and 3D-config API. Recommended entry point for new consumers — advanced 3D config is reached through the `display` / `view3D` escape hatches.
+
+```ts
+import { TowerRenderView } from 'ultimatedarktowerdisplay';
+import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb?url';
+
+const view = new TowerRenderView({
+  container: document.getElementById('tower')!,
+  modelUrl: towerModelUrl,
+  title: 'Render',
+  badges: [{ id: 'conn', label: 'BLE', value: 'connected', tone: 'good' }],
+});
+view.applyState(state);
+view.updateBadge('conn', { value: 'disconnected', tone: 'warn' });
+```
+
+#### Constructor
+
+```ts
+new TowerRenderView(options: TowerRenderViewOptions)
+```
+
+| Parameter                | Type                              | Default     | Description                                                                                              |
+| ------------------------ | --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `options.container`      | `HTMLElement`                     | —           | DOM element to render into.                                                                              |
+| `options.renderers`      | `RendererType \| RendererType[]`  | `'3d-view'` | Which renderer(s) to show. Defaults to the headline 3D render.                                           |
+| `options.modelUrl`       | `string`                          | —           | Required when `renderers` includes `'3d-view'`. Forwarded to `TowerDisplay`.                             |
+| `options.title`          | `string`                          | —           | Optional header title. Header renders only when at least one chrome option is set.                       |
+| `options.subtitle`       | `string`                          | —           | Optional header subtitle.                                                                                |
+| `options.badges`         | `TowerRenderViewBadge[]`          | —           | Optional status badge row in the header.                                                                 |
+| `options.actions`        | `HTMLElement[]`                   | —           | Optional action elements appended to the header's action slot.                                           |
+| `options.className`      | `string`                          | —           | Extra class on `.trv-root` for theming hooks (e.g. consumer-specific palette overrides).                 |
+
+All other `TowerDisplayOptions` fields (`lighting`, `camera`, `audio`, `dracoDecoderPath`, `debug3D`, `showGroundDisc`, `clickToToggleSeals`, `injectStyles`, `onSealClick`, `onSideChange`, `onLoadError`) are accepted and forwarded to the inner `TowerDisplay` unchanged.
+
+#### Methods
+
+The facade implements `ITowerDisplay` and forwards the common-path API to the inner `TowerDisplay`. See [`TowerDisplay`](#towerdisplay) for behavior details — listed here for discoverability:
+
+- `applyState(state, force?)`, `applySeals(brokenSeals)`, `selectSide(side)`, `setLedOverride(layer, light, effect)`, `clearLedOverrides()`, `showIdle()`
+- `applyLightingConfig(config)`, `applyCameraConfig(config)`, `applyAudioConfig(config)`, `setSceneLights(opts)`, `playEntrance()`
+
+Advanced 3D config not forwarded directly (e.g. `setSkyboxUrl`, `setBoardDiscEnabled`, `setZoomToCursor`, `setPreserveViewOnSideSelect`, `setDrumRotationSoundUrl`, `setTowerAudioEnabled`, `getLightingConfig`, `getCameraConfig`, `getAudioConfig`) is reached via `view.display.x(...)`.
+
+**Chrome mutators:**
+
+##### `setTitle(title: string | null): void`
+
+Set or clear the header title. Passing `null` (or `''`) removes the title; if the header has no other content it collapses entirely.
+
+##### `setSubtitle(subtitle: string | null): void`
+
+Set or clear the header subtitle. Same collapse rules as `setTitle`.
+
+##### `setBadges(badges: TowerRenderViewBadge[]): void`
+
+Replace the badge row. Pass `[]` to remove all badges (and collapse the badge slot).
+
+##### `updateBadge(id: string, patch: Partial<TowerRenderViewBadge>): void`
+
+Update a single badge by its `id`. No-op if no badge has that `id`. Useful for live indicators like connection state without rebuilding the whole row.
+
+##### `setActions(actions: HTMLElement[]): void`
+
+Replace the header action slot. Pass `[]` to clear and collapse the slot.
+
+##### `dispose(): void`
+
+Tear down the inner `TowerDisplay` and remove `.trv-root` from the container.
+
+#### Getters
+
+- **`display: TowerDisplay`** — the wrapped instance. Use for advanced 3D config that isn't forwarded on the facade (e.g. `view.display.setSkyboxUrl(...)`).
+- **`view3D: Tower3DView | null`** — shortcut for `display.view3D`. Useful for physics add-ons that need `view3D.getPhysicsHooks()`.
+- **`root: HTMLElement`** — the outer `.trv-root` element.
+- **`body: HTMLElement`** — the `.trv-body` element where the inner `TowerDisplay` mounts.
+- **`loadState: 'pending' | 'ready' | 'error' | undefined`** — current GLB load status. Forwards `display.loadState`.
+
+#### `TowerRenderViewBadge`
+
+```ts
+interface TowerRenderViewBadge {
+  id?: string;                                          // handle for updateBadge()
+  label: string;
+  value?: string;
+  tone?: 'neutral' | 'accent' | 'warn' | 'good';
+}
+```
+
+Tones map to `[data-tone]` selectors on `.trv-badge`. Theme via the `--trv-accent` CSS custom property on `.trv-root`.
+
+---
+
 ### `TowerDisplay`
 
-High-level wrapper that composes one or both renderers into a DOM container. Recommended entry point for most consumers.
+Lower-level wrapper that composes one or more renderers into a DOM container. Use this when you don't need the `TowerRenderView` chrome wrapper.
 
 ```ts
 const display = new TowerDisplay({
@@ -481,6 +580,42 @@ const resolved = display.getAudioConfig();                       // serialise fu
 `applyAudioConfig` sparse-merges — fields that are `undefined` are left alone. `getAudioConfig` returns `Required<AudioConfig>` with every field populated (the `sequenceMap` is the resolved effective map after fallback resolution, so the result round-trips through `applyAudioConfig` cleanly).
 
 The legacy fine-grained methods (`setTowerAudioLibrary`, `setTowerAudioEnabled`, `setDrumRotationSoundUrl`, `setDrumRotationSoundEnabled`) remain as thin shims that call `applyAudioConfig` under the hood. `setTowerAudioLibrary()` with no argument installs the bundled default pack.
+
+##### One-shot transient playback (`playSample`)
+
+```ts
+playSample(
+  sample: number,
+  opts?: { loop?: boolean; volume?: number },
+): { stop: () => void }
+```
+
+Available on `TowerRenderView`, `TowerDisplay`, and `Tower3DView`. Fires a transient sample play independent of `applyState`'s sync pipeline — each call allocates its own `AudioBufferSourceNode`, so subsequent state-driven `sync(0)`/`stop()` calls will not interrupt it. Use this when the audio model is fire-and-forget (e.g. the `ultimatedarktower` framework's `playSoundStateful`, which deliberately does not persist audio in tower state). For state-mirror playback, keep using `applyState(state)`.
+
+Trade-offs:
+- **Polyphony**: simultaneous calls play in parallel.
+- **Looped one-shots** (`opts.loop = true`) require holding the returned `{ stop }` handle; there is no automatic stop. For unbounded loops, prefer the state-driven path.
+- **Master mute/volume still apply** — per-shot gain feeds through the same master gain `applyAudioConfig` controls.
+- **No dedup** — two `playSample(N)` calls play twice; the `lastSample` state is untouched.
+
+Requires `applyAudioConfig({ enabled: true })` from a user gesture. Since v0.6.0, `setEnabled(true)` eagerly creates and resumes the AudioContext so subsequent `playSample` calls from non-gesture contexts (postMessage / WebSocket handlers) work correctly. See [AUDIO](AUDIO.md#one-shot-transient-playback-playsample) for the full discussion.
+
+##### One-shot transient LED sequence (`playSequence`) — 0.7.0+
+
+```ts
+playSequence(
+  sequenceId: number,
+  opts?: { onComplete?: () => void },
+): boolean
+```
+
+Available on `TowerRenderView`, `TowerDisplay`, and `Tower3DView`. Fires an LED sequence (e.g. `TOWER_LIGHT_SEQUENCES.victory`) as a transient command, independent of the `applyState` → `SequenceAnimator.apply(0)` → `stop()` pipeline. Use this when echoing a fire-and-forget light-override command (parallel to `playSample` for audio): the `ultimatedarktower` framework strips `state.led_sequence` on every response, so a state-driven `applyState` arriving immediately after would otherwise kill the sequence mid-playback. The transient animator flag ignores subsequent `apply(0)` calls until the sequence completes; explicit `stop()` or a different-id transient call still cancels it.
+
+If `bindSequenceToSample` is enabled in the audio config and the sequence has a mapped sample, the bound sample also fires via `playSampleOneShot` — matching the state-driven `applyState` behavior and the real tower's firmware (which plays the bound sound automatically on every light-override command). Enable via `applyAudioConfig({ bindSequenceToSample: true })` once at setup.
+
+Returns `true` if the sequence started (or was already running), `false` for an unknown id. State-driven drums, individual LEDs, and seal visibility continue to apply normally during transient playback — only `SequenceAnimator.apply(0)` is suppressed. No-op (returns `false`) when the display has no 3D renderer.
+
+See [AUDIO](AUDIO.md#one-shot-transient-playback-playsample) for the architectural rationale (same model as `playSample`).
 
 The bundled default pack ships in the package — no consumer setup is required for audio to work. See [AUDIO](AUDIO.md) for the full guide, including pack authoring, sequence binding, and bundler-compatibility notes.
 

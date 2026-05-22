@@ -5,6 +5,7 @@ import type { SoundPack } from './audio/soundPack';
 import { TowerStateReadout } from './TowerStateReadout';
 import { TowerSideView } from './2d/TowerSideView';
 import { Tower3DView } from './3d/Tower3DView';
+import type { PerfReport } from './3d/Tower3DView';
 import { TowerStateController } from './state/TowerStateController';
 import { injectStyles, suppressStyleInjection } from './styles';
 
@@ -244,6 +245,14 @@ export class TowerDisplay implements ITowerDisplay {
     this.view3d?.playEntrance();
   }
 
+  /**
+   * Collect a perf snapshot from the 3D view. See {@link Tower3DView.collectPerfReport}.
+   * Returns `null` when no 3D view is active.
+   */
+  collectPerfReport(durationMs?: number): Promise<PerfReport> | null {
+    return this.view3d?.collectPerfReport(durationMs) ?? null;
+  }
+
   /** Get the current camera config for the 3D view. Returns undefined when no 3D view is active. */
   getCameraConfig(): Required<CameraConfig> | undefined {
     return this.view3d?.getCameraConfig();
@@ -316,6 +325,30 @@ export class TowerDisplay implements ITowerDisplay {
    */
   applyAudioConfig(config: AudioConfig): void {
     this.view3d?.applyAudioConfig(config);
+  }
+
+  /**
+   * Play a tower sample as a one-shot, transient event — independent of the
+   * state-driven `applyState` audio path. Use for fire-and-forget audio
+   * commands (e.g. emulator/BLE mirrors). Forwards to
+   * {@link Tower3DView.playSample}. No-op (returns an inert handle) when the
+   * display has no 3D renderer — audio only lives on the 3D view.
+   */
+  playSample(
+    sample: number,
+    opts?: { loop?: boolean; volume?: number },
+  ): { stop: () => void } {
+    return this.view3d?.playSample(sample, opts) ?? { stop: () => { /* no-op */ } };
+  }
+
+  /**
+   * Play an LED light sequence as a transient, one-shot event — independent
+   * of the state-driven `applyState` path. Forwards to
+   * {@link Tower3DView.playSequence}. No-op (returns `false`) when the
+   * display has no 3D renderer.
+   */
+  playSequence(sequenceId: number, opts?: { onComplete?: () => void }): boolean {
+    return this.view3d?.playSequence(sequenceId, opts) ?? false;
   }
 
   /** Remove all rendered DOM content and reset internal state. */

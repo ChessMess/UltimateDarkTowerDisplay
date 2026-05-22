@@ -86,10 +86,11 @@ See the [docs/README glossary](README.md#glossary) for definitions of `drum`, `l
 
 ## Mounting and lifecycle
 
-A `TowerDisplay` owns one DOM container and one or more renderers inside it. The minimal lifecycle is:
+`TowerRenderView` is the recommended entry point. It owns one DOM container, mounts a `TowerDisplay` inside, and adds optional header chrome (title, subtitle, status badges, action row). The minimal lifecycle is:
 
 ```ts
-import { TowerDisplay } from 'ultimatedarktowerdisplay';
+import { TowerRenderView } from 'ultimatedarktowerdisplay';
+import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb?url';
 import { createDefaultTowerState } from 'ultimatedarktower';
 
 const container = document.getElementById('tower');
@@ -97,17 +98,25 @@ if (!container) {
   throw new Error('Missing #tower container');
 }
 
-const display = new TowerDisplay({ container });
-display.applyState(createDefaultTowerState());
+const view = new TowerRenderView({
+  container,
+  modelUrl: towerModelUrl,
+  title: 'Render',
+  badges: [{ id: 'conn', label: 'BLE', value: 'disconnected', tone: 'warn' }],
+});
+view.applyState(createDefaultTowerState());
 
 // Later, when a new state arrives:
-display.applyState(nextState);
+view.applyState(nextState);
 
 // Update the broken-seal set when it changes:
-display.applySeals([{ side: 'north', level: 'top' }]);
+view.applySeals([{ side: 'north', level: 'top' }]);
+
+// Live-update a badge as connection state changes:
+view.updateBadge('conn', { value: 'connected', tone: 'good' });
 
 // Tear down when removing the view:
-display.dispose();
+view.dispose();
 ```
 
 Behavior to know:
@@ -115,17 +124,28 @@ Behavior to know:
 - The constructor immediately renders an idle placeholder. `applyState` replaces it.
 - Styles are injected into `document.head` automatically on first use. To opt out (e.g. for CSP), pass `injectStyles: false` and apply the `TOWER_DISPLAY_CSS` string yourself.
 - A skull-drop highlight appears only when `beam.count` increases between two successive `applyState` calls. `dispose` clears this tracking.
-- The 3D renderer loads its GLB model asynchronously. State applied before load is queued and replayed on completion. Hook `onLoadError` (and check `display.loadState`) if you need to surface failures.
+- The 3D renderer loads its GLB model asynchronously. State applied before load is queued and replayed on completion. Hook `onLoadError` (and check `view.loadState`) if you need to surface failures.
+- Advanced 3D config that isn't forwarded on the facade (e.g. `setSkyboxUrl`, `setBoardDiscEnabled`) is reached via `view.display.*`; physics hooks via `view.view3D`.
+
+If you need composable control without the facade's wrapper div, instantiate `TowerDisplay` directly — same options, same state API, no chrome:
+
+```ts
+import { TowerDisplay } from 'ultimatedarktowerdisplay';
+const display = new TowerDisplay({ container });
+display.applyState(state);
+display.dispose();
+```
 
 For the full method/option reference see [API](API.md).
 
 ## Choosing renderers
 
-`TowerDisplay` composes one or more renderers. Default is `['readout', 'side-view']`. Override with the `renderers` option:
+Both `TowerRenderView` and `TowerDisplay` accept a `renderers` option. `TowerRenderView` defaults to `'3d-view'`; `TowerDisplay` defaults to `['readout', 'side-view']`. Override with the `renderers` option:
 
 ```ts
-const display = new TowerDisplay({
+const view = new TowerRenderView({
   container,
+  modelUrl: towerModelUrl,
   renderers: ['readout', '3d-view'],
 });
 ```
@@ -144,7 +164,7 @@ The 3D renderer plays decoded tower-state audio (`state.audio.sample`) using a b
 
 ```ts
 button.addEventListener('click', () => {
-  display.applyAudioConfig({ enabled: true });
+  view.applyAudioConfig({ enabled: true });
 });
 ```
 
@@ -155,37 +175,42 @@ To swap in your own samples or rebind sequence-to-sample mappings, see [AUDIO](A
 ### Vanilla HTML/Vite
 
 ```ts
-import { TowerDisplay } from 'ultimatedarktowerdisplay';
+import { TowerRenderView } from 'ultimatedarktowerdisplay';
+import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb?url';
 import { createDefaultTowerState } from 'ultimatedarktower';
 
 const container = document.querySelector<HTMLDivElement>('#tower')!;
-const display = new TowerDisplay({ container });
-display.applyState(createDefaultTowerState());
+const view = new TowerRenderView({ container, modelUrl: towerModelUrl });
+view.applyState(createDefaultTowerState());
 
-window.addEventListener('beforeunload', () => display.dispose());
+window.addEventListener('beforeunload', () => view.dispose());
 ```
 
 ### React
 
-`TowerDisplay` manages its own DOM, so React only provides the container and the cleanup hook.
+`TowerRenderView` manages its own DOM, so React only provides the container and the cleanup hook.
 
 ```tsx
 import { useEffect, useRef } from 'react';
-import { TowerDisplay } from 'ultimatedarktowerdisplay';
+import { TowerRenderView } from 'ultimatedarktowerdisplay';
+import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb?url';
 import type { TowerState } from 'ultimatedarktower';
 
 export function Tower({ state }: { state: TowerState }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const displayRef = useRef<TowerDisplay | null>(null);
+  const viewRef = useRef<TowerRenderView | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    displayRef.current = new TowerDisplay({ container: containerRef.current });
-    return () => displayRef.current?.dispose();
+    viewRef.current = new TowerRenderView({
+      container: containerRef.current,
+      modelUrl: towerModelUrl,
+    });
+    return () => viewRef.current?.dispose();
   }, []);
 
   useEffect(() => {
-    displayRef.current?.applyState(state);
+    viewRef.current?.applyState(state);
   }, [state]);
 
   return <div ref={containerRef} />;
@@ -197,21 +222,22 @@ export function Tower({ state }: { state: TowerState }) {
 ```vue
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { TowerDisplay } from 'ultimatedarktowerdisplay';
+import { TowerRenderView } from 'ultimatedarktowerdisplay';
+import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb?url';
 import type { TowerState } from 'ultimatedarktower';
 
 const props = defineProps<{ state: TowerState }>();
 const container = ref<HTMLDivElement | null>(null);
-let display: TowerDisplay | null = null;
+let view: TowerRenderView | null = null;
 
 onMounted(() => {
   if (!container.value) return;
-  display = new TowerDisplay({ container: container.value });
-  display.applyState(props.state);
+  view = new TowerRenderView({ container: container.value, modelUrl: towerModelUrl });
+  view.applyState(props.state);
 });
 
-watch(() => props.state, (next) => display?.applyState(next));
-onBeforeUnmount(() => display?.dispose());
+watch(() => props.state, (next) => view?.applyState(next));
+onBeforeUnmount(() => view?.dispose());
 </script>
 
 <template>
@@ -223,16 +249,18 @@ onBeforeUnmount(() => display?.dispose());
 
 ```ts
 import { UltimateDarkTower } from 'ultimatedarktower';
-import { TowerDisplay } from 'ultimatedarktowerdisplay';
+import { TowerRenderView } from 'ultimatedarktowerdisplay';
+import towerModelUrl from 'ultimatedarktowerdisplay/dist/3d/assets/tower.glb?url';
 
-const display = new TowerDisplay({ container });
+const view = new TowerRenderView({ container, modelUrl: towerModelUrl });
 const udt = new UltimateDarkTower();
 
-udt.onTowerStateUpdate = (state) => display.applyState(state);
+udt.onTowerStateUpdate = (state) => view.applyState(state);
 
 document.getElementById('connect')?.addEventListener('click', async () => {
   await udt.connect();
   await udt.calibrate();
+  view.updateBadge('conn', { value: 'connected', tone: 'good' });
 });
 ```
 

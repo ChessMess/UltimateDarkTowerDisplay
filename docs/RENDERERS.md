@@ -92,6 +92,17 @@ API surface ([API §Tower3DView](API.md#tower3dview)) is the largest of the thre
 
 For tuning the look see [LIGHTING](LIGHTING.md). For physics add-ons see [PHYSICS](PHYSICS.md).
 
+## Prefer `TowerRenderView` for one-call setup
+
+If you don't need to manage `TowerDisplay` directly, reach for [`TowerRenderView`](API.md#towerrenderview). It wraps a `TowerDisplay` with optional header chrome (title, subtitle, status badges, action row), defaults to the `'3d-view'` renderer, and exposes the same state/3D-config surface. Advanced 3D config not forwarded on the facade is reached via `view.display.x(...)`.
+
+```ts
+const view = new TowerRenderView({ container, modelUrl });
+view.applyState(state);
+```
+
+The sections below describe the underlying renderers used by both `TowerRenderView` and `TowerDisplay`.
+
 ## Composition rules in `TowerDisplay`
 
 `TowerDisplay` accepts any subset of `['readout', 'side-view', '3d-view']`. Slots render in the order given. The container becomes a flex column by default; override via CSS if you want a different layout.

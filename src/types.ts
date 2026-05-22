@@ -135,4 +135,24 @@ export interface ITowerDisplay {
   dispose(): void;
   /** Optional — select which side of the tower is facing. Only implemented by side-aware views. */
   selectSide?(side: TowerSide): void;
+  /**
+   * Optional — fire a one-shot tower sample independent of the state-driven
+   * audio path. Implemented by audio-capable renderers (Tower3DView and the
+   * facades that wrap it); not implemented by the 2D side-view or text
+   * readout. See {@link Tower3DView.playSample}.
+   */
+  playSample?(
+    sample: number,
+    opts?: { loop?: boolean; volume?: number },
+  ): { stop: () => void };
+  /**
+   * Optional — fire an LED light sequence as a transient, one-shot event
+   * independent of the state-driven path. Implemented by 3D-capable renderers
+   * (Tower3DView and the facades that wrap it); not implemented by the 2D
+   * side-view or text readout. See {@link Tower3DView.playSequence}.
+   */
+  playSequence?(
+    sequenceId: number,
+    opts?: { onComplete?: () => void },
+  ): boolean;
 }
