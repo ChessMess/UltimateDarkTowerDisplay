@@ -34,7 +34,28 @@ void main() {
  * The bloom layer index ({@link BLOOM_LAYER}) must be enabled on any mesh
  * that should glow. Per-frame cost is two scene traversals (darken + restore)
  * plus two composer renders.
+ *
+ * Bloom output is an intrinsically blurry effect, so `bloomComposer` renders
+ * at `lighting.scene.bloom.resolutionScale` (default 0.5) of the canvas
+ * backing resolution while `finalComposer` stays at full resolution. The
+ * blur is upsampled by the GPU's bilinear sampler when composited in the
+ * final pass; the visual is indistinguishable from full-resolution bloom but
+ * cuts bloom GPU cost by roughly `1 / scale²`.
  */
+/** Per-frame timings for the four sub-steps of {@link BloomManager.render}. */
+export interface BloomFrameMetrics {
+  /** Time spent walking the scene to swap non-bloom meshes to dark material. */
+  darkenMs: number;
+  /** Time spent in `bloomComposer.render()` (scene render at bloom-target res + UnrealBloomPass mip blurs). */
+  bloomComposerMs: number;
+  /** Time spent walking the scene to restore original materials. */
+  restoreMs: number;
+  /** Time spent in `finalComposer.render()` (full-resolution scene render + composite + OutputPass). */
+  finalComposerMs: number;
+  /** Sum of the four steps above. */
+  bloomTotalMs: number;
+}
+
 export class BloomManager {
   private readonly bloomLayer = new THREE.Layers();
   private readonly darkMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -43,6 +64,16 @@ export class BloomManager {
   private readonly bloomComposer: EffectComposer;
   private readonly finalComposer: EffectComposer;
   private readonly bloomPass: UnrealBloomPass;
+  private readonly resolutionScale: number;
+
+  /**
+   * When `true`, `render()` records per-frame timings into {@link lastMetrics}.
+   * Adds ~5 `performance.now()` calls per frame; leave `false` in production.
+   * Toggled by `Tower3DView.collectPerfReport`.
+   */
+  collectMetrics = false;
+  /** Most recent frame's timings, populated only while {@link collectMetrics} is `true`. */
+  lastMetrics: BloomFrameMetrics | null = null;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -53,12 +84,17 @@ export class BloomManager {
     height: number,
   ) {
     this.bloomLayer.set(BLOOM_LAYER);
+    this.resolutionScale = lighting.scene.bloom.resolutionScale;
+
+    const bloomW = Math.max(1, Math.round(width * this.resolutionScale));
+    const bloomH = Math.max(1, Math.round(height * this.resolutionScale));
 
     this.bloomComposer = new EffectComposer(renderer);
     this.bloomComposer.renderToScreen = false;
+    this.bloomComposer.setSize(bloomW, bloomH);
     this.bloomComposer.addPass(new RenderPass(scene, camera));
     this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(width, height),
+      new THREE.Vector2(bloomW, bloomH),
       lighting.scene.bloom.strength,
       lighting.scene.bloom.radius,
       lighting.scene.bloom.threshold,
@@ -79,6 +115,7 @@ export class BloomManager {
     finalPass.needsSwap = true;
 
     this.finalComposer = new EffectComposer(renderer);
+    this.finalComposer.setSize(width, height);
     this.finalComposer.addPass(new RenderPass(scene, camera));
     this.finalComposer.addPass(finalPass);
     this.finalComposer.addPass(new OutputPass());
@@ -86,10 +123,29 @@ export class BloomManager {
 
   /** Render the scene with selective bloom applied. */
   render(): void {
+    if (!this.collectMetrics) {
+      this.darkenNonBloom();
+      this.bloomComposer.render();
+      this.restoreMaterials();
+      this.finalComposer.render();
+      return;
+    }
+    const t0 = performance.now();
     this.darkenNonBloom();
+    const t1 = performance.now();
     this.bloomComposer.render();
+    const t2 = performance.now();
     this.restoreMaterials();
+    const t3 = performance.now();
     this.finalComposer.render();
+    const t4 = performance.now();
+    this.lastMetrics = {
+      darkenMs: t1 - t0,
+      bloomComposerMs: t2 - t1,
+      restoreMs: t3 - t2,
+      finalComposerMs: t4 - t3,
+      bloomTotalMs: t4 - t0,
+    };
   }
 
   /** Push updated bloom strength/radius/threshold from a new lighting config. */
@@ -100,9 +156,12 @@ export class BloomManager {
     this.bloomPass.threshold = threshold;
   }
 
-  /** Forward a canvas resize to both composers. */
+  /** Forward a canvas resize. `bloomComposer` renders at `resolutionScale`
+   *  of the full size; `finalComposer` matches the canvas exactly. */
   setSize(width: number, height: number): void {
-    this.bloomComposer.setSize(width, height);
+    const bloomW = Math.max(1, Math.round(width * this.resolutionScale));
+    const bloomH = Math.max(1, Math.round(height * this.resolutionScale));
+    this.bloomComposer.setSize(bloomW, bloomH);
     this.finalComposer.setSize(width, height);
   }
 

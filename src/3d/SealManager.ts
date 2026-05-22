@@ -136,7 +136,12 @@ export class SealManager {
         model.add(haloSprite);
 
         // Accent PointLight — atmospheric spill onto drum interior surfaces.
-        // Created regardless, but left at intensity 0 when accentLight is off.
+        // `visible` defaults to false. Tower3DView owns the visibility state for
+        // ALL 36 LED-related lights (24 LED reds + 12 accent) via a bulk gate
+        // that flips them together on any-LED-active / all-dark transitions,
+        // with both program variants pre-compiled at scene init to avoid the
+        // ~880 ms shader recompile stalls that per-frame visibility toggling
+        // produces. setSealLed drives only intensity. See docs/framerate-issue.md.
         const light = new THREE.PointLight(
           cfg.color,
           0,
@@ -171,7 +176,8 @@ export class SealManager {
     if (!cfg.enabled) {
       ref.proxyMesh.visible = false;
       ref.haloSprite.visible = false;
-      ref.light.visible = false;
+      ref.light.intensity = 0;
+      // `light.visible` deliberately not touched — see buildSealBacklights.
       return;
     }
 
@@ -192,12 +198,13 @@ export class SealManager {
       ref.haloSprite.visible = false;
     }
 
+    // Drive only intensity. `light.visible` is set once in
+    // buildSealBacklights / updateLighting based on cfg.accentLight, never
+    // per-frame here. See buildSealBacklights for the rationale.
     if (cfg.accentLight) {
       ref.light.intensity = driverV * cfg.intensity;
-      ref.light.visible = on;
     } else {
       ref.light.intensity = 0;
-      ref.light.visible = false;
     }
   }
 
@@ -265,6 +272,8 @@ export class SealManager {
       ref.light.color.copy(color);
       ref.light.distance = backlightDistance;
       ref.light.decay = cfg.decay;
+      // light.visible is owned by Tower3DView's bulk gate; we only manage
+      // intensity here. See buildSealBacklights for the rationale.
 
       this.setSealLed(key, ref.driver.v, lighting);
     }

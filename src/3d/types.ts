@@ -61,6 +61,13 @@ export interface LightingConfigCore {
       radius?: number;
       /** Luminance threshold — 0 means all bright pixels bloom. */
       threshold?: number;
+      /**
+       * Fraction of the canvas backing resolution to render bloom at (0–1).
+       * Defaults to **0.5** (half-res, ~4× cheaper than full-res). Bloom is
+       * intrinsically blurry, so lowering this is visually free; lower it
+       * further (e.g. 0.25) on weak GPUs. Set to 1 for full-resolution bloom.
+       */
+      resolutionScale?: number;
     };
   };
 

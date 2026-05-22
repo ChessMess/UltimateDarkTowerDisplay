@@ -29,6 +29,7 @@ import { CameraController } from './CameraController';
 import { SceneLighting } from './SceneLighting';
 import type { SceneLightsPartial } from './SceneLighting';
 import { BloomManager } from './BloomManager';
+import type { BloomFrameMetrics } from './BloomManager';
 import { EntranceAnimator } from './EntranceAnimator';
 import { GroundDiscManager } from './GroundDiscManager';
 import { SkyboxManager } from './SkyboxManager';
@@ -56,6 +57,8 @@ const CONSOLE_LOGGER: Logger = {
 type Tower3DViewInternals = {
   ledRefs: Map<string, LedRef>;
   sealManager: SealManager;
+  updateLightsGate: () => void;
+  lightsGateOpen: boolean;
 };
 const internals = (view: Tower3DView): Tower3DViewInternals =>
   view as unknown as Tower3DViewInternals;
@@ -97,10 +100,83 @@ export const __testables = {
     internals(view).sealManager.sealBacklights.get(`${side}:${level}`),
   getSealBacklightCount: (view: Tower3DView): number =>
     internals(view).sealManager.sealBacklights.size,
+  /** Drive the bulk-lights gate manually for tests (rAF doesn't run in jsdom). */
+  tickLightsGate: (view: Tower3DView): void => internals(view).updateLightsGate(),
+  isLightsGateOpen: (view: Tower3DView): boolean => internals(view).lightsGateOpen,
 };
 
 function isSoundPack(v: Record<number, string> | SoundPack): v is SoundPack {
   return typeof (v as SoundPack).name === 'string' && typeof (v as SoundPack).samples === 'object';
+}
+
+/** Sorted-array stats (median / p95 / max) rounded to 2 decimals. */
+function stat(arr: number[]): PerfStat {
+  if (arr.length === 0) return { median: 0, p95: 0, max: 0 };
+  const sorted = [...arr].sort((a, b) => a - b);
+  return {
+    median: +sorted[Math.floor(sorted.length / 2)].toFixed(2),
+    p95: +sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))].toFixed(2),
+    max: +sorted[sorted.length - 1].toFixed(2),
+  };
+}
+
+/** Integer-stats helper for counts (no decimals). Avoids `Math.max(...arr)` for safety on large samples. */
+function countStat(arr: number[]): { median: number; max: number } {
+  if (arr.length === 0) return { median: 0, max: 0 };
+  const sorted = [...arr].sort((a, b) => a - b);
+  return { median: sorted[Math.floor(sorted.length / 2)], max: sorted[sorted.length - 1] };
+}
+
+/** Aggregate statistics for one perf-report metric, in ms (or counts where noted). */
+export interface PerfStat {
+  median: number;
+  p95: number;
+  max: number;
+}
+
+/**
+ * Structured perf snapshot returned by {@link Tower3DView.collectPerfReport}.
+ * Diagnostic-only. See `docs/framerate-issue.md` §16 for usage and interpretation.
+ */
+export interface PerfReport {
+  /** Frames per second measured over the report window. */
+  fps: number;
+  /** Number of rAF callbacks observed. */
+  frames: number;
+  /** Actual measured duration in ms (may slightly differ from the requested duration). */
+  durationMs: number;
+  /** Whether the bloom pipeline was active during the report. */
+  bloomEnabled: boolean;
+  /** Wall-clock interval between consecutive rAF callbacks. The canonical ground truth for frame time. */
+  frameMs: PerfStat;
+  /** Sum of bloom sub-steps per frame. Only present when bloom is enabled. */
+  bloomTotalMs?: PerfStat;
+  /** `scene.traverse` to swap non-bloom meshes to black. Only present when bloom is enabled. */
+  darkenMs?: PerfStat;
+  /** `bloomComposer.render()`: scene render at bloom-target res + UnrealBloomPass blurs. Only present when bloom is enabled. */
+  bloomComposerMs?: PerfStat;
+  /** `scene.traverse` to restore original materials. Only present when bloom is enabled. */
+  restoreMs?: PerfStat;
+  /** `finalComposer.render()`: full-res scene render + composite + OutputPass. Only present when bloom is enabled. */
+  finalComposerMs?: PerfStat;
+  /** Draw calls per frame from `renderer.info.render`. Sums across all renderer.render() calls in the frame. */
+  drawCalls: { median: number; max: number };
+  /** Triangles per frame from `renderer.info.render`. Sums across all renderer.render() calls in the frame. */
+  triangles: { median: number; max: number };
+  /** Number of compiled shader programs (snapshot at end of report). Stable count = no recompiles. */
+  programs: number;
+  /** Visible-object counts snapshotted at end of report. */
+  scene: {
+    visibleBloomMeshes: number;
+    visibleNonBloomMeshes: number;
+    visiblePointLights: number;
+    visibleSprites: number;
+    totalMeshes: number;
+  };
+  /** LED state snapshotted at end of report. */
+  drivers: { ledsActive: number };
+  /** Canvas dimensions at end of report. */
+  canvas: { cssW: number; cssH: number; bufW: number; bufH: number; pixelRatio: number };
 }
 
 export interface Tower3DViewOptions {
@@ -208,6 +284,16 @@ export class Tower3DView implements ITowerDisplay {
   private ledRefs: Map<string, LedRef> = new Map();
   private ledAnimator: LedEffectAnimator | null = null;
   private sequenceAnimator: SequenceAnimator | null = null;
+
+  /**
+   * Tracks whether the bulk LED-lights gate is open. When false (idle), every
+   * LED-related PointLight is `visible: false` so the fragment shader iterates
+   * zero of them per fragment (pre-fix idle perf). When true (any LED active),
+   * all 36 lights are `visible: true`. Both program variants are pre-compiled
+   * at scene init (see `prewarmLightPrograms`) so gate flips don't recompile.
+   * See `docs/framerate-issue.md`.
+   */
+  private lightsGateOpen = false;
 
   /** Optional callback fired when the selected side changes (user click or programmatic). */
   onSideChange?: (side: TowerSide) => void;
@@ -450,6 +536,66 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
+   * Play a tower sample as a one-shot, transient event — independent of the
+   * state-driven audio path. Use this when echoing a fire-and-forget audio
+   * command (e.g. emulator/BLE mirrors where the protocol does not persist
+   * audio in tower state, so a subsequent `applyState` with `audio.sample = 0`
+   * would otherwise immediately stop sync-initiated playback). For
+   * state-mirror playback, keep using `applyState(state)` instead.
+   *
+   * Side effects: polyphony — calling twice in quick succession plays both
+   * samples in parallel. Looped one-shots (`opts.loop = true`) require
+   * retaining the returned handle and calling `stop()` to end them; for
+   * unbounded loops prefer the state-driven path.
+   *
+   * Requires `applyAudioConfig({ enabled: true })` from a user gesture.
+   */
+  playSample(
+    sample: number,
+    opts: { loop?: boolean; volume?: number } = {},
+  ): { stop: () => void } {
+    return this.towerSampleAudio.playSampleOneShot(
+      sample,
+      opts.loop ?? false,
+      opts.volume ?? 0,
+    );
+  }
+
+  /**
+   * Play an LED light sequence as a transient, one-shot event — independent
+   * of the state-driven `applyState` path. Use this when echoing a
+   * fire-and-forget light-override command (e.g. emulator/BLE mirrors where
+   * the framework strips `led_sequence` from state, so a subsequent
+   * `applyState` with `led_sequence === 0` would otherwise call
+   * `SequenceAnimator.apply(0)` and kill the sequence mid-playback).
+   *
+   * While the transient sequence is playing, the internal `apply(0)` calls
+   * issued by `applyState` become no-ops on the sequence animator (state
+   * still drives drums, individual LEDs, etc.). When the sequence completes,
+   * normal state-driven sequence apply resumes.
+   *
+   * If `bindSequenceToSample` is enabled in the audio config and the sequence
+   * has a mapped sample (in the sequence map), the bound sample also fires
+   * via `playSampleOneShot` — matching the state-driven `applyState` behavior
+   * and the real tower's firmware (which plays the bound sound automatically
+   * on every light-override command).
+   *
+   * Returns `true` if the sequence started (or was already running), `false`
+   * for an unknown sequence id.
+   */
+  playSequence(sequenceId: number, opts: { onComplete?: () => void } = {}): boolean {
+    if (!this.sequenceAnimator) return false;
+    const started = this.sequenceAnimator.applyTransient(sequenceId, opts.onComplete);
+    if (started && this.audioState.bindSequenceToSample) {
+      const mapped = this.activeSequenceMap()[sequenceId];
+      if (mapped !== undefined && mapped !== 0) {
+        this.towerSampleAudio.playSampleOneShot(mapped, false, 0);
+      }
+    }
+    return started;
+  }
+
+  /**
    * Return the fully-resolved audio configuration. Every field is populated:
    * `pack`, `enabled`, `bindSequenceToSample`, `sequenceMap` (the effective
    * map after fallback resolution), and `drumRotationUrl`.
@@ -570,6 +716,242 @@ export class Tower3DView implements ITowerDisplay {
   playEntrance(): void {
     if (!this.sceneLighting || !this.renderer) return;
     this.entranceAnimator.play(this.sceneLighting, this.renderer, this.lighting);
+  }
+
+  /**
+   * Collect a structured perf snapshot over `durationMs` of wall clock time.
+   * Counts rAF intervals, records BloomManager sub-step timings (via its
+   * `collectMetrics` flag), reads `renderer.info.render` per frame (with
+   * `autoReset` temporarily disabled so totals reflect the WHOLE frame, not
+   * just the last `renderer.render()` call), and snapshots scene state at
+   * the end.
+   *
+   * Diagnostic-only. Enable, capture, share the JSON. See
+   * `docs/framerate-issue.md` §16 for the recipe and interpretation guide.
+   *
+   * @param durationMs how long to sample. Defaults to 3000 (3 s).
+   */
+  async collectPerfReport(durationMs = 3000): Promise<PerfReport> {
+    const bloom = this.bloomManager;
+    if (bloom) bloom.collectMetrics = true;
+
+    const renderer = this.renderer;
+    const prevAutoReset = renderer ? renderer.info.autoReset : true;
+    if (renderer) {
+      // We'll reset manually once per frame so info totals cover the whole frame
+      // (RenderPasses inside the bloom composers each call renderer.render and
+      // would otherwise clobber the counters mid-frame).
+      renderer.info.autoReset = false;
+      renderer.info.reset();
+    }
+
+    const frameMs: number[] = [];
+    const bloomTotalMs: number[] = [];
+    const darkenMs: number[] = [];
+    const bloomComposerMs: number[] = [];
+    const restoreMs: number[] = [];
+    const finalComposerMs: number[] = [];
+    const drawCalls: number[] = [];
+    const triangles: number[] = [];
+
+    await new Promise<void>((resolve) => {
+      const start = performance.now();
+      let lastTs = start;
+      const tick = (ts: number): void => {
+        frameMs.push(ts - lastTs);
+        lastTs = ts;
+
+        // Read prior-frame bloom metrics (render runs before rAF for the next frame).
+        if (bloom?.lastMetrics) {
+          const m: BloomFrameMetrics = bloom.lastMetrics;
+          bloomTotalMs.push(m.bloomTotalMs);
+          darkenMs.push(m.darkenMs);
+          bloomComposerMs.push(m.bloomComposerMs);
+          restoreMs.push(m.restoreMs);
+          finalComposerMs.push(m.finalComposerMs);
+        }
+        // Read frame totals, then reset so the next frame starts fresh.
+        if (renderer) {
+          drawCalls.push(renderer.info.render.calls);
+          triangles.push(renderer.info.render.triangles);
+          renderer.info.reset();
+        }
+
+        if (ts - start < durationMs) requestAnimationFrame(tick);
+        else resolve();
+      };
+      requestAnimationFrame(tick);
+    });
+
+    if (bloom) bloom.collectMetrics = false;
+    if (renderer) renderer.info.autoReset = prevAutoReset;
+
+    // Drop the first sample for each series — frame[0] frameMs is the gap
+    // between the report-start call and the first rAF (often a partial frame
+    // duration which skews the median). Same for prior-frame bloom metrics
+    // which may reflect a frame outside the window.
+    const trim = <T>(a: T[]): T[] => (a.length > 1 ? a.slice(1) : a);
+
+    // Snapshot scene state
+    const bloomLayerInst = new THREE.Layers();
+    bloomLayerInst.set(BLOOM_LAYER);
+    let visibleBloomMeshes = 0;
+    let visibleNonBloomMeshes = 0;
+    let visibleSprites = 0;
+    let visiblePointLights = 0;
+    let totalMeshes = 0;
+    if (this.scene) {
+      this.scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.isMesh) {
+          totalMeshes++;
+          if (!obj.visible) return;
+          if (bloomLayerInst.test(obj.layers)) visibleBloomMeshes++;
+          else visibleNonBloomMeshes++;
+          return;
+        }
+        if ((obj as THREE.Sprite).isSprite && obj.visible) {
+          visibleSprites++;
+          return;
+        }
+        if ((obj as THREE.PointLight).isPointLight && obj.visible) {
+          visiblePointLights++;
+        }
+      });
+    }
+
+    let ledsActive = 0;
+    for (const ref of this.ledRefs.values()) {
+      if (ref.driver.v > 0.001) ledsActive++;
+    }
+
+    const canvas = renderer?.domElement;
+    const measuredMs = frameMs.reduce((s, x) => s + x, 0);
+    const trimmedFrameMs = trim(frameMs);
+    const fps = trimmedFrameMs.length > 0
+      ? (trimmedFrameMs.length * 1000) / trimmedFrameMs.reduce((s, x) => s + x, 0)
+      : 0;
+
+    return {
+      fps: +fps.toFixed(1),
+      frames: trimmedFrameMs.length,
+      durationMs: +measuredMs.toFixed(1),
+      bloomEnabled: !!bloom,
+      frameMs: stat(trimmedFrameMs),
+      ...(bloomTotalMs.length > 1
+        ? {
+          bloomTotalMs: stat(trim(bloomTotalMs)),
+          darkenMs: stat(trim(darkenMs)),
+          bloomComposerMs: stat(trim(bloomComposerMs)),
+          restoreMs: stat(trim(restoreMs)),
+          finalComposerMs: stat(trim(finalComposerMs)),
+        }
+        : {}),
+      drawCalls: countStat(trim(drawCalls)),
+      triangles: countStat(trim(triangles)),
+      programs: renderer?.info.programs?.length ?? 0,
+      scene: { visibleBloomMeshes, visibleNonBloomMeshes, visiblePointLights, visibleSprites, totalMeshes },
+      drivers: { ledsActive },
+      canvas: canvas
+        ? {
+          cssW: canvas.clientWidth,
+          cssH: canvas.clientHeight,
+          bufW: canvas.width,
+          bufH: canvas.height,
+          pixelRatio: renderer.getPixelRatio?.() ?? 1,
+        }
+        : { cssW: 0, cssH: 0, bufW: 0, bufH: 0, pixelRatio: 0 },
+    };
+  }
+
+  /**
+   * Pre-compile shader programs for both the "all 36 LED lights visible" and
+   * "all 36 LED lights invisible" states so runtime gate flips hit the program
+   * cache and never trigger a ~880 ms shader-recompile stall. Called once from
+   * the model-load callback after `buildLeds` and `buildSealBacklights`. Uses
+   * Three.js's `WebGLRenderer.compileAsync` which leverages the
+   * `KHR_parallel_shader_compile` extension when available.
+   */
+  private async prewarmLightPrograms(): Promise<void> {
+    if (!this.scene || !this.camera || !this.renderer) return;
+
+    // Force LED proxy meshes and halo sprites visible during prewarm. They're
+    // created `visible: false` and only become visible per-LED when a sequence
+    // runs — so without this their bloom-layer program variants would compile
+    // on the first sequence start instead of during the prewarm window.
+    // (Prewarm runs right after buildLeds + buildSealBacklights, before any
+    // state replay, so we know the meshes' resting state is `visible: false`.)
+    const setMeshesVisible = (visible: boolean): void => {
+      for (const ref of this.ledRefs.values()) {
+        if (ref.proxyMesh) ref.proxyMesh.visible = visible;
+        if (ref.haloSprite) ref.haloSprite.visible = visible;
+      }
+      for (const r of this.sealManager.sealBacklights.values()) {
+        r.proxyMesh.visible = visible;
+        r.haloSprite.visible = visible;
+      }
+    };
+    setMeshesVisible(true);
+
+    // Compile + render with "36 lights visible". compileAsync covers materials
+    // in the scene graph; the follow-up render covers the BloomManager's
+    // darkMaterial swap (not in the scene graph) and the UnrealBloomPass's
+    // internal blur materials.
+    this.setBulkLightsVisible(true);
+    await this.renderer.compileAsync(this.scene, this.camera);
+    if (!this.scene || !this.camera || !this.renderer) return;
+    this.renderOnce();
+
+    // Compile + render with "0 lights visible". Leave the gate in this state
+    // (matches lightsGateOpen = false initial; LED meshes go back to invisible
+    // below so the rendered idle scene is identical to pre-prewarm).
+    this.setBulkLightsVisible(false);
+    await this.renderer.compileAsync(this.scene, this.camera);
+    if (!this.scene || !this.camera || !this.renderer) return;
+    this.renderOnce();
+
+    setMeshesVisible(false);
+  }
+
+  /** One-shot render mirroring the render loop's path. Used by prewarm. */
+  private renderOnce(): void {
+    if (!this.renderer || !this.scene || !this.camera) return;
+    if (this.bloomManager) this.bloomManager.render();
+    else this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Bulk-toggle visibility on all 36 LED-related PointLights together. Owned
+   * by Tower3DView (not LedEffectAnimator / SealManager) because the goal is
+   * a stable lights-count hash for the program cache. Per-frame visibility
+   * toggling on individual lights causes shader recompiles (see prewarm).
+   */
+  private setBulkLightsVisible(visible: boolean): void {
+    for (const ref of this.ledRefs.values()) {
+      ref.redLight.visible = visible;
+    }
+    // Accent lights respect `accentLight: false` — they stay invisible even
+    // when the gate opens, because the user opted out of atmospheric spill.
+    const accentEnabled = this.lighting.leds.sealBacklights.accentLight;
+    for (const ref of this.sealManager.sealBacklights.values()) {
+      ref.light.visible = visible && accentEnabled;
+    }
+    this.lightsGateOpen = visible;
+  }
+
+  /**
+   * Per-tick check called from the render loop. If any LED is currently lit
+   * (driver.v > 0.001), open the gate; otherwise close it. State transitions
+   * use the pre-warmed program cache → no recompile.
+   */
+  private updateLightsGate(): void {
+    let anyActive = false;
+    for (const ref of this.ledRefs.values()) {
+      if (ref.driver.v > 0.001) { anyActive = true; break; }
+    }
+    if (anyActive !== this.lightsGateOpen) {
+      this.setBulkLightsVisible(anyActive);
+    }
   }
 
   /** Toggle the shadow-catching ground disc. Builds lazily on first enable. */
@@ -764,7 +1146,7 @@ export class Tower3DView implements ITowerDisplay {
     loadTowerModel(
       url,
       this.dracoDecoderPath,
-      ({ root, modelRadius, modelBottomY, modelTopY }) => {
+      async ({ root, modelRadius, modelBottomY, modelTopY }) => {
         if (!this.scene) return;
 
         this.modelRadius = modelRadius;
@@ -802,6 +1184,14 @@ export class Tower3DView implements ITowerDisplay {
           this.pendingSide = null;
           this.cameraController?.snapToSide(pending);
         }
+
+        // Pre-compile shader programs for BOTH lights-gate states so runtime
+        // gate flips never trigger a shader-recompile stall. Must complete
+        // before any state-replay (`applyState` below could turn LEDs on,
+        // which would open the gate and need the program already cached).
+        await this.prewarmLightPrograms();
+        // dispose() may have been called during the await.
+        if (!this.scene) return;
 
         // Replay state AFTER all visuals are built (seals + LEDs)
         this._loadState = 'ready';
@@ -843,7 +1233,7 @@ export class Tower3DView implements ITowerDisplay {
       ref.redLight.color.setHex(lighting.leds.red.color);
       ref.redLight.distance = redHaloDistance;
       ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
-      ref.redLight.visible = ref.driver.v > 0.001;
+      // `visible` intentionally not touched here — see buildLeds for rationale.
 
       if (ref.proxyMesh) {
         const col = layer >= 4 ? baseColor : ledgeColor;
@@ -856,6 +1246,10 @@ export class Tower3DView implements ITowerDisplay {
     }
 
     this.sealManager.updateLighting(lighting, this.modelRadius);
+
+    // Re-sync the bulk lights gate after potential config changes
+    // (e.g. accentLight flipped at runtime). Uses the current gate state.
+    this.setBulkLightsVisible(this.lightsGateOpen);
 
     this.bloomManager?.applyConfig(lighting);
   }
@@ -877,6 +1271,11 @@ export class Tower3DView implements ITowerDisplay {
       for (let light = 0; light < LIGHTS_PER_LAYER; light++) {
         const redPos = computeRedLightPosition(layer, light, this.modelRadius);
         const redLight = new THREE.PointLight(red.color, 0, redHaloDistance, 2);
+        // visible defaults to false. The bulk lights gate (see updateLightsGate)
+        // flips ALL 36 LED-related lights together when ANY LED becomes lit,
+        // and back to false when all LEDs go dark. Both program variants are
+        // pre-compiled at scene init (see prewarmLightPrograms) so gate
+        // transitions don't trigger shader recompiles — see docs/framerate-issue.md.
         redLight.visible = false;
         redLight.position.set(redPos.x, redPos.y, redPos.z);
         this.model.add(redLight);
@@ -1006,6 +1405,7 @@ export class Tower3DView implements ITowerDisplay {
       this.cameraController?.tickDerivedSide();
       this.tickPhysicsListeners();
       this.sceneLighting?.tick();
+      this.updateLightsGate();
       if (this.renderer && this.scene && this.camera) {
         if (this.bloomManager) {
           this.bloomManager.render();

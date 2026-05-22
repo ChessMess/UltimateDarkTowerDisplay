@@ -30,6 +30,7 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
       strength: 1.5,
       radius: 0.5,
       threshold: 0.0,
+      resolutionScale: 0.5,
     },
   },
   leds: {
@@ -172,6 +173,8 @@ export function resolveLighting(
         strength: user?.scene?.bloom?.strength ?? base.scene.bloom.strength,
         radius: user?.scene?.bloom?.radius ?? base.scene.bloom.radius,
         threshold: user?.scene?.bloom?.threshold ?? base.scene.bloom.threshold,
+        resolutionScale:
+          user?.scene?.bloom?.resolutionScale ?? base.scene.bloom.resolutionScale,
       },
     },
     leds: {

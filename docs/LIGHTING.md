@@ -234,12 +234,15 @@ The entrance cinematic dips this to `0.7 × 0.15 = 0.105` for the silhouette bea
 
 `UnrealBloomPass` plus a two-composer pipeline (`bloomComposer` → `finalComposer`) built in `initScene` ([Tower3DView.ts:420-449](../src/3d/Tower3DView.ts#L420-L449)).
 
-| Field                   | Type      | Default | Description                                       |
-| ----------------------- | --------- | ------- | ------------------------------------------------- |
-| `scene.bloom.enabled`   | `boolean` | `true`  | Build the bloom pipeline at all                   |
-| `scene.bloom.strength`  | `number`  | `1.5`   | Glow intensity (0–3)                              |
-| `scene.bloom.radius`    | `number`  | `0.5`   | Bloom spread radius (0–1)                         |
-| `scene.bloom.threshold` | `number`  | `0.0`   | Luminance threshold (0 = all bright pixels bloom) |
+| Field                          | Type      | Default | Description                                                                                                 |
+| ------------------------------ | --------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `scene.bloom.enabled`          | `boolean` | `true`  | Build the bloom pipeline at all                                                                             |
+| `scene.bloom.strength`         | `number`  | `1.5`   | Glow intensity (0–3)                                                                                        |
+| `scene.bloom.radius`           | `number`  | `0.5`   | Bloom spread radius (0–1)                                                                                   |
+| `scene.bloom.threshold`        | `number`  | `0.0`   | Luminance threshold (0 = all bright pixels bloom)                                                           |
+| `scene.bloom.resolutionScale`  | `number`  | `0.5`   | Bloom render-target size as a fraction of the canvas backing buffer. Visually transparent; ~4× GPU savings. |
+
+`resolutionScale` only affects the `bloomComposer` (the offscreen target where the scene is re-rendered for bloom extraction + UnrealBloomPass blurs); `finalComposer` always renders at full canvas resolution. The bloom result is upsampled by the GPU's bilinear sampler when composited. Bloom is intrinsically a wide Gaussian blur — rendering it at half or quarter resolution is visually indistinguishable from full res because the blur smears over any aliasing introduced by the downsample. See [`docs/framerate-issue.md`](framerate-issue.md) for the perf rationale.
 
 Selective-bloom mechanism:
 
@@ -299,10 +302,25 @@ Decay is hard-coded to `2` (quadratic) in the `THREE.PointLight` constructor.
 
 ```ts
 redLight.intensity = driver.v * red.maxHalo;
-redLight.visible = driver.v > 0.001;
+// `redLight.visible` is owned by Tower3DView's bulk lights gate (below),
+// NOT written per-frame here. Per-frame visibility toggling on lights
+// caused ~880 ms shader-recompile stalls on sequence transitions.
 ```
 
 `driver.v` is animated by `LedEffectAnimator.setEffect()` (see [Section 12](#12-led-effects--driver-model)).
+
+### 10.1 Bulk lights gate
+
+The 24 red `PointLight`s here and the 12 seal accent `PointLight`s (§11.3) all share a single visibility gate owned by `Tower3DView`:
+
+- **Gate closed** (no LED has `driver.v > 0.001`): all 36 lights `visible: false` → Three.js's fragment shader iterates 0 PointLights per fragment. This is the idle state.
+- **Gate open** (any LED has `driver.v > 0.001`): all 36 lights `visible: true` → fragment shader iterates 36 PointLights per fragment.
+
+Per-frame check in `Tower3DView.updateLightsGate()` (called from the render loop tick) flips the gate when state changes. `Tower3DView.setBulkLightsVisible(visible)` writes the visibility to all 36 lights in one pass, honoring `accentLight: false` (accent lights stay invisible regardless of gate state when the user has opted out of atmospheric spill).
+
+**Why bulk-toggle (vs per-LED toggle):** Three.js's shader-program cache key includes the active-lights count ([WebGLLights.js:442-451](../node_modules/three/src/renderers/webgl/WebGLLights.js#L442-L451)). Every distinct count is a separate program — varying it during gameplay (e.g. by toggling per-LED based on individual intensity) forces shader recompiles synchronously on the main thread. With the bulk gate, the count flips between only TWO values: 0 (gate closed) and 36 (gate open). Both program variants are pre-compiled at scene init via `Tower3DView.prewarmLightPrograms()` — `WebGLRenderer.compileAsync` followed by a render pass to also cache `BloomManager`'s `darkMaterial` programs and the proxy/halo mesh variants. Subsequent gate flips hit the program cache → no recompile stall.
+
+See [`docs/framerate-issue.md`](framerate-issue.md) §13 for the full investigation and measurement evidence.
 
 ## 11. Seal backlight LEDs
 
@@ -334,9 +352,10 @@ Source: [SealManager.ts:104-120](../src/3d/SealManager.ts#L104-L120).
 
 `THREE.PointLight` for atmospheric spill onto drum interior surfaces.
 
-- Created always; intensity stays at 0 unless `accentLight: true`. Default **is** `true` ([LightingResolver.ts:52](../src/3d/LightingResolver.ts#L52)).
+- Created always with `visible: false`. Visibility is owned by Tower3DView's bulk lights gate (see [§10.1](#101-bulk-lights-gate)) — when the gate opens AND `accentLight: true`, all 12 accent lights become visible together.
+- `accentLight` default **is** `true` ([LightingResolver.ts:52](../src/3d/LightingResolver.ts#L52)). When `false`, the gate skips these 12 lights even when open (user opted out of atmospheric spill).
 - Distance `modelRadius × distanceFactor (0.20)`, decay `2.0`
-- Intensity = `driver.v × intensity (2)`
+- Intensity = `driver.v × intensity (2)` — driven per-frame in `SealManager.setSealLed`.
 
 Source: [SealManager.ts:122-132](../src/3d/SealManager.ts#L122-L132).
 
@@ -566,12 +585,13 @@ Per-frame in `startRenderLoop()` ([Tower3DView.ts:623-650](../src/3d/Tower3DView
 
 1. `controls?.update()` — `OrbitControls` damping
 2. `sceneLighting?.fill.lookAt(0, 0, 0)` — `RectAreaLight` stays facing model centre as the camera orbits
-3. If `bloomComposer && finalComposer`:
+3. `updateLightsGate()` — checks if any LED has `driver.v > 0.001`; bulk-toggles all 36 LED-related `PointLight`s visible/invisible together. See [§10.1](#101-bulk-lights-gate).
+4. If `bloomComposer && finalComposer`:
    - `darkenNonBloom()` — non-`BLOOM_LAYER` meshes swapped to black material
-   - `bloomComposer.render()` — renders only bloom-layer pixels into the bloom render target
+   - `bloomComposer.render()` — renders only bloom-layer pixels into the bloom render target (at `scene.bloom.resolutionScale` of canvas, default ½; see [§8](#8-bloom-post-processing))
    - `restoreMaterials()` — restores original materials
-   - `finalComposer.render()` — composites base scene + bloom render target via shader pass
-4. Else: `renderer.render(scene, camera)` — direct render with no post
+   - `finalComposer.render()` — composites base scene + bloom render target via shader pass (at full canvas resolution)
+5. Else: `renderer.render(scene, camera)` — direct render with no post
 
 `bloomLayer` is a single `THREE.Layers` instance ([Tower3DView.ts:128](../src/3d/Tower3DView.ts#L128)) with `BLOOM_LAYER (1)` set in `initScene` ([Tower3DView.ts:418](../src/3d/Tower3DView.ts#L418)). The `darkMaterial` is a shared `MeshBasicMaterial({ color: 0x000000 })` used to mask non-bloom meshes during the bloom pass.
 
@@ -610,6 +630,7 @@ const DEFAULT_LIGHTING = {
       strength: 1.5,
       radius: 0.5,
       threshold: 0.0,
+      resolutionScale: 0.5,
     },
   },
   leds: {
@@ -853,3 +874,4 @@ Recorded so contributors do not chase apparent bugs.
 - [RENDERERS §Tower3DView](RENDERERS.md#tower3dview) — when to pick the 3D renderer.
 - [EXAMPLE §3D Options](EXAMPLE.md#panel-3d-options-lighting-and-scene) — the demo's live lighting editor.
 - [ARCHITECTURE §subsystem map](ARCHITECTURE.md#subsystem-map) — file-by-file orientation in `src/3d/`.
+- [lighting-alternatives.md](lighting-alternatives.md) — research survey of 17 alternative approaches to the current 36-PointLight design, with a comparison table and recommended experiment order.

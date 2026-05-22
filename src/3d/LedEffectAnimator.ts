@@ -53,8 +53,11 @@ export class LedEffectAnimator {
     const { driver, redLight } = ref;
     const cfg = this.getConfig();
     const { red } = cfg.leds;
+    // Drive only intensity; `visible` stays true for the light's lifetime to
+    // keep Three.js's lights-count hash stable. Toggling visible per-frame
+    // forces shader recompiles on every LED on/off transition — measured
+    // ~880 ms main-thread stalls. See docs/framerate-issue.md.
     redLight.intensity = driver.v * red.maxHalo;
-    redLight.visible = driver.v > 0.001;
 
     if (sealKey && this.sealManager) {
       this.sealManager.setSealLed(sealKey, driver.v, cfg);

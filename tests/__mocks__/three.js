@@ -154,15 +154,30 @@ class PerspectiveCamera {
 class WebGLRenderer {
   constructor() {
     this.domElement = document.createElement('canvas');
-    this.info = { memory: { geometries: 0, textures: 0 } };
+    this.info = {
+      memory: { geometries: 0, textures: 0 },
+      render: { calls: 0, triangles: 0, points: 0, lines: 0, frame: 0 },
+      programs: [],
+      autoReset: true,
+      reset() {
+        this.render.calls = 0;
+        this.render.triangles = 0;
+        this.render.points = 0;
+        this.render.lines = 0;
+      },
+    };
     this.shadowMap = { enabled: false, type: 0 };
     this.toneMapping = 0;
     this.toneMappingExposure = 1;
     this.outputColorSpace = '';
+    this.capabilities = { getMaxAnisotropy: () => 1 };
   }
   setPixelRatio() {}
   setSize() {}
+  getPixelRatio() { return 1; }
   render() {}
+  compile() { return new Set(); }
+  compileAsync() { return Promise.resolve(new Set()); }
   dispose() {}
   forceContextLoss() {}
 }
@@ -398,6 +413,30 @@ class CylinderGeometry {
   dispose() {}
 }
 
+class TextureLoader {
+  constructor() {}
+  load(_url, onLoad, _onProgress, _onError) {
+    // Tests don't need a real texture — return a stub and never fire callbacks.
+    const tex = { isTexture: true, dispose() {}, image: null };
+    if (typeof onLoad === 'function') setTimeout(() => onLoad(tex), 0);
+    return tex;
+  }
+  loadAsync(_url) {
+    return Promise.resolve({ isTexture: true, dispose() {}, image: null });
+  }
+}
+
+class Clock {
+  constructor(autoStart = true) {
+    this.autoStart = autoStart;
+    this.running = false;
+  }
+  start() { this.running = true; }
+  stop() { this.running = false; }
+  getDelta() { return 0; }
+  getElapsedTime() { return 0; }
+}
+
 class AxesHelper {
   constructor(size) {
     this.size = size;
@@ -438,6 +477,8 @@ module.exports = {
   CircleGeometry,
   CylinderGeometry,
   AxesHelper,
+  Clock,
+  TextureLoader,
   MOUSE: {
     ROTATE: 0,
     DOLLY: 1,
