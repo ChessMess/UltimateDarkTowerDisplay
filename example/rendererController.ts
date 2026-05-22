@@ -1,5 +1,5 @@
-import { TowerDisplay, TowerStateReadout } from '../src/index';
-import type { TowerDisplayOptions, RendererType } from '../src/index';
+import { TowerRenderView, TowerStateReadout } from '../src/index';
+import type { TowerDisplay, TowerRenderViewOptions, RendererType } from '../src/index';
 import type { TowerState, TowerSide } from 'ultimatedarktower';
 import type { DomElements } from './dom';
 import { toggleSeal, refreshSeals } from './sealController';
@@ -24,7 +24,7 @@ declare global {
   }
 }
 
-let display: TowerDisplay;
+let view: TowerRenderView;
 let readout: TowerStateReadout;
 let lastState: TowerState | null = null;
 let lastSide: TowerSide | null = null;
@@ -33,11 +33,11 @@ let currentActiveId: ViewButtonId = 'btn-view-3d';
 const viewChangeListeners = new Set<() => void>();
 
 function publishDisplay(): void {
-  window.display = display;
+  window.display = view.display;
 }
 
 export function getDisplay(): TowerDisplay {
-  return display;
+  return view.display;
 }
 
 export function getReadout(): TowerStateReadout {
@@ -77,13 +77,13 @@ function fireViewChange(): void {
   }
 }
 
-function buildDisplayOptions(renderers: RendererType | RendererType[], els: DomElements): TowerDisplayOptions {
+function buildViewOptions(renderers: RendererType | RendererType[], els: DomElements): TowerRenderViewOptions {
   return {
     container: els.towerContainer,
     renderers,
     modelUrl: towerModelUrl,
     clickToToggleSeals: false, // external source of truth lives in sealController.
-    onSealClick: (seal) => toggleSeal(seal, display, readout),
+    onSealClick: (seal) => toggleSeal(seal, view.display, readout),
     onSideChange: (side) => { lastSide = side; },
     debug3D: (els.debug3dCheckbox?.checked ?? false),
     camera: {
@@ -125,63 +125,63 @@ function syncToolbar3DState(_els: DomElements): void {
 // example only needs to flip `enabled` on user gesture.
 function syncAudioEnabledFromCheckbox(els: DomElements, enableNow = false): void {
   if (enableNow && els.chkTowerAudio?.checked) {
-    display.applyAudioConfig({ enabled: true });
+    view.applyAudioConfig({ enabled: true });
   }
 }
 
 export function armTowerAudioFromUserGesture(els: DomElements): void {
   if (!is3DViewVisible() || !els.chkTowerAudio?.checked) return;
-  display.applyAudioConfig({ enabled: true });
+  view.applyAudioConfig({ enabled: true });
 }
 
-function recreateDisplay(renderers: RendererType | RendererType[], activeId: ViewButtonId, els: DomElements): void {
-  display.dispose();
+function recreateView(renderers: RendererType | RendererType[], activeId: ViewButtonId, els: DomElements): void {
+  view.dispose();
   currentRenderers = renderers;
   currentActiveId = activeId;
-  display = new TowerDisplay(buildDisplayOptions(renderers, els));
+  view = new TowerRenderView(buildViewOptions(renderers, els));
   publishDisplay();
   setActiveViewButton(activeId, els);
   syncAudioEnabledFromCheckbox(els, true);
-  if (lastState) display.applyState(lastState);
-  replayLedOverrides(display);
-  refreshSeals(display, readout);
-  if (lastSide) display.selectSide(lastSide);
+  if (lastState) view.applyState(lastState);
+  replayLedOverrides(view.display);
+  refreshSeals(view.display, readout);
+  if (lastSide) view.selectSide(lastSide);
   syncToolbar3DState(els);
   fireViewChange();
 }
 
 /**
- * Rebuild the TowerDisplay in place using the currently-selected renderers
+ * Rebuild the render view in place using the currently-selected renderers
  * and view button. Used by the pop-out controller after moving #tower
  * between the main document and a popup document.
  */
 export function recreateCurrentDisplay(els: DomElements): void {
-  recreateDisplay(currentRenderers, currentActiveId, els);
+  recreateView(currentRenderers, currentActiveId, els);
 }
 
 export function initRendererController(els: DomElements): void {
   readout = new TowerStateReadout(els.readoutContainer);
   readout.clickToToggleSeals = true;
-  readout.onSealClick = (seal) => toggleSeal(seal, display, readout);
+  readout.onSealClick = (seal) => toggleSeal(seal, view.display, readout);
   readout.clickToToggleLeds = true;
-  readout.onLedClick = (layer, light, effect) => recordLedOverride(layer, light, effect, display);
-  display = new TowerDisplay(buildDisplayOptions('3d-view', els));
+  readout.onLedClick = (layer, light, effect) => recordLedOverride(layer, light, effect, view.display);
+  view = new TowerRenderView(buildViewOptions('3d-view', els));
   publishDisplay();
   syncAudioEnabledFromCheckbox(els);
 
   for (const [id, renderers] of Object.entries(viewButtons) as [ViewButtonId, RendererType | RendererType[]][]) {
     const btn = getViewButtonRef(id, els);
-    if (btn) btn.addEventListener('click', () => recreateDisplay(renderers, id, els));
+    if (btn) btn.addEventListener('click', () => recreateView(renderers, id, els));
   }
 
   if (els.debug3dCheckbox) {
     els.debug3dCheckbox.addEventListener('change', () => {
-      recreateDisplay(currentRenderers, currentActiveId, els);
+      recreateView(currentRenderers, currentActiveId, els);
     });
   }
 
   if (els.btnEntrance) {
-    els.btnEntrance.addEventListener('click', () => display.playEntrance());
+    els.btnEntrance.addEventListener('click', () => view.playEntrance());
   }
 
   syncToolbar3DState(els);

@@ -661,6 +661,19 @@ code {
   display: none;
 }
 
+/* Gothic theme overrides for the library-provided TowerRenderView chrome.
+   These re-point the facade's CSS custom properties at the example's palette
+   so the optional header/badges blend into the panel rather than the
+   library's neutral defaults. */
+#rendered-panel .trv-root {
+  --trv-accent: var(--lume);
+  --trv-border: var(--border-gold);
+  --trv-title-color: var(--ink);
+  --trv-subtitle-color: var(--text-dim);
+  --trv-badge-bg: var(--bg-panel);
+  --trv-badge-border: var(--border-gold);
+}
+
 .panel-editors {
   gap: 0.75rem;
 }

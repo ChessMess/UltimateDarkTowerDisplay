@@ -460,6 +460,114 @@ button.tdr-led[data-overridden="true"][data-effect="on"] {
   width: 100% !important;
   height: 100% !important;
 }
+
+/* ── Tower Render View (facade chrome) ── */
+
+.trv-root {
+  --trv-border: #2a2a2a;
+  --trv-title-color: #e8e8e8;
+  --trv-subtitle-color: #888;
+  --trv-badge-bg: #1a1a1a;
+  --trv-badge-border: #333;
+  --trv-badge-color: #b8b8b8;
+  --trv-accent: #f0c040;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+}
+
+.trv-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.trv-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--trv-border);
+}
+
+.trv-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.trv-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--trv-title-color);
+  margin: 0;
+}
+
+.trv-subtitle {
+  font-size: 0.7rem;
+  color: var(--trv-subtitle-color);
+  margin: 0;
+}
+
+.trv-badges {
+  margin-left: auto;
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.trv-badge {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  background: var(--trv-badge-bg);
+  border: 1px solid var(--trv-badge-border);
+  border-radius: 3px;
+  color: var(--trv-badge-color);
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: baseline;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.trv-badge-label {
+  color: var(--trv-subtitle-color);
+}
+
+.trv-badge-value {
+  color: var(--trv-title-color);
+  font-weight: 600;
+}
+
+.trv-badge[data-tone="accent"] {
+  border-color: var(--trv-accent);
+}
+.trv-badge[data-tone="accent"] .trv-badge-value {
+  color: var(--trv-accent);
+}
+
+.trv-badge[data-tone="warn"] {
+  border-color: #b35414;
+}
+.trv-badge[data-tone="warn"] .trv-badge-value {
+  color: #e67e22;
+}
+
+.trv-badge[data-tone="good"] {
+  border-color: #27ae60;
+}
+.trv-badge[data-tone="good"] .trv-badge-value {
+  color: #27ae60;
+}
+
+.trv-actions {
+  display: flex;
+  gap: 0.4rem;
+}
 `;
 
 /** The raw CSS string for all tower display components.
