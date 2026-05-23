@@ -86,7 +86,7 @@ Updated by each branch's docs-only PR. (Largely redundant with [`RESULTS.md`](li
 | 00 baseline | (no branch — captured on `main@3ab257f`, 2026-05-23) | captured | [`00-baseline.md`](lighting-experiments/00-baseline.md) | n/a |
 | 4.18 | `lighting/4.18-twelve-lights` | pending | `4.18-twelve-lights.md` | |
 | 4.16 | `lighting/4.16-emissive-standard` | pending | `4.16-emissive-standard.md` | |
-| 4.2  | `lighting/4.2-range-cull` | pending | `4.2-range-cull.md` | |
+| 4.2  | `lighting/4.2-range-cull` | report-complete | [`4.2-range-cull.md`](lighting-experiments/4.2-range-cull.md) | |
 | 4.5  | `lighting/4.5-light-probe` | pending | `4.5-light-probe.md` | |
 | 4.1  | `lighting/4.1-hdr-proxies` | pending | `4.1-hdr-proxies.md` | |
 | 4.4  | `lighting/4.4-two-directional` | pending | `4.4-two-directional.md` | |

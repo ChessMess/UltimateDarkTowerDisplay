@@ -15,7 +15,7 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 | 00 | baseline | baseline-captured | n/a | n/a | n/a | yes | n/a | [00-baseline.md](00-baseline.md) |
 | 4.18 | twelve-lights | pending | — | — | — | — | — | `4.18-twelve-lights.md` |
 | 4.16 | emissive-standard | pending | — | — | — | — | — | `4.16-emissive-standard.md` |
-| 4.2  | range-cull | pending | — | — | — | — | — | `4.2-range-cull.md` |
+| 4.2  | range-cull | report-complete | +231% (75.1→24.0 ms) | +87% (141.6→76.9 ms) | no | yes | none | [4.2-range-cull.md](4.2-range-cull.md) |
 | 4.5  | light-probe | pending | — | — | — | — | — | `4.5-light-probe.md` |
 | 4.1  | hdr-proxies | pending | — | — | — | — | — | `4.1-hdr-proxies.md` |
 | 4.4  | two-directional | pending | — | — | — | — | — | `4.4-two-directional.md` |
