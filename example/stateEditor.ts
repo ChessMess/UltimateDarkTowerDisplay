@@ -102,6 +102,8 @@ export function initStateEditor(
   }
 
   if (els.btnEmpty) {
+    // `#btn-empty` is the EMPTY baseline trigger for `.claude/skills/darktower-3d-perf`.
+    // If you change the handler so a click no longer puts the renderer in a fully-off state, update SKILL.md.
     els.btnEmpty.addEventListener('click', () => {
       setStateName('empty state', els);
       applyAndShow(createEmptyState(), getDisplay, getReadout, setLastState, els);

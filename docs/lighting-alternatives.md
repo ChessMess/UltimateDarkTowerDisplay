@@ -521,6 +521,14 @@ Whatever direction we pick, verification follows [framerate-issue.md §5](framer
 2. Compare against current baseline: idle 120 fps / 0 PointLights, sequence 14–17 fps / 36 PointLights, programs +3 on first sequence then stable.
 3. The replacement must **beat the sequence fps without regressing idle fps** and without growing `programs` over time.
 
+**Operationally, use the `darktower-3d-perf` Claude Code skill** at [`.claude/skills/darktower-3d-perf/SKILL.md`](../.claude/skills/darktower-3d-perf/SKILL.md). The skill encodes this recipe as a standardized capture protocol (Empty → Idle → Scenario → Post-idle), and its "When evaluating a lighting alternative" section adds:
+- The mandatory **baseline-first** workflow (capture on `main` before implementing — without a same-machine baseline, "this is faster" claims are noise).
+- The **Empty / 1-LED / All-LEDs scenario triplet**, which surfaces step-cost discontinuities that single-scenario tests miss. The current bulk-lights gate pays full 36-light fragment cost for *one* lit LED — most options in 4.1/4.3/4.4/4.5/4.18 are specifically designed to flatten that step, and the triplet is the test that proves they did.
+- A per-alternative-class **expected-signals table** (what `visiblePointLights` / `programs` / `bloomTotalMs` should read after each kind of change, plus the smoking-gun signal that proves the alternative actually took effect — e.g. for 4.2, `frameMs.median` drops while `visiblePointLights` stays at 36).
+- A consistent **markdown report format** so two reports separated by an alternative-swap diff cleanly in a PR.
+
+If you change anything in this doc that affects how alternatives should be measured (new options, new success criteria, deprecated approaches), update SKILL.md too.
+
 ### 5.9 WebGPU compatibility check
 
 If we move forward with 4.10 (or partial-WebGPU for 4.15), confirm:
