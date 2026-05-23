@@ -1237,7 +1237,8 @@ export class Tower3DView implements ITowerDisplay {
 
       if (ref.proxyMesh) {
         const col = layer >= 4 ? baseColor : ledgeColor;
-        (ref.proxyMesh.material as THREE.MeshBasicMaterial).color.copy(col);
+        // 4.16: live-color updates go to .emissive on MeshStandardMaterial.
+        (ref.proxyMesh.material as THREE.MeshStandardMaterial).emissive.copy(col);
       }
       if (ref.haloSprite) {
         const col = layer >= 4 ? baseColor : ledgeColor;
@@ -1288,12 +1289,17 @@ export class Tower3DView implements ITowerDisplay {
 
           const proxyRadius = this.modelRadius * ledgeLeds.proxy.sizeFactor;
           const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
-          const proxyMat = new THREE.MeshBasicMaterial({
-            color: ledgeLeds.color,
-            transparent: true,
-            opacity: 0,
-            depthWrite: false,
+          // 4.16: MeshStandardMaterial with emissive drives the bloom pop.
+          // color: black so the proxy disappears when emissiveIntensity goes to
+          // zero (no diffuse contribution). toneMapped: false preserves the
+          // existing bloom-pop behavior. The driver writes emissiveIntensity in
+          // LedEffectAnimator.writeLed.
+          const proxyMat = new THREE.MeshStandardMaterial({
+            color: 0x000000,
+            emissive: ledgeLeds.color,
+            emissiveIntensity: 0,
             toneMapped: false,
+            depthWrite: false,
           });
           const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
           proxyMesh.position.set(x, y, z);
@@ -1331,12 +1337,13 @@ export class Tower3DView implements ITowerDisplay {
 
           const proxyRadius = this.modelRadius * baseLeds.proxy.sizeFactor;
           const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
-          const proxyMat = new THREE.MeshBasicMaterial({
-            color: baseLeds.color,
-            transparent: true,
-            opacity: 0,
-            depthWrite: false,
+          // 4.16: MeshStandardMaterial emissive — see ledge proxy above for rationale.
+          const proxyMat = new THREE.MeshStandardMaterial({
+            color: 0x000000,
+            emissive: baseLeds.color,
+            emissiveIntensity: 0,
             toneMapped: false,
+            depthWrite: false,
           });
           const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
           proxyMesh.position.set(x, y, z);

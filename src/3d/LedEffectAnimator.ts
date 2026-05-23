@@ -66,7 +66,11 @@ export class LedEffectAnimator {
     const ledgeCfg = cfg.leds.ledgeLeds;
     if (ref.proxyMesh && layer === 3 && ledgeCfg.enabled) {
       if (ledgeCfg.proxy.enabled) {
-        (ref.proxyMesh.material as THREE.MeshBasicMaterial).opacity = driver.v;
+        // 4.16: drive emissiveIntensity instead of opacity. The proxy mesh now
+        // uses MeshStandardMaterial with color=black + emissive=led-color, so
+        // emissiveIntensity = driver.v reproduces the opacity-driven fade with
+        // proper PBR + bloom integration.
+        (ref.proxyMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = driver.v;
         ref.proxyMesh.visible = driver.v > 0.001;
       } else {
         ref.proxyMesh.visible = false;
@@ -85,7 +89,8 @@ export class LedEffectAnimator {
     const baseCfg = cfg.leds.baseLeds;
     if (ref.proxyMesh && layer >= 4 && baseCfg.enabled) {
       if (baseCfg.proxy.enabled) {
-        (ref.proxyMesh.material as THREE.MeshBasicMaterial).opacity = driver.v;
+        // 4.16: see ledge branch above.
+        (ref.proxyMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = driver.v;
         ref.proxyMesh.visible = driver.v > 0.001;
       } else {
         ref.proxyMesh.visible = false;

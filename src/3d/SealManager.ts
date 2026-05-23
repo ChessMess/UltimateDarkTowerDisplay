@@ -97,14 +97,18 @@ export class SealManager {
         const { x, y, z } = pose.position;
 
         // Proxy mesh — bright "LED bulb" visible through aligned cutout holes.
+        // 4.16: MeshStandardMaterial with emissive drives the bloom pop. color
+        // is black so the proxy disappears when emissiveIntensity is zero (no
+        // diffuse contribution). toneMapped: false preserves the existing
+        // bloom-pop behavior. setSealLed writes emissiveIntensity per driver.
         const proxyRadius = modelRadius * cfg.proxy.sizeFactor;
         const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
-        const proxyMat = new THREE.MeshBasicMaterial({
-          color: cfg.color,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
+        const proxyMat = new THREE.MeshStandardMaterial({
+          color: 0x000000,
+          emissive: cfg.color,
+          emissiveIntensity: 0,
           toneMapped: false,
+          depthWrite: false,
         });
         const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
         proxyMesh.position.set(x, y, z);
@@ -185,7 +189,9 @@ export class SealManager {
     const on = driverV > 0.001;
 
     if (cfg.proxy.enabled) {
-      (ref.proxyMesh.material as THREE.MeshBasicMaterial).opacity = driverV;
+      // 4.16: drive emissiveIntensity instead of opacity. Proxy now uses
+      // MeshStandardMaterial with color=black + emissive=led-color.
+      (ref.proxyMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = driverV;
       ref.proxyMesh.visible = on;
     } else {
       ref.proxyMesh.visible = false;
@@ -259,7 +265,8 @@ export class SealManager {
       const { x, y, z } = pose.position;
 
       ref.proxyMesh.position.set(x, y, z);
-      (ref.proxyMesh.material as THREE.MeshBasicMaterial).color.copy(color);
+      // 4.16: live-color updates go to .emissive on MeshStandardMaterial.
+      (ref.proxyMesh.material as THREE.MeshStandardMaterial).emissive.copy(color);
       const proxyRadius = modelRadius * cfg.proxy.sizeFactor;
       ref.proxyMesh.scale.setScalar(proxyRadius / (ref.proxyMesh.geometry as THREE.SphereGeometry).parameters.radius);
 
