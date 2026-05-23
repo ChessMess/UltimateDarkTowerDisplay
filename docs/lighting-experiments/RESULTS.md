@@ -14,7 +14,7 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 |---:|---|---|---:|---:|---|---|---|---|
 | 00 | baseline | baseline-captured | n/a | n/a | n/a | yes | n/a | [00-baseline.md](00-baseline.md) |
 | 4.18 | twelve-lights | pending | — | — | — | — | — | `4.18-twelve-lights.md` |
-| 4.16 | emissive-standard | pending | — | — | — | — | — | `4.16-emissive-standard.md` |
+| 4.16 | emissive-standard | report-complete | +5% (13.1 → 13.8) ¹ | -3% (6.9 → 6.7) ¹ | no | yes ² | none ³ | [4.16-emissive-standard.md](4.16-emissive-standard.md) |
 | 4.2  | range-cull | pending | — | — | — | — | — | `4.2-range-cull.md` |
 | 4.5  | light-probe | pending | — | — | — | — | — | `4.5-light-probe.md` |
 | 4.1  | hdr-proxies | pending | — | — | — | — | — | `4.1-hdr-proxies.md` |
@@ -23,6 +23,10 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 | 4.11 | min-cost-combo | pending | — | — | — | — | — | `4.11-min-cost-combo.md` |
 
 Statuses: `baseline-captured` (this file only) → `pending` → `implemented` → `report-complete` → `merged` | `abandoned`.
+
+¹ **4.16 is a building-block validation, not a perf candidate** — see the [§8 framing note](../lighting-testing-plan.md#8-per-alternative-entries). Its success criterion is visual parity + programs stable + tests pass, NOT frameMs improvement. The Display delta is within capture noise; the Retina delta is the expected ~5% per-fragment cost of swapping MeshBasicMaterial → MeshStandardMaterial. Acceptable.
+² 4.16 dropped `programs` from 30 → 29 (the new MeshStandardMaterial proxies share a program variant with the existing drum-interior material), then stable across 3 sequence-5 transitions.
+³ Visual parity confirmed pixel-level identical via deterministic All-LEDs-on screenshot pair at both canvas sizes.
 
 **Current leader (provisional):** none yet — only baseline is captured. The first alternative to land per the [§6 ordering](../lighting-alternatives.md#6-recommended-next-experiments) is `4.18 twelve-lights` (Path A).
 
