@@ -13,7 +13,7 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 | § | Alternative | Status | scenario fps Δ (Display ~1.84 M) | scenario fps Δ (Retina ~8.08 M) | idle/empty regress? | programs stable? | Visual delta | Result file |
 |---:|---|---|---:|---:|---|---|---|---|
 | 00 | baseline | baseline-captured | n/a | n/a | n/a | yes | n/a | [00-baseline.md](00-baseline.md) |
-| 4.18 | twelve-lights | pending | — | — | — | — | — | `4.18-twelve-lights.md` |
+| 4.18 | twelve-lights | report-complete | **+816%** (13.1 → 120) | **+979%** (6.9 → 74.5) | no | yes | none | [4.18-twelve-lights.md](4.18-twelve-lights.md) |
 | 4.16 | emissive-standard | pending | — | — | — | — | — | `4.16-emissive-standard.md` |
 | 4.2  | range-cull | pending | — | — | — | — | — | `4.2-range-cull.md` |
 | 4.5  | light-probe | pending | — | — | — | — | — | `4.5-light-probe.md` |
@@ -24,7 +24,7 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 
 Statuses: `baseline-captured` (this file only) → `pending` → `implemented` → `report-complete` → `merged` | `abandoned`.
 
-**Current leader (provisional):** none yet — only baseline is captured. The first alternative to land per the [§6 ordering](../lighting-alternatives.md#6-recommended-next-experiments) is `4.18 twelve-lights` (Path A).
+**Current leader (provisional):** [4.18 twelve-lights](4.18-twelve-lights.md) — sequence `frameMs.median` dropped **88%** on Retina full-window (well above the ≥60% gate); every scenario hits v-sync at Display canvas; idle/empty unchanged; programs stable; no visual-difference risk. Held in draft (code PR `lighting/4.18-twelve-lights`) per [§11 of the testing plan](../lighting-testing-plan.md#11-selection--merge-decision) until the remaining 7 alternatives are evaluated.
 
 ## Baseline numbers (excerpted from `00-baseline.md` for at-a-glance reference)
 
