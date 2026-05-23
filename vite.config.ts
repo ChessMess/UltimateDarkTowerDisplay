@@ -105,6 +105,11 @@ export default defineConfig({
       ultimatedarktower: resolve(__dirname, 'node_modules/ultimatedarktower/dist/src/index.js'),
     },
   },
+  optimizeDeps: {
+    // Force Vite to pre-bundle the CJS build of ultimatedarktower so esbuild
+    // converts it to proper ESM with all named exports available statically.
+    include: ['ultimatedarktower'],
+  },
   assetsInclude: ['**/*.glb', '**/*.ogg'],
   build: {
     lib: {
