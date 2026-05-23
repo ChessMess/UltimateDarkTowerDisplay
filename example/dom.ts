@@ -50,6 +50,7 @@ export interface DomElements {
   btnRandom: HTMLElement | null;
   btnAllOn: HTMLElement | null;
   btnIdle: HTMLElement | null;
+  btnRemoveAllSeals: HTMLElement | null;
   btnResetSeals: HTMLElement | null;
   btnEmpty: HTMLElement | null;
   selSequence: HTMLSelectElement | null;
@@ -127,6 +128,7 @@ export function queryDom(): DomElements {
     btnRandom: document.getElementById('btn-random'),
     btnAllOn: document.getElementById('btn-allon'),
     btnIdle: document.getElementById('btn-idle'),
+    btnRemoveAllSeals: document.getElementById('btn-remove-all-seals'),
     btnResetSeals: document.getElementById('btn-reset-seals'),
     btnEmpty: document.getElementById('btn-empty'),
     selSequence: document.getElementById('sel-sequence') as HTMLSelectElement | null,

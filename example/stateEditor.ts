@@ -5,7 +5,7 @@ import { refreshConfigPreview, setConfigPreviewMessage, syncConfigSelectorVisibi
 import { refreshLightingConfigBox } from './lightingController';
 import { armTowerAudioFromUserGesture, is3DViewVisible, getLastState } from './rendererController';
 import { createReadmeExampleState, createRandomState, createAllOnState, createSequenceState, createEmptyState, SEQUENCE_AUDIO_MAP } from './presets';
-import { resetSeals, toggleSeal, getTower } from './sealController';
+import { removeAllSeals, resetSeals, toggleSeal, getTower } from './sealController';
 import { clearLedOverrides } from './ledOverrideController';
 import { SEQUENCE_METADATA } from '../src/sequences/sequenceMetadata';
 
@@ -72,6 +72,13 @@ export function initStateEditor(
       getDisplay().showIdle();
       getReadout().showIdle();
       setConfigPreviewMessage('Idle view: no state currently rendered.', els);
+    });
+  }
+
+  if (els.btnRemoveAllSeals) {
+    els.btnRemoveAllSeals.addEventListener('click', () => {
+      removeAllSeals(getDisplay(), getReadout());
+      refreshSealToggleActive(els);
     });
   }
 

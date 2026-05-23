@@ -53,11 +53,11 @@ export interface PhysicsConfig {
      */
     modelUrl?: string;
     /**
-     * Physics collider shape. `'sphere'` (default) uses a Rapier ball
-     * collider — preserves the existing physics tuning regardless of the
-     * visual mesh. `'hull'` derives a convex hull from `modelUrl`'s
-     * point cloud; falls back to `'sphere'` with a `console.warn` when
-     * `modelUrl` is unset or the hull is degenerate.
+     * Physics collider shape. `'hull'` (default) derives a convex hull from
+     * `modelUrl`'s point cloud; falls back to `'sphere'` with a `console.warn`
+     * when `modelUrl` is unset or the hull is degenerate. `'sphere'` uses a
+     * Rapier ball collider — preserves the existing physics tuning regardless
+     * of the visual mesh.
      *
      * Hull dynamics may need re-tuning of friction/restitution.
      *

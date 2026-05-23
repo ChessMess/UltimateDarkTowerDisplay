@@ -91,7 +91,10 @@
           <button data-seal-level="bottom" data-seal-side="east">E</button>
           <button data-seal-level="bottom" data-seal-side="south">S</button>
           <button data-seal-level="bottom" data-seal-side="west">W</button>
-          <button id="btn-reset-seals" class="seal-reset">Reset Seals</button>
+          <div class="seal-action-row">
+            <button id="btn-remove-all-seals" class="seal-reset">Remove All</button>
+            <button id="btn-reset-seals" class="seal-reset">Replace All</button>
+          </div>
         </div>
       </section>
 
@@ -279,11 +282,11 @@
                 </select>
               </label>
               <label class="toolbar-label"
-                title="Physics collider shape. Sphere preserves all current tuning. Hull derives a convex hull from the loaded model and may need friction/restitution re-tuning. Disabled when Model is Sphere.">
+                title="Physics collider shape. Mesh derives a convex hull from the loaded model and may need friction/restitution re-tuning. Sphere preserves all current tuning. Disabled when Model is Sphere.">
                 Collider
                 <select id="sel-skull-collider">
                   <option value="sphere">Sphere</option>
-                  <option value="hull">Hull</option>
+                  <option value="hull">Mesh</option>
                 </select>
               </label>
             </div>

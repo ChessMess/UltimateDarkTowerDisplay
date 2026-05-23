@@ -26,6 +26,7 @@ This doc is the canonical record of the investigation, the fix, and the diagnost
 - [11. Reference Material](#11-reference-material)
 - [12. Final Verification Checklist](#12-final-verification-checklist)
 - [13. Follow-up Fix — Bulk Lights Gate + Prewarm (2026-05-22 PM)](#13-follow-up-fix--bulk-lights-gate--prewarm-2026-05-22-pm)
+- [14. Pop-out Window Perf — Open Investigation (unresolved, 2026-05-22)](#14-pop-out-window-perf--open-investigation-unresolved-2026-05-22)
 
 ---
 
@@ -550,3 +551,114 @@ At the user's natural canvas size (1.1 M backing pixels):
 ### 13.7 How this updates §4
 
 The instructions in §4 ("The Fix — Code Changes") describe the first fix (keep all lights visible). The CURRENT shipped behavior is §4 PLUS §13 — the gate makes `setBulkLightsVisible(true/false)` the source of truth for the 36 lights' visibility, while individual LEDs still only animate intensity. The two together are what's in the dist.
+
+---
+
+## 14. Pop-out Window Perf — Open Investigation (unresolved, 2026-05-22)
+
+> **Status: UNRESOLVED.** A separate perf problem from §1–§13. The popup window itself slows the 3D renderer down even after §4 + §13 are in effect. Multiple fix attempts in this session did not help and were reverted. The Display example's Pop Out feature is shipped as-is.
+
+### 14.1 What the user observed
+
+In the Display example app ([example/popOutController.ts](../example/popOutController.ts)) the "Pop Out" button transplants `#rendered-panel` into a separate browser window (`window.open`) and recreates the renderer inside it. With all LEDs manually lit via the override panel:
+
+| Scenario | Canvas (CSS) | fps |
+|---|---|---:|
+| Main page, embedded | ~1194 × 1053 | ~30 |
+| Popup window | 940 × 907 | ~18 |
+
+Same scene, smaller canvas in popup, still slower. The §13 prewarm + gate fix is in effect in both cases (verified — `programs` only grows by +3 on first sequence).
+
+### 14.2 What we measured
+
+Two `collectPerfReport(3000)` captures inside the popup (M1 Pro, ANGLE Metal renderer):
+
+**Popup at idle (no LEDs lit):**
+- `fps: 50`, `frameMs.median: 20.0 ms` exactly, `max: 21 ms`
+- `bloomTotalMs.median: 1.0 ms` — CPU dispatch is essentially free
+- `drawCalls: 91`, `triangles: 1.6 M`, `bufW × bufH: 942 × 909` (DPR 1, gate closed)
+- `programs: 27`, `visiblePointLights: 0`
+
+**Popup with all LEDs on:**
+- `fps: 14.2`, `frameMs.median: 20.0 ms`, **`p95: 480 ms`, `max: 1140 ms`**
+- `programs: 30` (only +3 from idle — prewarm gap, expected)
+- `visiblePointLights: 36`, `drawCalls: 195`, `triangles: 1.8 M`
+- Steady-state fps matches idle. The catastrophic stalls (one or two 0.5–1.1 s frames per 3-second window) are what destroys the average.
+
+### 14.3 What we ruled out
+
+| Hypothesis | Test | Verdict |
+|---|---|---|
+| Canvas is cross-document-adopted; WebGL context degrades when moved between docs | Ran `canvas.ownerDocument` check while popup open; got `where: "popup"` ✓ | The canvas IS correctly owned by the popup's document. Not the cause. |
+| Pixel count (DPR 2 × large canvas = many fragments × 36 active lights) | Added a `maxPixelRatio` option, capped popup to DPR 1 (~860 K backing pixels) | No measurable fps improvement. Pixel count is not the dominant cost in this regime. Reverted. |
+| Popup's fps cap is a Chrome cross-window throttle | Moved popup between external (50 Hz) and built-in (120 Hz) monitor; fps idle scaled accordingly | It's just per-display vsync. Not a Chrome quirk. The "50 fps" floor was the user's external monitor. |
+| Same-document fullscreen overlay would avoid cross-window cost | Replaced popup with `position: fixed; inset: 0` body class; live canvas + WebGL context stayed alive (no recreate) | Got WORSE — ~4 fps with all LEDs on at fullscreen. Overlay canvas is larger than the popup was, and even with DPR cap the per-fragment cost dominates. Reverted. |
+| `transferControlToOffscreen` / OffscreenCanvas would help | Not tested | Speculative. Significant rearchitecture. |
+
+### 14.4 Where the cost actually is
+
+The data points at **transient stall frames during sequence playback in the popup**, not steady-state per-fragment cost. Specifically:
+
+- Steady-state in popup is fine (50 fps median = vsync cap, not a perf cliff)
+- Stalls of ~480–1140 ms appear despite `programs` count only growing by +3
+- §13's prewarm DOES run in the popup's freshly-recreated renderer (the load callback awaits it before `_loadState = 'ready'`)
+- But each program compile in the popup's WebGL context appears to be much more expensive than in the main window's context (3 compiles × ~40 ms = 120 ms doesn't account for a 1140 ms frame)
+
+The stalls might come from:
+1. **Popup-context shader compile cost amplified by cross-process compositing** — the popup has its own GPU process binding; compile + first-render of new programs may serialize across a process boundary.
+2. **Backpressured GPU pipeline during gate transitions** — when 36 lights become visible, the popup's compositor may struggle to consume the larger frame and back-pressure the renderer.
+3. **rAF coordination between main page and popup compositor** — the render loop's `requestAnimationFrame` is bound to the main page's window; the popup paints on its own compositor schedule.
+
+We don't have a smoking-gun measurement that distinguishes these.
+
+### 14.5 What did NOT work — do not try again
+
+| Attempted | Outcome | Why |
+|---|---|---|
+| `maxPixelRatio` option on Tower3DView, capping popup to DPR 1 | No measurable improvement | Per-fragment cost wasn't the bottleneck in the popup case. The plumbing existed on `Tower3DView` / `TowerDisplay` / `TowerRenderView` / `TowerRenderViewOptions` and the example wired it via a `popoutActive` flag. **All reverted.** Only the popup hits this perf class — adding API surface for no benefit is the wrong trade. |
+| In-page fullscreen CSS overlay instead of `window.open` | Worse fps than the popup it was meant to replace (~4 fps with all LEDs on at full viewport) | Overlay canvas is large (full viewport at DPR 2). Even with DPR cap to 1, fragment work for 36 lights dominates. User preferred the popup back — **reverted**. |
+| Public `Tower3DView.setPixelRatio(value)` runtime method | Added then removed | Was added to support the overlay path; never used by anything else. Removed when overlay was reverted. |
+
+### 14.6 What to try next (productive directions, untested)
+
+The single most useful next experiment is a **side-by-side perf report at the SAME scene + canvas size** in main vs popup. Currently we have main at ~1194 × 1053 (popup transplants the panel, so they can't both be the same size at the same instant — see below). The bug surfaces in the popup despite the smaller canvas, so the comparison would need to either:
+
+- Test in main with the canvas resized to match the popup (940 × 907) — does main stall too at that size?
+- Or test in popup with the canvas resized larger to match the main baseline.
+
+If main is fine at 940 × 907 with all LEDs on but popup is not, that confirms the popup's WebGL context is the issue. Then:
+
+1. **Detect popup context in `prewarmLightPrograms`** and run additional render passes (gate-open + gate-closed). The §13 prewarm uses one render pass — popup-context Three.js may need more variants warmed before `_loadState = 'ready'`.
+2. **Stream the rendered frame into the popup instead of re-rendering there** — keep the canvas in the main document, use `canvas.captureStream()` or a `<video>` element in the popup pointing at a MediaStream. Avoids cross-window WebGL entirely. Trade-off: codec overhead vs. cross-window rendering overhead — unknown without measurement.
+3. **Cross-browser check** — Firefox / Safari may have different popup compositing behavior. If the cliff is Chrome-specific, that confirms it's a browser pipeline issue and not a Three.js / app-code issue.
+4. **Capture a Chrome `chrome://tracing` profile** during a sequence in the popup — would surface whether the 1140 ms is GPU work, IPC, compositor wait, or shader compile.
+
+The Playwright MCP server is available locally (see `~/.claude/memory/reference_playwright_mcp.md`), which can drive both the main and popup windows headlessly to capture comparable `collectPerfReport` blobs without manual repro.
+
+### 14.7 Current shipped state
+
+- [example/popOutController.ts](../example/popOutController.ts) — unchanged from before this investigation. Same browser-window-popup behavior. Same perf characteristics.
+- [example/example.css](../example/example.css) `.popout-body` / `.popout-placeholder` rules — unchanged.
+- Library code (`src/`, `tests/`) — no diff from before this investigation. No new API surface.
+- All `maxPixelRatio` plumbing, the `setPixelRatio` runtime method, and the in-page overlay attempt are **reverted in full**. The diff after the investigation should be zero against the pre-session baseline for everything except this doc entry.
+
+### 14.8 Diagnostic snippets that worked
+
+Two console snippets useful for any future popup-perf investigation. Run in the **main** window's DevTools with the popup open:
+
+**Locate the canvas across both documents:**
+```js
+(() => {
+  const canvases = [];
+  const winB = window.open('', 'udtd-render'); // returns existing popup if open
+  [window, winB].forEach((w, i) => {
+    try {
+      w?.document.querySelectorAll('canvas').forEach(c =>
+        canvases.push({ where: i === 0 ? 'main' : 'popup', w: c.width, h: c.height }));
+    } catch (e) { canvases.push({ where: i === 0 ? 'main' : 'popup', error: String(e) }); }
+  });
+  return { popupOpen: !!winB && !winB.closed, canvases };
+})();
+```
+
+**Capture comparable perf reports (with `window.display` exposed):** use `await window.display.collectPerfReport(3000)` exactly as §5 documents. The Display example app already publishes `window.display` via [example/rendererController.ts](../example/rendererController.ts) `publishDisplay()`.

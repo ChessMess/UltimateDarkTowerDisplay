@@ -181,10 +181,12 @@ export function initPhysicsController(): void {
 
     selModel.addEventListener('change', () => {
       syncColliderEnabled();
-      applyConfig({ skull: {
-        modelUrl: selModel.value || undefined,
-        colliderShape: selCollider.value as 'sphere' | 'hull',
-      }});
+      applyConfig({
+        skull: {
+          modelUrl: selModel.value || undefined,
+          colliderShape: selCollider.value as 'sphere' | 'hull',
+        }
+      });
     });
 
     selCollider.addEventListener('change', () => {
@@ -192,6 +194,15 @@ export function initPhysicsController(): void {
     });
 
     syncColliderEnabled();
+
+    // Pre-select skull_1 + hull as the initial defaults if a model is available.
+    const firstSkullUrl = Object.values(skullModules)[0] as string | undefined;
+    if (firstSkullUrl) {
+      selModel.value = firstSkullUrl;
+      selCollider.value = 'hull';
+      syncColliderEnabled();
+      applyConfig({ skull: { modelUrl: firstSkullUrl, colliderShape: 'hull' } });
+    }
 
     // Mirror JSON-paste config edits back into the UI.
     sliderSyncers.push((cfg) => {

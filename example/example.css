@@ -902,10 +902,16 @@ code {
   box-shadow: 0 0 8px rgba(200, 112, 32, 0.3);
 }
 
-/* Reset Seals: spans only the NESW button columns (skip the row-label col). */
-.seal-toggle-grid .seal-reset {
+/* Seal action row: spans only the NESW button columns (skip the row-label col). */
+.seal-toggle-grid .seal-action-row {
   grid-column: 2 / -1;
+  display: flex;
+  gap: 0.4rem;
   margin-top: 0.3rem;
+}
+
+.seal-toggle-grid .seal-action-row .seal-reset {
+  flex: 1;
   padding: 0.4rem 0;
   font-size: 0.66rem;
 }

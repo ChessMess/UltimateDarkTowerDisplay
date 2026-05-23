@@ -26,6 +26,17 @@ export function refreshSeals(display: TowerDisplay, readout: TowerStateReadout):
   readout.applySeals(broken);
 }
 
+export function removeAllSeals(display: TowerDisplay, readout: TowerStateReadout): void {
+  const levels = ['top', 'middle', 'bottom'] as const;
+  const sides = ['north', 'east', 'south', 'west'] as const;
+  for (const level of levels) {
+    for (const side of sides) {
+      tower.markSealBroken({ level, side });
+    }
+  }
+  refreshSeals(display, readout);
+}
+
 export function resetSeals(display: TowerDisplay, readout: TowerStateReadout): void {
   tower.resetBrokenSeals();
   refreshSeals(display, readout);
