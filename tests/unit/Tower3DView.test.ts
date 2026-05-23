@@ -114,10 +114,11 @@ describe('Tower3DView instance', () => {
 
       view.applyState(state);
 
-      // Instant-write effects land directly on the redLight without a tween.
-      expect(getLedRef(view, 0, 0)!.redLight.intensity).toBeCloseTo(1.0, 10);
+      // Instant-write effects land directly on the driver without a tween.
+      // (Under 4.18 the per-LED PointLight is null — driver.v is the source of truth.)
+      expect(getLedRef(view, 0, 0)!.driver.v).toBeCloseTo(1.0, 10);
       // Default-off LEDs end up dark.
-      expect(getLedRef(view, 2, 1)!.redLight.intensity).toBeCloseTo(0, 10);
+      expect(getLedRef(view, 2, 1)!.driver.v).toBeCloseTo(0, 10);
       // Breathe creates exactly one yoyo tween for that LED.
       const breatheRef = getLedRef(view, 1, 2)!;
       expect(breatheRef.tween).not.toBeNull();
@@ -148,7 +149,7 @@ describe('Tower3DView instance', () => {
       await Promise.resolve();
 
       // After buildLeds finishes, replayAll wrote the `on` effect to (0,0).
-      expect(getLedRef(view, 0, 0)!.redLight.intensity).toBeCloseTo(1.0, 10);
+      expect(getLedRef(view, 0, 0)!.driver.v).toBeCloseTo(1.0, 10);
       view.dispose();
     });
   });
@@ -166,12 +167,14 @@ describe('Tower3DView instance', () => {
       for (let layer = 0; layer < 6; layer++) {
         for (let light = 0; light < 4; light++) {
           const ref = getLedRef(view, layer, light)!;
-          expect(ref.redLight.intensity).toBeCloseTo(0, 10);
-          // Bulk-lights gate closes when no LEDs active → visible = false.
-          // See docs/framerate-issue.md §16 for the gate rationale.
-          expect(ref.redLight.visible).toBe(false);
+          expect(ref.driver.v).toBeCloseTo(0, 10);
+          // Under 4.18 the per-LED PointLight is removed — driver is the only signal.
+          expect(ref.redLight).toBeNull();
         }
       }
+      // Bulk-lights gate closes when no LEDs active. See docs/framerate-issue.md §16
+      // for the gate rationale, docs/lighting-experiments/4.18-twelve-lights.md for
+      // the 36 → 12 reduction.
       expect(isLightsGateOpen(view)).toBe(false);
       view.dispose();
     });
@@ -199,13 +202,15 @@ describe('Tower3DView instance', () => {
   });
 
   describe('red light creation', () => {
-    it('creates a redLight for every LED', () => {
+    it('creates an LED ref for every LED with no per-LED PointLight (4.18)', () => {
+      // Pre-4.18 this asserted a PointLight per LED (24 total). Under 4.18 the
+      // per-LED PointLights are gone — ref exists but `redLight` is null.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       for (let layer = 0; layer < 6; layer++) {
         for (let light = 0; light < 4; light++) {
           const ref = getLedRef(view, layer, light);
           expect(ref).toBeDefined();
-          expect(ref!.redLight).toBeDefined();
+          expect(ref!.redLight).toBeNull();
         }
       }
       view.dispose();
@@ -265,10 +270,12 @@ describe('Tower3DView instance', () => {
   });
 
   describe('lockstep animation', () => {
-    it('write() drives redLight intensity and visibility from driver.v', () => {
+    it('write() drives driver and opens the bulk-lights gate', () => {
       // Use `breathe` so we have a live tween whose onUpdate we can fire to
       // exercise the writeLed() pipeline. (`on` is now an instant write —
       // no tween, no onUpdate.)
+      // Under 4.18 the per-LED redLight is null; intensity assertions moved to
+      // the gate's seal-accent surface in the "bulk lights gate" suite below.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
@@ -283,17 +290,17 @@ describe('Tower3DView instance', () => {
       (ref.tween as unknown as { vars: { onUpdate: () => void } }).vars.onUpdate();
       tickLightsGate(view); // any-active → gate opens
 
-      expect(ref.redLight.intensity).toBeCloseTo(0.7, 10);
-      expect(ref.redLight.visible).toBe(true);
+      expect(ref.driver.v).toBeCloseTo(0.7, 10);
+      expect(isLightsGateOpen(view)).toBe(true);
       view.dispose();
     });
 
-    it('write() drops redLight intensity to 0 at zero driver; gate closes', () => {
-      // Regression guard: writeLed must not toggle `redLight.visible` per frame.
-      // The bulk-lights gate (in startRenderLoop tick) handles visibility based
-      // on whether any LED has driver.v > 0.001. Both gate states (0 lights and
-      // 36 lights) are pre-compiled at scene init so transitions don't trigger
-      // shader recompiles. See docs/framerate-issue.md.
+    it('write() drops driver to 0 at zero target; gate closes', () => {
+      // Regression guard: the bulk-lights gate (in startRenderLoop tick) handles
+      // visibility based on whether any LED has driver.v > 0.001. Both gate
+      // states (0 lights and 12 seal-accent lights under 4.18) are pre-compiled
+      // at scene init so transitions don't trigger shader recompiles.
+      // See docs/framerate-issue.md and docs/lighting-experiments/4.18-twelve-lights.md.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
@@ -306,8 +313,7 @@ describe('Tower3DView instance', () => {
       (ref.tween as unknown as { vars: { onUpdate: () => void } }).vars.onUpdate();
       tickLightsGate(view); // no LEDs active → gate closes
 
-      expect(ref.redLight.intensity).toBeCloseTo(0, 10);
-      expect(ref.redLight.visible).toBe(false);
+      expect(ref.driver.v).toBeCloseTo(0, 10);
       expect(isLightsGateOpen(view)).toBe(false);
       view.dispose();
     });
@@ -315,24 +321,23 @@ describe('Tower3DView instance', () => {
 
   describe('bulk lights gate', () => {
     it('opens when any LED has driver.v > 0.001 and closes when all are 0', () => {
+      // Under 4.18 the gate manages only the 12 seal accent PointLights (the
+      // 24 per-LED redLights have been removed). With accentLight default
+      // false, intensity stays 0 — we verify the gate state and the absence
+      // of per-LED PointLights here.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
       // Initial: gate closed (all LEDs idle)
       tickLightsGate(view);
       expect(isLightsGateOpen(view)).toBe(false);
       for (const r of [getLedRef(view, 0, 0)!, getLedRef(view, 3, 1)!]) {
-        expect(r.redLight.visible).toBe(false);
+        expect(r.redLight).toBeNull();
       }
 
-      // Drive one LED to nonzero → gate opens, all 24 redLights visible
+      // Drive one LED to nonzero → gate opens
       getLedRef(view, 0, 0)!.driver.v = 0.5;
       tickLightsGate(view);
       expect(isLightsGateOpen(view)).toBe(true);
-      for (let layer = 0; layer < 6; layer++) {
-        for (let light = 0; light < 4; light++) {
-          expect(getLedRef(view, layer, light)!.redLight.visible).toBe(true);
-        }
-      }
 
       // Drop back to 0 → gate closes
       getLedRef(view, 0, 0)!.driver.v = 0;
@@ -341,29 +346,33 @@ describe('Tower3DView instance', () => {
 
       view.dispose();
     });
-  });
 
-  describe('dispose cleans up red lights', () => {
-    it('removes redLight from parent for every LED', () => {
-      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
-      const state = makeState();
-      for (const layer of state.layer) {
-        for (const light of layer.light) light.effect = LIGHT_EFFECTS.on;
-      }
-      view.applyState(state);
+    it('with accentLight enabled, gate flips the 12 seal accent PointLights', () => {
+      const view = new Tower3DView(container, {
+        modelUrl: TEST_MODEL_URL,
+        lighting: { leds: { sealBacklights: { accentLight: true } } },
+      });
 
-      const refs = [];
-      for (let layer = 0; layer < 6; layer++) {
-        for (let light = 0; light < 4; light++) {
-          refs.push(getLedRef(view, layer, light)!);
+      // Gate closed → all 12 accent lights invisible
+      tickLightsGate(view);
+      expect(isLightsGateOpen(view)).toBe(false);
+      for (const side of ['north', 'south', 'east', 'west']) {
+        for (const level of ['top', 'middle', 'bottom']) {
+          expect(getSealBacklight(view, side, level)!.light.visible).toBe(false);
         }
       }
 
-      expect(refs.every(r => r.redLight.parent !== null)).toBe(true);
+      // Drive one LED → gate opens → all 12 accent lights visible
+      getLedRef(view, 0, 0)!.driver.v = 0.5;
+      tickLightsGate(view);
+      expect(isLightsGateOpen(view)).toBe(true);
+      for (const side of ['north', 'south', 'east', 'west']) {
+        for (const level of ['top', 'middle', 'bottom']) {
+          expect(getSealBacklight(view, side, level)!.light.visible).toBe(true);
+        }
+      }
 
       view.dispose();
-
-      expect(refs.every(r => r.redLight.parent === null)).toBe(true);
     });
   });
 

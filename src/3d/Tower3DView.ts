@@ -289,9 +289,11 @@ export class Tower3DView implements ITowerDisplay {
    * Tracks whether the bulk LED-lights gate is open. When false (idle), every
    * LED-related PointLight is `visible: false` so the fragment shader iterates
    * zero of them per fragment (pre-fix idle perf). When true (any LED active),
-   * all 36 lights are `visible: true`. Both program variants are pre-compiled
-   * at scene init (see `prewarmLightPrograms`) so gate flips don't recompile.
-   * See `docs/framerate-issue.md`.
+   * the 12 seal accent lights are `visible: true`. Under 4.18 the 24 per-LED
+   * PointLights have been removed; only the 12 seal accent lights remain in
+   * the gate. Both program variants are pre-compiled at scene init (see
+   * `prewarmLightPrograms`) so gate flips don't recompile.
+   * See `docs/framerate-issue.md` and `docs/lighting-experiments/4.18-twelve-lights.md`.
    */
   private lightsGateOpen = false;
 
@@ -865,12 +867,14 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
-   * Pre-compile shader programs for both the "all 36 LED lights visible" and
-   * "all 36 LED lights invisible" states so runtime gate flips hit the program
-   * cache and never trigger a ~880 ms shader-recompile stall. Called once from
-   * the model-load callback after `buildLeds` and `buildSealBacklights`. Uses
+   * Pre-compile shader programs for both the "12 seal accent lights visible"
+   * and "0 lights visible" states so runtime gate flips hit the program cache
+   * and never trigger a ~880 ms shader-recompile stall. Called once from the
+   * model-load callback after `buildLeds` and `buildSealBacklights`. Uses
    * Three.js's `WebGLRenderer.compileAsync` which leverages the
    * `KHR_parallel_shader_compile` extension when available.
+   * Pre-4.18 this gated 36 lights (24 per-LED + 12 seal accent); 4.18 removed
+   * the 24 per-LED PointLights.
    */
   private async prewarmLightPrograms(): Promise<void> {
     if (!this.scene || !this.camera || !this.renderer) return;
@@ -893,18 +897,18 @@ export class Tower3DView implements ITowerDisplay {
     };
     setMeshesVisible(true);
 
-    // Compile + render with "36 lights visible". compileAsync covers materials
-    // in the scene graph; the follow-up render covers the BloomManager's
-    // darkMaterial swap (not in the scene graph) and the UnrealBloomPass's
-    // internal blur materials.
+    // Compile + render with "12 seal accent lights visible". compileAsync
+    // covers materials in the scene graph; the follow-up render covers the
+    // BloomManager's darkMaterial swap (not in the scene graph) and the
+    // UnrealBloomPass's internal blur materials.
     this.setBulkLightsVisible(true);
     await this.renderer.compileAsync(this.scene, this.camera);
     if (!this.scene || !this.camera || !this.renderer) return;
     this.renderOnce();
 
     // Compile + render with "0 lights visible". Leave the gate in this state
-    // (matches lightsGateOpen = false initial; LED meshes go back to invisible
-    // below so the rendered idle scene is identical to pre-prewarm).
+    // (matches lightsGateOpen = false initial; seal-backlight meshes go back
+    // to invisible below so the rendered idle scene is identical to pre-prewarm).
     this.setBulkLightsVisible(false);
     await this.renderer.compileAsync(this.scene, this.camera);
     if (!this.scene || !this.camera || !this.renderer) return;
@@ -921,14 +925,15 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
-   * Bulk-toggle visibility on all 36 LED-related PointLights together. Owned
-   * by Tower3DView (not LedEffectAnimator / SealManager) because the goal is
-   * a stable lights-count hash for the program cache. Per-frame visibility
-   * toggling on individual lights causes shader recompiles (see prewarm).
+   * Bulk-toggle visibility on the 12 seal accent PointLights together. Owned
+   * by Tower3DView (not SealManager) because the goal is a stable lights-count
+   * hash for the program cache. Per-frame visibility toggling on individual
+   * lights causes shader recompiles (see prewarm).
+   * Under 4.18 the 24 per-LED `redLight`s are null and are skipped here.
    */
   private setBulkLightsVisible(visible: boolean): void {
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.visible = visible;
+      if (ref.redLight) ref.redLight.visible = visible;
     }
     // Accent lights respect `accentLight: false` — they stay invisible even
     // when the gate opens, because the user opted out of atmospheric spill.
@@ -999,7 +1004,7 @@ export class Tower3DView implements ITowerDisplay {
     this.ledAnimator?.dispose();
     this.ledAnimator = null;
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.removeFromParent();
+      ref.redLight?.removeFromParent();
     }
     this.ledRefs.clear();
     this.sealManager.dispose();
@@ -1230,10 +1235,12 @@ export class Tower3DView implements ITowerDisplay {
     const baseColor = new THREE.Color(lighting.leds.baseLeds.color);
     for (const [key, ref] of this.ledRefs.entries()) {
       const layer = parseInt(key.split(':')[0], 10);
-      ref.redLight.color.setHex(lighting.leds.red.color);
-      ref.redLight.distance = redHaloDistance;
-      ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
-      // `visible` intentionally not touched here — see buildLeds for rationale.
+      if (ref.redLight) {
+        ref.redLight.color.setHex(lighting.leds.red.color);
+        ref.redLight.distance = redHaloDistance;
+        ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
+        // `visible` intentionally not touched here — see buildLeds for rationale.
+      }
 
       if (ref.proxyMesh) {
         const col = layer >= 4 ? baseColor : ledgeColor;
@@ -1255,14 +1262,17 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
-   * Populate `ledRefs` with 24 red PointLights (6 layers × 4 lights) positioned
-   * relative to the model's bounding radius.
+   * Populate `ledRefs` with 24 entries (6 layers × 4 lights). Each ref carries
+   * a driver, optional proxy mesh + halo sprite (ledge + base layers), and a
+   * `redLight` slot that is null under 4.18 — the 12 ring inset PointLights
+   * (layers 0–2) and 12 ledge/base corner PointLights (layers 3–5) have been
+   * removed. The bulk-lights gate now manages only the 12 seal accent lights
+   * in SealManager. See docs/lighting-experiments/4.18-twelve-lights.md.
    */
   private buildLeds(): void {
     if (!this.model) return;
 
-    const { red, ledgeLeds, baseLeds } = this.lighting.leds;
-    const redHaloDistance = this.modelRadius * red.haloDistanceFraction;
+    const { ledgeLeds, baseLeds } = this.lighting.leds;
 
     // Radial gradient texture shared by ledge and base halo sprites.
     const gradTex = this.createLedgeGradientTexture();
@@ -1270,17 +1280,7 @@ export class Tower3DView implements ITowerDisplay {
     for (let layer = 0; layer < TOWER_LAYER_COUNT; layer++) {
       for (let light = 0; light < LIGHTS_PER_LAYER; light++) {
         const redPos = computeRedLightPosition(layer, light, this.modelRadius);
-        const redLight = new THREE.PointLight(red.color, 0, redHaloDistance, 2);
-        // visible defaults to false. The bulk lights gate (see updateLightsGate)
-        // flips ALL 36 LED-related lights together when ANY LED becomes lit,
-        // and back to false when all LEDs go dark. Both program variants are
-        // pre-compiled at scene init (see prewarmLightPrograms) so gate
-        // transitions don't trigger shader recompiles — see docs/framerate-issue.md.
-        redLight.visible = false;
-        redLight.position.set(redPos.x, redPos.y, redPos.z);
-        this.model.add(redLight);
-
-        const ref: LedRef = { redLight, driver: { v: 0 }, tween: null };
+        const ref: LedRef = { redLight: null, driver: { v: 0 }, tween: null };
 
         // Layer 3 = LEDGE — add ball-type LED visuals (proxy sphere + halo sprite).
         if (layer === 3) {
