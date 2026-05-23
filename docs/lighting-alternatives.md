@@ -28,8 +28,9 @@ Quick-scan view. Detail and citations in §4. Code-impact and effort are subject
 | 4.16 | Emissive proxies via `MeshStandardMaterial` (not `MeshBasicMaterial`) | Switch proxy material from `MeshBasicMaterial` → `MeshStandardMaterial { emissive, emissiveIntensity }` | Marginal cost change (Standard is heavier than Basic) but enables emissive HDR + light pickup | Bulbs ✅ (PBR + emissive), halos unchanged | One material constructor change | Low | Yes (kept) | The canonical way to drive emissive intensity over time. Plays with bloom-threshold trick. | `MeshStandardMaterial` is per-fragment more expensive than `MeshBasicMaterial`. Worth it on 12 small proxies; not free. |
 | 4.17 | Volumetric god-ray shafts inside drum (Codrops pattern) | Add additive cone meshes radiating from each seal | Cheap fragment cost (additive cones); 12 small meshes | Spill ✅ (god-ray-like), bulbs ✅, halos ✅ | New per-seal cone mesh manager | Medium | Optional | Stylised but distinctive — gives a "molten-core ray" look. | Visual character differs significantly from current. Worth mocking up before committing. |
 | 4.18 | Consolidated 12-lights design: one PointLight per seal, ledge/base LEDs become emissive dots only | Collapse 12 ring + 12 accent → 12 seal PointLights; remove 12 ledge/base PointLights entirely | 36 PointLights → 12 PointLights = **3× per-fragment win** on the lights loop; cheaper than 4.4 in count terms but per-LED locality preserved | Bulbs ✅ (seal cutouts glow through), halos ✅ (all 24 sprites), spill ✅ (per-seal hotspots from inside drum), ledge/base bulbs ✅ as crisp dots with no spill | Subtractive on PointLight construction; gate logic simplifies | Low | Yes (kept) | Preserves per-seal locality (unlike 4.4). Honest mapping: 1 light per visible seal LED. Ledge/base "dots" match the visual intent — small indicator LEDs don't need to illuminate the model. | Still has 12 PointLights — not the cheapest option. The 12-light count is still in the shader hash; needs prewarm for the gate flip. Ledge/base LEDs lose their faint atmospheric spill (currently from layers 3–5 corner PointLights). |
+| 4.19 | Interior atmospheric sprites (additive blob texture) | Add 1–3 large camera-facing additive sprites *inside* the drum per seal; reuses existing halo infrastructure ([SealManager.ts](../src/3d/SealManager.ts) `SpriteMaterial`+`CanvasTexture` pattern) | Cheap — sprites cost ~µs/frame each; no per-fragment light loop | Bulbs ✅, halos ✅, spill ✅ (faked via additive accumulation, not PBR) | Minimal: extend existing halo pattern | Very Low | Unchanged (sprites already bloom-layer) | Reuses proven in-tree infrastructure. No shader-recompile risk. Per-LED locality preserved. | Camera-aligned billboards, not surface-conforming. No PBR coupling. Overlapping additive can saturate. |
 
-**Reading the table:** The single biggest perf delta is always *"remove the 36-PointLight per-fragment loop."* Options 4.1, 4.3, 4.4, 4.5, 4.10, 4.11, 4.13 all do that completely; 4.18 takes it from 36→12 while preserving per-LED locality. Options 4.2, 4.16 leave lights in place and optimise inside the loop. Options 4.8, 4.11, 4.14, 4.15 additionally address bloom-pass cost.
+**Reading the table:** The single biggest perf delta is always *"remove the 36-PointLight per-fragment loop."* Options 4.1, 4.3, 4.4, 4.5, 4.10, 4.11, 4.13 all do that completely; 4.18 takes it from 36→12 while preserving per-LED locality. Options 4.2, 4.16 leave lights in place and optimise inside the loop. Options 4.8, 4.11, 4.14, 4.15 additionally address bloom-pass cost. Options 4.17 (god-ray cones) and 4.19 (interior atmospheric sprites) fake the interior spill without lights — 4.19 is the cheaper sibling, reusing in-tree sprite infrastructure rather than authoring new cone geometry.
 
 The recommended starting point (§6) is **4.1 + 4.16 + 4.4** combined: emissive `MeshStandardMaterial` proxies pushed HDR, no per-LED PointLights, two `DirectionalLight`s inside the drum for spill. Smallest perf-positive change that preserves all four visual goals.
 
@@ -477,6 +478,66 @@ End state: 12 PointLights total, all inside the drum, one per seal. 24 emissive-
 
 ---
 
+### 4.19 Interior atmospheric sprites (additive blob texture)
+
+**What:** Place 1–3 large `THREE.Sprite`s **inside** the drum per seal, scaled big enough to read as a soft red atmospheric blob through the seal cutout and into the drum interior. Material is `THREE.SpriteMaterial { map: redGradient, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }` — the identical recipe already used by the existing halo sprites ([SealManager.ts:120-136](../src/3d/SealManager.ts#L120-L136)). Opacity driven per-frame by the same `LedEffectAnimator.writeLed()` path that already drives the halos ([LedEffectAnimator.ts:75-98](../src/3d/LedEffectAnimator.ts#L75-L98)).
+
+This is a **quantitative extension** of the technique already deployed for the exterior halo deliverable — adding more, larger sprites placed deeper in the drum to fake the "molten core" atmospheric spill that PointLights currently provide.
+
+**Visual mapping:**
+- Bulbs (1): ✅ Keep emissive proxies (4.1 / 4.16) — sprites are atmospheric, not the bulb itself.
+- Halo (2): ✅ Existing exterior halo sprites unchanged.
+- Interior spill (3): ✅ The interior sprites fake the spill via additive accumulation. **Not surface-conforming** — they're billboards floating in space, not light reflected off the drum interior wall. From most camera angles inside an enclosed drum this reads convincingly; close inspection reveals the trick.
+- Runtime color (4): ✅ `SpriteMaterial.color` is uniform-set.
+- Driver coupling (5): ✅ Same `LedEffectAnimator.writeLed()` callback that already drives 32 existing halo sprites — extends the branch to drive interior sprites too. No new animation infrastructure.
+
+**Perf delta:**
+- Sprites have **no per-fragment light loop cost** — pure additive blend of a small textured quad.
+- Estimated cost: ~few µs per sprite on draw, no shader recompile risk (sprites don't enter the lights-count hash). 12–36 new sprites add negligible GPU time vs the ~66 ms/frame the 36 PointLights cost today.
+- The existing bloom layer (`BLOOM_LAYER`) accepts sprites without configuration changes — `haloSprite.layers.enable(BLOOM_LAYER)` is already standard in [SealManager.ts:133](../src/3d/SealManager.ts#L133).
+
+**Why it's interesting:**
+- **Reuses proven in-tree infrastructure.** The codebase has already shipped this technique for halos with 32 deployed sprites. Extending it is the lowest-novelty path among non-PointLight spill options.
+- **Per-seal locality preserved** (unlike 4.4's two directionals). One sprite per seal means one breathing seal lights one zone.
+- **No shader-recompile risk.** Sprites are outside the `directionalLength`/`pointLength` shader hash from [framerate-issue.md §3](framerate-issue.md#3-the-bug--root-cause). Adding/removing sprites at runtime is free.
+- **Pairs naturally with 4.1.** Emissive HDR proxies for the bulbs + halo sprites for the cutout glow + interior atmospheric sprites for the spill = the full visual deliverable with zero PointLights.
+- **Cheaper than 4.17 (god-ray cones).** Sprites are billboarded automatically; no cone geometry to author, position, or animate.
+
+**Risks / limitations:**
+- **Camera-aligned, not surface-conforming.** A sprite is a flat quad facing the camera. Real PointLights illuminate the actual drum interior wall — light wraps around concavities. Sprites fake this convincingly from many angles but won't survive close inspection (especially with a free-orbit camera). For a fixed or constrained camera arc this is invisible; for the Tower Emulator's free orbit it's worth A/B-testing.
+- **No PBR coupling.** Sprites don't interact with `MeshStandardMaterial`'s metalness/roughness/normal. Real PointLights produce subtle specular highlights on the drum interior that sprites cannot replicate. The current PointLight setup mostly uses diffuse wash anyway, so this gap is minor for our deliverable.
+- **Additive saturation.** Overlapping additive sprites accumulate without clamping — three sprites at full opacity in the same pixel = `(3r, 0, 0)` which tonemaps to bright red and bloom-amplifies further. Mitigation: tune `cfg.interior.opacity` carefully; A/B with [collectPerfReport()](../src/3d/Tower3DView.ts) screenshots side-by-side; consider gating to one sprite per seal if multi-sprite saturation reads "blown out."
+- **Depth-sort fragility.** With `depthWrite: false` (required for additive blending hygiene) sprites rely on render order. The existing halos set `renderOrder = 3` ([SealManager.ts:134](../src/3d/SealManager.ts#L134)) — interior sprites would need to be ordered after the drum body but before halos.
+- **Won't capture a `CubeCamera`.** If we later combine with 4.13 (env map), interior sprites are excluded from PBR reflections — the cube camera renders the scene geometry, not bloom-layer sprites.
+
+**Implementation sketch:**
+- Extend `SealManager.buildSealBacklights` to construct N interior sprites per seal alongside the existing halo. New position: same `(x, y, z)` as the seal accent light (`radius × 0.15` inside the drum). Scale: larger than the halo, e.g. `modelRadius × 0.6` vs halo's `× 0.3` factor.
+- Reuse the existing radial-gradient `CanvasTexture` from [SealManager.ts:357-377](../src/3d/SealManager.ts#L357-L377) — same `getOrCreateGradientTexture()` cache.
+- Extend `SealManager.setSealLed` to drive interior-sprite opacity from `driverV * cfg.interior.opacity` alongside the existing halo+proxy writes.
+- New config knob in `ResolvedLightingConfig.leds.sealBacklights.interior`: `{ enabled, count, sizeFactor, opacity }`. Off by default until visually validated.
+- For ledge/base LEDs (layers 3–5) — likely *not* applicable. Those LEDs are designed as "dot" indicators without spill (consistent with 4.18's premise). Skip.
+
+**Combining considerations:**
+- **With 4.1 + 4.16:** Natural pair. Emissive HDR proxies for bulbs + interior sprites for spill + raised bloom threshold = full deliverable with zero PointLights.
+- **With 4.8 (fake-glow):** Sprites also work without bloom (§5.4). Combined: fake-glow for the bulb, interior sprites for spill, drop bloom entirely. Cheapest possible delivery short of 4.11.
+- **With 4.11 (drop bloom):** Excellent fit — interior sprites' additive blending reads as glow even without bloom amplification.
+- **With 4.14 (CSS overlay):** CSS handles exterior indicators; interior sprites stay in WebGL for spill. Clean separation.
+- **With 4.18:** Could be combined as a hybrid — keep 12 seal PointLights AND add interior sprites for amplified atmospheric layer. Probably overkill but valid for visual tuning.
+- **Vs 4.17 (god-ray cones):** Same goal (fake spill inside drum) but sprites are cheaper, simpler, reuse in-tree infrastructure. Cones offer more directional shaping; sprites are radial-isotropic. Pick cones for stylized "ray" reads, sprites for ambient "blob" reads.
+
+**Citations:**
+- [Stemkoski Shader-Glow demo](https://stemkoski.github.io/Three.js/Shader-Glow.html) — canonical halo/glow patterns.
+- [three.js SpriteMaterial docs](https://threejs.org/docs/pages/SpriteMaterial.html) — confirms `blending`, `map`, `depthWrite`, `transparent`.
+- [three.js Billboards manual](https://threejs.org/manual/en/billboards.html) — `THREE.Sprite` auto-faces camera; no manual rotation math.
+- [Codrops: Volumetric Light Rays with three.js](https://tympanus.net/codrops/2022/06/27/volumetric-light-rays-with-three-js/) — additive-blend fake-volumetrics overview.
+- [Front Dev: Volumetric Lights via Layers](https://www.thefrontdev.co.uk/creating-volumetric-lights-with-radial-blur-in-three.js-using-layers/) — community pattern using additive sprites/meshes inside scene.
+- Internal: [SealManager.ts:120-136](../src/3d/SealManager.ts#L120-L136) — the existing halo SpriteMaterial recipe that this option extends.
+- Internal: [LedEffectAnimator.ts:75-98](../src/3d/LedEffectAnimator.ts#L75-L98) — the driver-coupling write path that would also drive interior sprites.
+
+**Effort:** Very Low. ~1–2 days. ~50 LOC of subtractive-from-PointLight + additive-of-sprite changes in SealManager + a new config knob. Reuses existing texture cache, render-order convention, bloom layer, and animation driver.
+
+---
+
 ## 5. Cross-cutting considerations
 
 ### 5.1 `MeshBasicMaterial` has no `emissive`
@@ -499,7 +560,7 @@ Worth doing alongside any option above to collapse 12+ proxy mesh draw calls int
 
 ### 5.4 Halos already work without bloom
 
-Halo sprites use `THREE.AdditiveBlending` with a radial-gradient canvas texture ([SealManager.ts:104–120](../src/3d/SealManager.ts#L104-L120)). Additive blending is itself a "glow" effect — bloom amplifies it but isn't load-bearing for the soft-halo read. Matters for 4.8, 4.11, 4.14.
+Halo sprites use `THREE.AdditiveBlending` with a radial-gradient canvas texture ([SealManager.ts:104–120](../src/3d/SealManager.ts#L104-L120)). Additive blending is itself a "glow" effect — bloom amplifies it but isn't load-bearing for the soft-halo read. Matters for 4.8, 4.11, 4.14. This same additive-sprite-blob technique can be extended *inside* the drum to fake the atmospheric spill that PointLights currently provide — see §4.19.
 
 ### 5.5 The shader-recompile trap is still real
 
@@ -549,7 +610,7 @@ Two natural ordering principles:
 
 **Path B — replace paradigm (bigger upside, more change):**
 
-1. **4.1 + 4.16 first** — emissive `MeshStandardMaterial` proxies + raised bloom threshold + no PointLights. ~3 days. If atmospheric-spill loss is acceptable, ship and stop.
+1. **4.1 + 4.16 first** — emissive `MeshStandardMaterial` proxies + raised bloom threshold + no PointLights. ~3 days. If atmospheric-spill loss is acceptable, ship and stop. Otherwise add **4.19** (interior atmospheric sprites) — also ~1–2 days and reuses existing halo infrastructure.
 2. **4.4 second, only if 4.1+4.16 felt visually flat** — add 2 `DirectionalLight`s inside the drum to recover spill. ~2 days on top.
 3. **4.5 (LightProbe) if 4.4 doesn't read right** — replace 2 DirectionalLights with analytical SH probe.
 4. **4.12 (decals) as an alternative spill solution** — if 4.4 reads too global and 4.5 reads too smooth.
@@ -559,6 +620,7 @@ Two natural ordering principles:
 **Either path:**
 - **4.2** is risk-free, can ship anytime.
 - **4.16** is good hygiene regardless.
+- **4.19** is the cheapest spill solution if extending an already-deployed pattern is preferred over introducing 2 DirectionalLights (4.4) or new SH math (4.5).
 - **4.6, 4.7, 4.10 deferred** — only if lighter options can't hit the target.
 - **4.14 (CSS overlay) special-purpose** — only if seal-indicator UI is decoupled from atmospheric design.
 
