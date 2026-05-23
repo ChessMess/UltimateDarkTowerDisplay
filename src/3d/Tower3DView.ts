@@ -44,6 +44,69 @@ export type { SealBacklightRef };
 
 const DEFAULT_DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
 
+// Lighting experiment 4.2 — range-cull patch for the PointLight loop in
+// lights_fragment_begin. Wraps the per-light work (getPointLightInfo + shadow
+// sample + RE_Direct) in an early-out if-block when the fragment is beyond
+// pointLight.distance. Verified against three.js r0.184.0 chunk source; if
+// the chunk shifts, applyPointLightRangeCull() warns and leaves the material
+// unmodified. Lights with distance:0 (infinite range) would mis-cull — this
+// project always sets a positive distance, so the guard is safe.
+const POINTLIGHT_LOOP_HEAD = `pointLight = pointLights[ i ];`;
+const POINTLIGHT_RE_DIRECT_CALL = `RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );`;
+
+function buildRangeCulledLightsChunk(): string | null {
+  const chunk = THREE.ShaderChunk?.lights_fragment_begin;
+  if (typeof chunk !== 'string') return null;
+  if (!chunk.includes(POINTLIGHT_LOOP_HEAD) || !chunk.includes(POINTLIGHT_RE_DIRECT_CALL)) {
+    return null;
+  }
+  return chunk
+    .replace(
+      POINTLIGHT_LOOP_HEAD,
+      `${POINTLIGHT_LOOP_HEAD}\n\t\t\tvec3 lVectorRC42 = pointLight.position - geometryPosition;\n\t\t\tif ( dot( lVectorRC42, lVectorRC42 ) <= pointLight.distance * pointLight.distance ) {`,
+    )
+    .replace(POINTLIGHT_RE_DIRECT_CALL, `${POINTLIGHT_RE_DIRECT_CALL}\n\t\t\t}`);
+}
+
+let rangeCullWarned = false;
+
+function applyPointLightRangeCull(root: THREE.Object3D): void {
+  const patchedChunk = buildRangeCulledLightsChunk();
+  if (!patchedChunk) {
+    // ShaderChunk is undefined in the Jest mock of three; the warning is only
+    // meaningful in the real three.js runtime, where it signals a chunk text
+    // shift the patch must catch up to.
+    if (!rangeCullWarned && typeof THREE.ShaderChunk === 'object') {
+      rangeCullWarned = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[Tower3DView] 4.2 range-cull: lights_fragment_begin chunk text changed in this three.js build; PointLight loop left unpatched.',
+      );
+    }
+    return;
+  }
+  const onBeforeCompile = (shader: { fragmentShader: string }) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_begin>',
+      patchedChunk,
+    );
+  };
+  const seen = new WeakSet<THREE.Material>();
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (!m || seen.has(m)) continue;
+      const std = m as THREE.MeshStandardMaterial;
+      if (!std.isMeshStandardMaterial) continue;
+      seen.add(m);
+      std.onBeforeCompile = onBeforeCompile;
+      std.needsUpdate = true;
+    }
+  });
+}
+
 type Logger = { log(label: string, data?: Record<string, unknown>): void };
 
 const NULL_LOGGER: Logger = { log: () => { } };
@@ -1168,6 +1231,12 @@ export class Tower3DView implements ITowerDisplay {
         this.drumManager.buildDrumNodes(root);
         this.scene.add(root);
         this.model = root;
+
+        // Lighting experiment 4.2: range-cull the PointLight loop on every lit
+        // GLB material. Each fragment now early-exits the per-light work when
+        // outside the light's distance cutoff. See docs/lighting-experiments/
+        // 4.2-range-cull.md for the perf result.
+        applyPointLightRangeCull(root);
 
         this.sceneLighting?.applyLights(this.lighting, modelRadius);
         if (this.showGroundDisc) this.groundDiscManager?.build(modelRadius, modelBottomY, this.lighting);
