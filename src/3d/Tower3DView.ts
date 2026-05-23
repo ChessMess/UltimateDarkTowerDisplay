@@ -36,6 +36,7 @@ import { SkyboxManager } from './SkyboxManager';
 import { SealManager } from './SealManager';
 import type { SealBacklightRef } from './SealManager';
 import { DrumManager } from './DrumManager';
+import { LightProbeManager } from './LightProbeManager';
 import { loadTowerModel } from './ModelLoader';
 
 // Re-exported for consumers that import directly from Tower3DView rather than the package root.
@@ -220,6 +221,10 @@ export class Tower3DView implements ITowerDisplay {
   private readonly cameraConfig: CameraConfig;
 
   private sceneLighting: SceneLighting | null = null;
+  private lightProbeManager: LightProbeManager | null = null;
+  // Preallocated scratch Color to avoid per-frame allocation when feeding the
+  // current seal-LED color into LightProbeManager.update().
+  private readonly lightProbeColor: THREE.Color = new THREE.Color();
   private entranceAnimator: EntranceAnimator = new EntranceAnimator();
   private groundDiscManager: GroundDiscManager | null = null;
   private skyboxManager: SkyboxManager | null = null;
@@ -927,14 +932,17 @@ export class Tower3DView implements ITowerDisplay {
    * toggling on individual lights causes shader recompiles (see prewarm).
    */
   private setBulkLightsVisible(visible: boolean): void {
+    // §4.5: all LED-related PointLights are null (24 per-LED reds + 12 seal
+    // accents). The visibility flips are no-ops on the live scene; only the
+    // `lightsGateOpen` flag is meaningful, kept so external callers / tests
+    // can still observe transition state. Loops left in case a future
+    // alternative resurrects per-LED PointLights — null-guards make them safe.
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.visible = visible;
+      if (ref.redLight) ref.redLight.visible = visible;
     }
-    // Accent lights respect `accentLight: false` — they stay invisible even
-    // when the gate opens, because the user opted out of atmospheric spill.
     const accentEnabled = this.lighting.leds.sealBacklights.accentLight;
     for (const ref of this.sealManager.sealBacklights.values()) {
-      ref.light.visible = visible && accentEnabled;
+      if (ref.light) ref.light.visible = visible && accentEnabled;
     }
     this.lightsGateOpen = visible;
   }
@@ -978,6 +986,8 @@ export class Tower3DView implements ITowerDisplay {
     this.entranceAnimator.dispose();
     this.sceneLighting?.dispose();
     this.sceneLighting = null;
+    this.lightProbeManager?.dispose();
+    this.lightProbeManager = null;
     this.groundDiscManager?.dispose();
     this.groundDiscManager = null;
     this.skyboxManager?.dispose();
@@ -999,7 +1009,7 @@ export class Tower3DView implements ITowerDisplay {
     this.ledAnimator?.dispose();
     this.ledAnimator = null;
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.removeFromParent();
+      ref.redLight?.removeFromParent();
     }
     this.ledRefs.clear();
     this.sealManager.dispose();
@@ -1108,6 +1118,10 @@ export class Tower3DView implements ITowerDisplay {
     this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
 
     this.sceneLighting = new SceneLighting(this.scene, this.camera, this.renderer, lighting);
+    // §4.5: scene-level LightProbe added at init so the USE_LIGHT_PROBES
+    // shader define is in the program key from the first compile — no
+    // mid-session recompile when the first seal LED activates.
+    this.lightProbeManager = new LightProbeManager(this.scene);
     this.groundDiscManager = new GroundDiscManager(
       this.scene,
       this.renderer.capabilities.getMaxAnisotropy(),
@@ -1225,15 +1239,12 @@ export class Tower3DView implements ITowerDisplay {
     this.sceneLighting?.applyLights(lighting, this.modelRadius);
     this.groundDiscManager?.updateLighting(lighting, this.modelRadius, this.modelBottomY);
 
-    const redHaloDistance = this.modelRadius * lighting.leds.red.haloDistanceFraction;
+    // §4.5: per-LED PointLights are null; no per-light color/distance/intensity
+    // to push. Proxy/halo updates below still apply.
     const ledgeColor = new THREE.Color(lighting.leds.ledgeLeds.color);
     const baseColor = new THREE.Color(lighting.leds.baseLeds.color);
     for (const [key, ref] of this.ledRefs.entries()) {
       const layer = parseInt(key.split(':')[0], 10);
-      ref.redLight.color.setHex(lighting.leds.red.color);
-      ref.redLight.distance = redHaloDistance;
-      ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
-      // `visible` intentionally not touched here — see buildLeds for rationale.
 
       if (ref.proxyMesh) {
         const col = layer >= 4 ? baseColor : ledgeColor;
@@ -1261,8 +1272,9 @@ export class Tower3DView implements ITowerDisplay {
   private buildLeds(): void {
     if (!this.model) return;
 
-    const { red, ledgeLeds, baseLeds } = this.lighting.leds;
-    const redHaloDistance = this.modelRadius * red.haloDistanceFraction;
+    // §4.5: `red.haloDistanceFraction` and `red.color` are no longer read here
+    // — the per-LED PointLights they parameterised are not constructed.
+    const { ledgeLeds, baseLeds } = this.lighting.leds;
 
     // Radial gradient texture shared by ledge and base halo sprites.
     const gradTex = this.createLedgeGradientTexture();
@@ -1270,17 +1282,16 @@ export class Tower3DView implements ITowerDisplay {
     for (let layer = 0; layer < TOWER_LAYER_COUNT; layer++) {
       for (let light = 0; light < LIGHTS_PER_LAYER; light++) {
         const redPos = computeRedLightPosition(layer, light, this.modelRadius);
-        const redLight = new THREE.PointLight(red.color, 0, redHaloDistance, 2);
-        // visible defaults to false. The bulk lights gate (see updateLightsGate)
-        // flips ALL 36 LED-related lights together when ANY LED becomes lit,
-        // and back to false when all LEDs go dark. Both program variants are
-        // pre-compiled at scene init (see prewarmLightPrograms) so gate
-        // transitions don't trigger shader recompiles — see docs/framerate-issue.md.
-        redLight.visible = false;
-        redLight.position.set(redPos.x, redPos.y, redPos.z);
-        this.model.add(redLight);
+        // §4.5 (light-probe): the 24 per-LED PointLights formerly created here
+        // are not constructed. Per the §4.18 result, these corner-positioned
+        // lights at `cornerNearSurfaceRadius=0.52` cast mostly outward — their
+        // contribution to drum-interior spill was already shown to be visually
+        // negligible. The 12 seal-accent interior contribution is replaced by
+        // a single scene-level THREE.LightProbe (see LightProbeManager).
+        // `ref.redLight` is held as null so LedEffectAnimator's write path
+        // simply skips it; same nullability pattern as §4.18.
 
-        const ref: LedRef = { redLight, driver: { v: 0 }, tween: null };
+        const ref: LedRef = { redLight: null, driver: { v: 0 }, tween: null };
 
         // Layer 3 = LEDGE — add ball-type LED visuals (proxy sphere + halo sprite).
         if (layer === 3) {
@@ -1406,6 +1417,17 @@ export class Tower3DView implements ITowerDisplay {
       this.tickPhysicsListeners();
       this.sceneLighting?.tick();
       this.updateLightsGate();
+      // §4.5: recompute the LightProbe's 9 SH3 coefficients from the live
+      // seal-backlight state. O(N) over lit seals (≤12); per-fragment cost
+      // is O(1) regardless of N.
+      if (this.lightProbeManager && this.sealManager.sealBacklights.size > 0) {
+        const sealCfg = this.lighting.leds.sealBacklights;
+        this.lightProbeManager.update(
+          this.sealManager.sealBacklights.values(),
+          this.lightProbeColor.setHex(sealCfg.color),
+          sealCfg.intensity,
+        );
+      }
       if (this.renderer && this.scene && this.camera) {
         if (this.bloomManager) {
           this.bloomManager.render();

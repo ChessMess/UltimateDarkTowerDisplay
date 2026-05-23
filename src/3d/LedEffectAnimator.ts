@@ -23,7 +23,14 @@ const FLICKER_LERP_ALPHA = 0.15;
 const TICK_S = 1 / FIRMWARE_TICK_HZ;
 
 export interface LedRef {
-  redLight: THREE.PointLight;
+  /**
+   * Per-LED red PointLight. `null` in §4.5 (light-probe) — the 24 per-LED
+   * PointLights formerly created in Tower3DView.buildLeds are dropped; a
+   * scene-level LightProbe replaces the 12 seal accents' interior spill, and
+   * the corner-positioned ring/ledge/base lights cast mostly outward (per
+   * §4.18 finding) and need no replacement. writeLed null-checks this field.
+   */
+  redLight: THREE.PointLight | null;
   driver: { v: number };
   /** The active GSAP animation driving this LED's effect. Holds a Tween for
    *  Breathe/BreatheFast/Breathe50, a Timeline for Flicker, and null for
@@ -53,11 +60,9 @@ export class LedEffectAnimator {
     const { driver, redLight } = ref;
     const cfg = this.getConfig();
     const { red } = cfg.leds;
-    // Drive only intensity; `visible` stays true for the light's lifetime to
-    // keep Three.js's lights-count hash stable. Toggling visible per-frame
-    // forces shader recompiles on every LED on/off transition — measured
-    // ~880 ms main-thread stalls. See docs/framerate-issue.md.
-    redLight.intensity = driver.v * red.maxHalo;
+    // §4.5: redLight is null. Drive only intensity when present; the LightProbe
+    // re-derives interior spill from driver.v + position each frame instead.
+    if (redLight) redLight.intensity = driver.v * red.maxHalo;
 
     if (sealKey && this.sealManager) {
       this.sealManager.setSealLed(sealKey, driver.v, cfg);

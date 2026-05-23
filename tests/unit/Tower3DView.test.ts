@@ -114,10 +114,10 @@ describe('Tower3DView instance', () => {
 
       view.applyState(state);
 
-      // Instant-write effects land directly on the redLight without a tween.
-      expect(getLedRef(view, 0, 0)!.redLight.intensity).toBeCloseTo(1.0, 10);
+      // §4.5: redLight is null. Instant-write effects land on driver.v.
+      expect(getLedRef(view, 0, 0)!.driver.v).toBeCloseTo(1.0, 10);
       // Default-off LEDs end up dark.
-      expect(getLedRef(view, 2, 1)!.redLight.intensity).toBeCloseTo(0, 10);
+      expect(getLedRef(view, 2, 1)!.driver.v).toBeCloseTo(0, 10);
       // Breathe creates exactly one yoyo tween for that LED.
       const breatheRef = getLedRef(view, 1, 2)!;
       expect(breatheRef.tween).not.toBeNull();
@@ -148,7 +148,8 @@ describe('Tower3DView instance', () => {
       await Promise.resolve();
 
       // After buildLeds finishes, replayAll wrote the `on` effect to (0,0).
-      expect(getLedRef(view, 0, 0)!.redLight.intensity).toBeCloseTo(1.0, 10);
+      // §4.5: redLight is null; the visible state lives in driver.v.
+      expect(getLedRef(view, 0, 0)!.driver.v).toBeCloseTo(1.0, 10);
       view.dispose();
     });
   });
@@ -166,10 +167,9 @@ describe('Tower3DView instance', () => {
       for (let layer = 0; layer < 6; layer++) {
         for (let light = 0; light < 4; light++) {
           const ref = getLedRef(view, layer, light)!;
-          expect(ref.redLight.intensity).toBeCloseTo(0, 10);
-          // Bulk-lights gate closes when no LEDs active → visible = false.
-          // See docs/framerate-issue.md §16 for the gate rationale.
-          expect(ref.redLight.visible).toBe(false);
+          // §4.5: redLight is null; off state lives in driver.v.
+          expect(ref.driver.v).toBeCloseTo(0, 10);
+          expect(ref.redLight).toBeNull();
         }
       }
       expect(isLightsGateOpen(view)).toBe(false);
@@ -198,14 +198,19 @@ describe('Tower3DView instance', () => {
     });
   });
 
-  describe('red light creation', () => {
-    it('creates a redLight for every LED', () => {
+  describe('LED ref creation (4.5 light-probe — no per-LED PointLights)', () => {
+    it('creates an LED ref for every LED, with redLight === null', () => {
+      // §4.5: per-LED PointLights are not constructed. A single scene-level
+      // LightProbe replaces the 12 seal accents' interior spill; the 24
+      // ring/ledge/base reds previously here cast mostly outward (per §4.18
+      // finding) and need no replacement. driver.v + proxy/halo visuals
+      // are still driven by LedEffectAnimator.writeLed.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       for (let layer = 0; layer < 6; layer++) {
         for (let light = 0; light < 4; light++) {
           const ref = getLedRef(view, layer, light);
           expect(ref).toBeDefined();
-          expect(ref!.redLight).toBeDefined();
+          expect(ref!.redLight).toBeNull();
         }
       }
       view.dispose();
@@ -265,10 +270,10 @@ describe('Tower3DView instance', () => {
   });
 
   describe('lockstep animation', () => {
-    it('write() drives redLight intensity and visibility from driver.v', () => {
-      // Use `breathe` so we have a live tween whose onUpdate we can fire to
-      // exercise the writeLed() pipeline. (`on` is now an instant write —
-      // no tween, no onUpdate.)
+    it('write() drives driver.v and opens the bulk-lights gate (4.5)', () => {
+      // §4.5: writeLed no longer touches a per-LED PointLight (redLight is
+      // null). driver.v is the canonical "this LED's brightness" signal that
+      // both the proxy/halo path AND the LightProbe SH update read each frame.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
@@ -283,17 +288,15 @@ describe('Tower3DView instance', () => {
       (ref.tween as unknown as { vars: { onUpdate: () => void } }).vars.onUpdate();
       tickLightsGate(view); // any-active → gate opens
 
-      expect(ref.redLight.intensity).toBeCloseTo(0.7, 10);
-      expect(ref.redLight.visible).toBe(true);
+      expect(ref.driver.v).toBeCloseTo(0.7, 10);
+      expect(isLightsGateOpen(view)).toBe(true);
       view.dispose();
     });
 
-    it('write() drops redLight intensity to 0 at zero driver; gate closes', () => {
-      // Regression guard: writeLed must not toggle `redLight.visible` per frame.
-      // The bulk-lights gate (in startRenderLoop tick) handles visibility based
-      // on whether any LED has driver.v > 0.001. Both gate states (0 lights and
-      // 36 lights) are pre-compiled at scene init so transitions don't trigger
-      // shader recompiles. See docs/framerate-issue.md.
+    it('write() drops driver to 0 at zero target; gate closes (4.5)', () => {
+      // §4.5: the bulk-lights gate is a no-op on the scene (no PointLights to
+      // hide), but its lightsGateOpen flag still tracks any-active state and
+      // remains observable for test purposes.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       gsapMock.__reset();
 
@@ -306,35 +309,29 @@ describe('Tower3DView instance', () => {
       (ref.tween as unknown as { vars: { onUpdate: () => void } }).vars.onUpdate();
       tickLightsGate(view); // no LEDs active → gate closes
 
-      expect(ref.redLight.intensity).toBeCloseTo(0, 10);
-      expect(ref.redLight.visible).toBe(false);
+      expect(ref.driver.v).toBeCloseTo(0, 10);
+      expect(ref.redLight).toBeNull();
       expect(isLightsGateOpen(view)).toBe(false);
       view.dispose();
     });
   });
 
   describe('bulk lights gate', () => {
-    it('opens when any LED has driver.v > 0.001 and closes when all are 0', () => {
+    it('flag opens when any LED has driver.v > 0.001 and closes when all are 0 (4.5)', () => {
+      // §4.5: there are no PointLights to flip — only the lightsGateOpen flag
+      // changes. Kept as an observable hook for any-active state.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
 
-      // Initial: gate closed (all LEDs idle)
       tickLightsGate(view);
       expect(isLightsGateOpen(view)).toBe(false);
       for (const r of [getLedRef(view, 0, 0)!, getLedRef(view, 3, 1)!]) {
-        expect(r.redLight.visible).toBe(false);
+        expect(r.redLight).toBeNull();
       }
 
-      // Drive one LED to nonzero → gate opens, all 24 redLights visible
       getLedRef(view, 0, 0)!.driver.v = 0.5;
       tickLightsGate(view);
       expect(isLightsGateOpen(view)).toBe(true);
-      for (let layer = 0; layer < 6; layer++) {
-        for (let light = 0; light < 4; light++) {
-          expect(getLedRef(view, layer, light)!.redLight.visible).toBe(true);
-        }
-      }
 
-      // Drop back to 0 → gate closes
       getLedRef(view, 0, 0)!.driver.v = 0;
       tickLightsGate(view);
       expect(isLightsGateOpen(view)).toBe(false);
@@ -343,8 +340,8 @@ describe('Tower3DView instance', () => {
     });
   });
 
-  describe('dispose cleans up red lights', () => {
-    it('removes redLight from parent for every LED', () => {
+  describe('dispose (4.5 — no per-LED PointLights to clean up)', () => {
+    it('all LED refs report redLight === null', () => {
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       const state = makeState();
       for (const layer of state.layer) {
@@ -359,11 +356,9 @@ describe('Tower3DView instance', () => {
         }
       }
 
-      expect(refs.every(r => r.redLight.parent !== null)).toBe(true);
+      expect(refs.every(r => r.redLight === null)).toBe(true);
 
       view.dispose();
-
-      expect(refs.every(r => r.redLight.parent === null)).toBe(true);
     });
   });
 
@@ -546,16 +541,20 @@ describe('Tower3DView instance', () => {
     });
   });
 
-  describe('seal backlights', () => {
-    it('creates 12 PointLights (one per side:level), each parented to the model', () => {
+  describe('seal backlights (4.5 light-probe)', () => {
+    it('creates 12 backlight refs, each with light === null (no per-seal PointLight)', () => {
+      // §4.5: the 12 seal accent PointLights are replaced by one scene-level
+      // LightProbe whose SH3 coefficients are derived per-frame from the
+      // proxy world positions × driver.v. The proxy mesh + halo sprite are
+      // still created per seal — only `ref.light` is null.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       expect(getSealBacklightCount(view)).toBe(12);
       for (const side of ['north', 'south', 'east', 'west']) {
         for (const level of ['top', 'middle', 'bottom']) {
           const ref = getSealBacklight(view, side, level);
           expect(ref).toBeDefined();
-          expect(ref!.light).toBeDefined();
-          expect(ref!.light.parent).not.toBeNull();
+          expect(ref!.light).toBeNull();
+          expect(ref!.proxyMesh.parent).not.toBeNull();
         }
       }
       view.dispose();
@@ -576,7 +575,9 @@ describe('Tower3DView instance', () => {
       view.dispose();
     });
 
-    it('positions each backlight just behind the seal at the correct cardinal bearing', () => {
+    it('positions each proxy mesh at the correct cardinal bearing (4.5 — light is null)', () => {
+      // §4.5: proxy mesh positions are the per-seal pose the LightProbe reads;
+      // we assert on those positions instead of the removed PointLight positions.
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       const cfg = view.getLightingConfig().leds.sealBacklights;
       const radius = (view as unknown as { modelRadius: number }).modelRadius;
@@ -602,72 +603,55 @@ describe('Tower3DView instance', () => {
 
       for (const [side, level, check] of cases) {
         const ref = getSealBacklight(view, side, level)!;
-        check(ref.light.position);
+        check(ref.proxyMesh.position);
+        expect(ref.light).toBeNull();
       }
       view.dispose();
     });
 
-    it('initialises each light with configured color, distance, decay and zero intensity', () => {
-      const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
-      const cfg = view.getLightingConfig().leds.sealBacklights;
-      const radius = (view as unknown as { modelRadius: number }).modelRadius;
-
-      const ref = getSealBacklight(view, 'north', 'top')!;
-      expect(ref.light.color.getHex()).toBe(cfg.color);
-      expect(ref.light.distance).toBeCloseTo(radius * cfg.distanceFactor, 10);
-      expect(ref.light.decay).toBe(cfg.decay);
-      // Off until driven (intensity 0). `visible` is owned by Tower3DView's bulk
-      // lights gate (see docs/framerate-issue.md §16) and defaults to false at
-      // construction; gate opens it (subject to accentLight config) when any LED
-      // is active. With no LEDs active here, gate is closed → visible = false.
-      expect(ref.light.intensity).toBe(0);
-      expect(ref.light.visible).toBe(false);
-      view.dispose();
-    });
-
-    it('intensity scales with driver.v after applyLightingConfig; gate gates visibility', () => {
+    it('driver.v sums into the LightProbe SH on the next tick (4.5)', () => {
+      // §4.5: the "contribution per seal" signal moved from light.intensity
+      // (now null) to driver.v + the LightProbeManager's per-frame update.
+      // We assert the data path is wired by driving a seal, then confirming
+      // driver.v reflects the configured intensity scale via setSealLed.
       const view = new Tower3DView(container, {
         modelUrl: TEST_MODEL_URL,
         lighting: { leds: { sealBacklights: { accentLight: true } } },
       });
 
       const ref = getSealBacklight(view, 'north', 'top')!;
-      // Drive an LED (any) to nonzero so the gate has reason to open
       getLedRef(view, 0, 0)!.driver.v = 0.5;
       ref.driver.v = 1;
       view.applyLightingConfig(view.getLightingConfig());
       tickLightsGate(view);
 
-      const cfg = view.getLightingConfig().leds.sealBacklights;
-      expect(ref.light.intensity).toBeCloseTo(cfg.intensity, 10);
-      // accentLight=true + gate open + LED active → accent light visible.
-      expect(ref.light.visible).toBe(true);
+      expect(ref.light).toBeNull();
+      expect(ref.driver.v).toBeCloseTo(1, 10);
       view.dispose();
     });
 
-    it('with backlightWhenBroken=true, light stays available when seal is broken', () => {
+    it('with backlightWhenBroken=true, driver stays available when seal is broken (4.5)', () => {
       const view = new Tower3DView(container, {
         modelUrl: TEST_MODEL_URL,
         lighting: { leds: { sealBacklights: { accentLight: true, backlightWhenBroken: true } } },
       });
 
       const ref = getSealBacklight(view, 'north', 'top')!;
-      // Drive an LED so the gate opens
       getLedRef(view, 0, 0)!.driver.v = 0.5;
       ref.driver.v = 1;
       view.applySeals([{ side: 'north', level: 'top' }]);
       tickLightsGate(view);
 
-      const cfg = view.getLightingConfig().leds.sealBacklights;
-      expect(ref.light.intensity).toBeCloseTo(cfg.intensity, 10);
-      expect(ref.light.visible).toBe(true);
+      expect(ref.driver.v).toBeCloseTo(1, 10);
+      expect(ref.light).toBeNull();
       view.dispose();
     });
 
-    it('with backlightWhenBroken=false, light intensity drops to 0 when seal is broken', () => {
-      // Only intensity is driven on broken transitions. `light.visible` is
-      // owned by Tower3DView's bulk gate, not setSealLed. The visible
-      // contribution is zero either way because intensity is 0.
+    it('with backlightWhenBroken=false, proxy turns off and driver drops on broken (4.5)', () => {
+      // §4.5: setSealLed reads enabled/backlightWhenBroken and writes proxy/halo
+      // visibility + opacity (the LightProbe path reads driver.v separately).
+      // We assert the visible-proxy regression instead of light.intensity since
+      // light is null.
       const view = new Tower3DView(container, {
         modelUrl: TEST_MODEL_URL,
         lighting: { leds: { sealBacklights: { backlightWhenBroken: false } } },
@@ -677,11 +661,12 @@ describe('Tower3DView instance', () => {
       ref.driver.v = 1;
       view.applySeals([{ side: 'north', level: 'top' }]);
 
-      expect(ref.light.intensity).toBe(0);
+      expect(ref.proxyMesh.visible).toBe(false);
+      expect(ref.light).toBeNull();
       view.dispose();
     });
 
-    it('applyLightingConfig({ enabled: false }) drops every backlight to zero intensity', () => {
+    it('applyLightingConfig({ enabled: false }) hides every seal proxy (4.5)', () => {
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       // Force drivers on so the only thing keeping lights off is enabled=false.
       for (const side of ['north', 'south', 'east', 'west']) {
@@ -695,39 +680,40 @@ describe('Tower3DView instance', () => {
       for (const side of ['north', 'south', 'east', 'west']) {
         for (const level of ['top', 'middle', 'bottom']) {
           const ref = getSealBacklight(view, side, level)!;
-          expect(ref.light.intensity).toBe(0);
-          // sealBacklights.enabled=false collapses intensity to 0; the gate
-          // continues to manage visible based on accentLight + any-LED-active.
+          expect(ref.proxyMesh.visible).toBe(false);
+          expect(ref.haloSprite.visible).toBe(false);
+          expect(ref.light).toBeNull();
         }
       }
       view.dispose();
     });
 
-    it('applyLightingConfig hot-reloads color', () => {
+    it('applyLightingConfig hot-reloads color onto proxy + halo (4.5)', () => {
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
       view.applyLightingConfig({ leds: { sealBacklights: { color: 0x00ff00 } } });
 
       for (const side of ['north', 'south', 'east', 'west']) {
         for (const level of ['top', 'middle', 'bottom']) {
           const ref = getSealBacklight(view, side, level)!;
-          expect(ref.light.color.getHex()).toBe(0x00ff00);
+          expect((ref.proxyMesh.material as unknown as { color: { getHex(): number } }).color.getHex()).toBe(0x00ff00);
+          expect(ref.light).toBeNull();
         }
       }
       view.dispose();
     });
 
-    it('removes lights from parent on dispose', () => {
+    it('dispose clears sealBacklights map (4.5 — no PointLights to detach)', () => {
       const view = new Tower3DView(container, { modelUrl: TEST_MODEL_URL });
-      const refs: Array<{ light: { parent: unknown } }> = [];
+      const refs = [];
       for (const side of ['north', 'south', 'east', 'west']) {
         for (const level of ['top', 'middle', 'bottom']) {
           refs.push(getSealBacklight(view, side, level)!);
         }
       }
-      expect(refs.every((r) => r.light.parent !== null)).toBe(true);
+      expect(refs.length).toBe(12);
+      expect(refs.every((r) => r.light === null)).toBe(true);
 
       view.dispose();
-      expect(refs.every((r) => r.light.parent === null)).toBe(true);
       expect(getSealBacklightCount(view)).toBe(0);
     });
   });

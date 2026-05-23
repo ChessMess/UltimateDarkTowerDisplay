@@ -13,8 +13,14 @@ function sealKey(side: string, level: string): string {
 }
 
 export interface SealBacklightRef {
-  /** Optional atmospheric accent PointLight (disabled by default). */
-  light: THREE.PointLight;
+  /**
+   * Atmospheric accent PointLight. `null` in §4.5 (light-probe) — the 12 seal
+   * accents are replaced by a single scene-level `THREE.LightProbe` whose SH3
+   * coefficients are derived per-frame from the seal positions × intensities.
+   * See `LightProbeManager`. The field is retained so call sites depending on
+   * `SealBacklightRef.light` need only null-check rather than restructure.
+   */
+  light: THREE.PointLight | null;
   /** Bright proxy mesh — the directly-visible "LED bulb" seen through cutouts. */
   proxyMesh: THREE.Mesh;
   /** Soft additive halo sprite around the proxy. */
@@ -135,25 +141,14 @@ export class SealManager {
         haloSprite.visible = false;
         model.add(haloSprite);
 
-        // Accent PointLight — atmospheric spill onto drum interior surfaces.
-        // `visible` defaults to false. Tower3DView owns the visibility state for
-        // ALL 36 LED-related lights (24 LED reds + 12 accent) via a bulk gate
-        // that flips them together on any-LED-active / all-dark transitions,
-        // with both program variants pre-compiled at scene init to avoid the
-        // ~880 ms shader recompile stalls that per-frame visibility toggling
-        // produces. setSealLed drives only intensity. See docs/framerate-issue.md.
-        const light = new THREE.PointLight(
-          cfg.color,
-          0,
-          modelRadius * cfg.distanceFactor,
-          cfg.decay,
-        );
-        light.position.set(x, y, z);
-        light.visible = false;
-        model.add(light);
+        // §4.5: no accent PointLight is constructed. The 12 seal accents'
+        // interior-spill contribution is replaced by a single scene-level
+        // THREE.LightProbe whose SH3 coefficients are recomputed each frame
+        // from this proxy's world position × color × driver.v. See
+        // LightProbeManager. `ref.light` is held as null for API stability.
 
         this.sealBacklights.set(key, {
-          light,
+          light: null,
           proxyMesh,
           haloSprite,
           sealNode,
@@ -176,8 +171,7 @@ export class SealManager {
     if (!cfg.enabled) {
       ref.proxyMesh.visible = false;
       ref.haloSprite.visible = false;
-      ref.light.intensity = 0;
-      // `light.visible` deliberately not touched — see buildSealBacklights.
+      if (ref.light) ref.light.intensity = 0;
       return;
     }
 
@@ -198,14 +192,9 @@ export class SealManager {
       ref.haloSprite.visible = false;
     }
 
-    // Drive only intensity. `light.visible` is set once in
-    // buildSealBacklights / updateLighting based on cfg.accentLight, never
-    // per-frame here. See buildSealBacklights for the rationale.
-    if (cfg.accentLight) {
-      ref.light.intensity = driverV * cfg.intensity;
-    } else {
-      ref.light.intensity = 0;
-    }
+    // §4.5: no accent PointLight (ref.light is null). The seal's contribution
+    // to interior spill is read from this driver.v + position by
+    // LightProbeManager.update() each frame; nothing per-LED to write here.
   }
 
   /**
@@ -247,7 +236,6 @@ export class SealManager {
   updateLighting(lighting: ResolvedLightingConfig, modelRadius: number): void {
     const cfg = lighting.leds.sealBacklights;
     const color = new THREE.Color(cfg.color);
-    const backlightDistance = modelRadius * cfg.distanceFactor;
 
     for (const [key, ref] of this.sealBacklights) {
       const pose = computeSealLedPose(
@@ -268,12 +256,9 @@ export class SealManager {
       const haloScale = modelRadius * cfg.halo.sizeFactor;
       ref.haloSprite.scale.setScalar(haloScale);
 
-      ref.light.position.set(x, y, z);
-      ref.light.color.copy(color);
-      ref.light.distance = backlightDistance;
-      ref.light.decay = cfg.decay;
-      // light.visible is owned by Tower3DView's bulk gate; we only manage
-      // intensity here. See buildSealBacklights for the rationale.
+      // §4.5: ref.light is null; no per-light pose/color/distance to push.
+      // LightProbeManager re-reads proxy world position and the configured
+      // color every frame, so config hot-reload propagates automatically.
 
       this.setSealLed(key, ref.driver.v, lighting);
     }
@@ -329,7 +314,7 @@ export class SealManager {
   /** Remove all LED visuals from their parents and clear both maps. */
   dispose(): void {
     for (const ref of this.sealBacklights.values()) {
-      ref.light.removeFromParent();
+      ref.light?.removeFromParent();
       ref.proxyMesh.geometry.dispose();
       (ref.proxyMesh.material as THREE.Material).dispose();
       ref.proxyMesh.removeFromParent();

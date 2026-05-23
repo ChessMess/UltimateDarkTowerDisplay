@@ -133,6 +133,12 @@ class Color {
     this.value = other.value;
     return this;
   }
+  // Linear-RGB component accessors. Three.js exposes r/g/b as numeric fields
+  // derived from the packed hex; the mock derives them on demand so
+  // LightProbeManager can read them without a real Color implementation.
+  get r() { return ((this.value >> 16) & 0xff) / 255; }
+  get g() { return ((this.value >> 8) & 0xff) / 255; }
+  get b() { return (this.value & 0xff) / 255; }
 }
 class PerspectiveCamera {
   constructor() {
@@ -274,6 +280,14 @@ class Mesh {
     }
     this.parent = null;
   }
+  // §4.5: LightProbeManager reads each seal proxy's world position per frame.
+  // The mock has no transform hierarchy, so return local position as-is.
+  getWorldPosition(v) {
+    v.x = this.position.x;
+    v.y = this.position.y;
+    v.z = this.position.z;
+    return v;
+  }
 }
 
 class ShaderMaterial {
@@ -347,6 +361,35 @@ class MeshStandardMaterial {
     return new MeshStandardMaterial(this._opts);
   }
   dispose() {}
+}
+
+class SphericalHarmonics3 {
+  constructor() {
+    this.coefficients = [];
+    for (let i = 0; i < 9; i++) this.coefficients.push(new Vector3());
+  }
+  zero() {
+    for (const c of this.coefficients) c.set(0, 0, 0);
+    return this;
+  }
+}
+
+class LightProbe {
+  constructor(_sh, intensity = 1) {
+    this.sh = new SphericalHarmonics3();
+    this.intensity = intensity;
+    this.visible = true;
+    this.position = new Vector3();
+    this.parent = null;
+    this.isLightProbe = true;
+  }
+  removeFromParent() {
+    if (this.parent && this.parent.children) {
+      const i = this.parent.children.indexOf(this);
+      if (i >= 0) this.parent.children.splice(i, 1);
+    }
+    this.parent = null;
+  }
 }
 
 class PointLight {
@@ -472,6 +515,8 @@ module.exports = {
   Mesh,
   MeshStandardMaterial,
   PointLight,
+  LightProbe,
+  SphericalHarmonics3,
   SpotLight,
   SphereGeometry,
   CircleGeometry,
