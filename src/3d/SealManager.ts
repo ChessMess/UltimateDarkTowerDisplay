@@ -13,8 +13,14 @@ function sealKey(side: string, level: string): string {
 }
 
 export interface SealBacklightRef {
-  /** Optional atmospheric accent PointLight (disabled by default). */
-  light: THREE.PointLight;
+  /**
+   * Optional atmospheric accent PointLight. §4.4 two-directional removes the
+   * 12 seal accent PointLights — `light` is always `null` on this branch.
+   * The slot is retained so the bulk-lights gate machinery in Tower3DView
+   * keeps the same null-guarded wire shape and any future alternative can
+   * re-attach a real PointLight here without re-wiring this struct.
+   */
+  light: THREE.PointLight | null;
   /** Bright proxy mesh — the directly-visible "LED bulb" seen through cutouts. */
   proxyMesh: THREE.Mesh;
   /** Soft additive halo sprite around the proxy. */
@@ -135,25 +141,15 @@ export class SealManager {
         haloSprite.visible = false;
         model.add(haloSprite);
 
-        // Accent PointLight — atmospheric spill onto drum interior surfaces.
-        // `visible` defaults to false. Tower3DView owns the visibility state for
-        // ALL 36 LED-related lights (24 LED reds + 12 accent) via a bulk gate
-        // that flips them together on any-LED-active / all-dark transitions,
-        // with both program variants pre-compiled at scene init to avoid the
-        // ~880 ms shader recompile stalls that per-frame visibility toggling
-        // produces. setSealLed drives only intensity. See docs/framerate-issue.md.
-        const light = new THREE.PointLight(
-          cfg.color,
-          0,
-          modelRadius * cfg.distanceFactor,
-          cfg.decay,
-        );
-        light.position.set(x, y, z);
-        light.visible = false;
-        model.add(light);
+        // §4.4 two-directional — accent PointLights removed entirely. The 2
+        // red DirectionalLights added in Tower3DView (driven by max(driver.v)
+        // across all LEDs via updateLightsGate) replace the per-seal spill
+        // role globally. The `light` slot stays null so Tower3DView's
+        // bulk-lights gate can null-guard its writes without a separate
+        // code path.
 
         this.sealBacklights.set(key, {
-          light,
+          light: null,
           proxyMesh,
           haloSprite,
           sealNode,
@@ -176,7 +172,7 @@ export class SealManager {
     if (!cfg.enabled) {
       ref.proxyMesh.visible = false;
       ref.haloSprite.visible = false;
-      ref.light.intensity = 0;
+      if (ref.light) ref.light.intensity = 0;
       // `light.visible` deliberately not touched — see buildSealBacklights.
       return;
     }
@@ -198,13 +194,14 @@ export class SealManager {
       ref.haloSprite.visible = false;
     }
 
-    // Drive only intensity. `light.visible` is set once in
-    // buildSealBacklights / updateLighting based on cfg.accentLight, never
-    // per-frame here. See buildSealBacklights for the rationale.
-    if (cfg.accentLight) {
-      ref.light.intensity = driverV * cfg.intensity;
-    } else {
-      ref.light.intensity = 0;
+    // §4.4 two-directional — accent PointLight removed (`ref.light` always
+    // null). The 2 red DirectionalLights in Tower3DView produce the
+    // atmospheric spill globally; their intensity is driven from
+    // max(driver.v) across all LEDs in updateLightsGate. Branch kept
+    // null-guarded so future alternatives can drop a real light back into
+    // the SealBacklightRef without changing this write path.
+    if (ref.light) {
+      ref.light.intensity = cfg.accentLight ? driverV * cfg.intensity : 0;
     }
   }
 
@@ -268,12 +265,14 @@ export class SealManager {
       const haloScale = modelRadius * cfg.halo.sizeFactor;
       ref.haloSprite.scale.setScalar(haloScale);
 
-      ref.light.position.set(x, y, z);
-      ref.light.color.copy(color);
-      ref.light.distance = backlightDistance;
-      ref.light.decay = cfg.decay;
-      // light.visible is owned by Tower3DView's bulk gate; we only manage
-      // intensity here. See buildSealBacklights for the rationale.
+      if (ref.light) {
+        ref.light.position.set(x, y, z);
+        ref.light.color.copy(color);
+        ref.light.distance = backlightDistance;
+        ref.light.decay = cfg.decay;
+        // light.visible is owned by Tower3DView's bulk gate; we only manage
+        // intensity here. See buildSealBacklights for the rationale.
+      }
 
       this.setSealLed(key, ref.driver.v, lighting);
     }
@@ -329,7 +328,7 @@ export class SealManager {
   /** Remove all LED visuals from their parents and clear both maps. */
   dispose(): void {
     for (const ref of this.sealBacklights.values()) {
-      ref.light.removeFromParent();
+      ref.light?.removeFromParent();
       ref.proxyMesh.geometry.dispose();
       (ref.proxyMesh.material as THREE.Material).dispose();
       ref.proxyMesh.removeFromParent();
