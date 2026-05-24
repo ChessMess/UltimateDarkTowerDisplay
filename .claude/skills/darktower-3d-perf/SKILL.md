@@ -170,6 +170,7 @@ An alternative that hits v-sync at 1.7M but craters at 7.84M has not solved the 
 | 4.13 (cube-camera env map) | 0 | One-shot recompile | Unchanged | `drawCalls` jumps by 6× per CubeCamera update — a new cost line worth flagging; trade-off check |
 | 4.16 (`MeshStandardMaterial` emissive) | unchanged | One-shot recompile (new material) | Unchanged | Marginal; mostly a "before/after looks the same" check |
 | 4.18 (12-light consolidation) | 0 (empty/idle) or 12 (any LED on, gate open) | New stable count = 12 (vs current 30) after one-shot recompile | Unchanged | 1-LED cost should drop to ~3× lower than today (12 / 36 ratio per §3) |
+| 4.19 (interior atmospheric sprites) | 0 (all PointLights removed) | **None** — sprites are outside the lights hash; adding them at runtime is free | Unchanged | `visibleSprites` up by `2 × cfg.interior.count × seal-count` (e.g. +24 at All-LEDs with count=2) above baseline; drawCalls up by `2 × new-visible-sprites` due to the two-composer bloom pipeline; depth-sort hygiene check (no z-fighting between interior sprites and drum interior wall) |
 
 For fields the standard PerfReport doesn't capture (DirectionalLight count, shadow-map count, cube-camera render-target size, custom shader chunks injected), supplement the report with a `mcp__chrome-devtools__evaluate_script` snippet that reads them directly off the scene graph or renderer.info — and add the captured value to the report as a custom row.
 

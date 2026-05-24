@@ -19,7 +19,7 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 | 4.5  | light-probe | pending | — | — | — | — | — | `4.5-light-probe.md` |
 | 4.1  | hdr-proxies | pending | — | — | — | — | — | `4.1-hdr-proxies.md` |
 | 4.4  | two-directional | pending | — | — | — | — | — | `4.4-two-directional.md` |
-| 4.19 | interior-sprites | pending | — | — | — | — | — | `4.19-interior-sprites.md` |
+| 4.19 | interior-sprites | report-complete | +816% | +1475% | no | yes | per-seal localised additive blobs; saturates at default opacity at All-LEDs (tunable) | [4.19-interior-sprites.md](4.19-interior-sprites.md) |
 | 4.11 | min-cost-combo | pending | — | — | — | — | — | `4.11-min-cost-combo.md` |
 
 Statuses: `baseline-captured` (this file only) → `pending` → `implemented` → `report-complete` → `merged` | `abandoned`.
