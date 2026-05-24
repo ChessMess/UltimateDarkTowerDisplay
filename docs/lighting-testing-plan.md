@@ -88,7 +88,7 @@ Updated by each branch's docs-only PR. (Largely redundant with [`RESULTS.md`](li
 | 4.16 | `lighting/4.16-emissive-standard` | pending | `4.16-emissive-standard.md` | |
 | 4.2  | `lighting/4.2-range-cull` | pending | `4.2-range-cull.md` | |
 | 4.5  | `lighting/4.5-light-probe` | pending | `4.5-light-probe.md` | |
-| 4.1  | `lighting/4.1-hdr-proxies` | pending | `4.1-hdr-proxies.md` | |
+| 4.1  | `lighting/4.1-hdr-proxies` | report-complete | [`4.1-hdr-proxies.md`](lighting-experiments/4.1-hdr-proxies.md) | |
 | 4.4  | `lighting/4.4-two-directional` | pending | `4.4-two-directional.md` | |
 | 4.19 | `lighting/4.19-interior-sprites` | pending | `4.19-interior-sprites.md` | |
 | 4.11 | `lighting/4.11-min-cost-combo` | pending | `4.11-min-cost-combo.md` | |

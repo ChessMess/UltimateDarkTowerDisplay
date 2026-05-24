@@ -17,7 +17,7 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 | 4.16 | emissive-standard | pending | — | — | — | — | — | `4.16-emissive-standard.md` |
 | 4.2  | range-cull | pending | — | — | — | — | — | `4.2-range-cull.md` |
 | 4.5  | light-probe | pending | — | — | — | — | — | `4.5-light-probe.md` |
-| 4.1  | hdr-proxies | pending | — | — | — | — | — | `4.1-hdr-proxies.md` |
+| 4.1  | hdr-proxies | report-complete | +815% | +1411% | no | yes | **interior spill lost** (bulbs/halos still bloom; no drum-interior wash) | [4.1-hdr-proxies.md](4.1-hdr-proxies.md) |
 | 4.4  | two-directional | pending | — | — | — | — | — | `4.4-two-directional.md` |
 | 4.19 | interior-sprites | pending | — | — | — | — | — | `4.19-interior-sprites.md` |
 | 4.11 | min-cost-combo | pending | — | — | — | — | — | `4.11-min-cost-combo.md` |
