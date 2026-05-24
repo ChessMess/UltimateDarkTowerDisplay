@@ -91,7 +91,7 @@ Updated by each branch's docs-only PR. (Largely redundant with [`RESULTS.md`](li
 | 4.1  | `lighting/4.1-hdr-proxies` | pending | `4.1-hdr-proxies.md` | |
 | 4.4  | `lighting/4.4-two-directional` | pending | `4.4-two-directional.md` | |
 | 4.19 | `lighting/4.19-interior-sprites` | pending | `4.19-interior-sprites.md` | |
-| 4.11 | `lighting/4.11-min-cost-combo` | pending | `4.11-min-cost-combo.md` | |
+| 4.11 | `lighting/4.11-min-cost-combo` | report-complete | [`4.11-min-cost-combo.md`](lighting-experiments/4.11-min-cost-combo.md) | |
 
 Statuses: `pending` → `implemented` → `report-complete` → `merged` | `abandoned`.
 
