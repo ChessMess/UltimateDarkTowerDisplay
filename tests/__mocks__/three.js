@@ -26,6 +26,7 @@ class Scene {
   }
   add(obj) {
     this.children.push(obj);
+    if (obj) obj.parent = this;
   }
   traverse(cb) {
     cb(this);
@@ -193,6 +194,7 @@ class DirectionalLight {
     this.color = new Color(color);
     this.intensity = intensity;
     this.position = new Vector3();
+    this.visible = true;
     this.castShadow = false;
     this.shadow = {
       mapSize: { set() {}, x: 0, y: 0 },
@@ -209,6 +211,14 @@ class DirectionalLight {
       },
     };
     this.target = null;
+    this.parent = null;
+  }
+  removeFromParent() {
+    if (this.parent && this.parent.children) {
+      const i = this.parent.children.indexOf(this);
+      if (i >= 0) this.parent.children.splice(i, 1);
+    }
+    this.parent = null;
   }
 }
 class RectAreaLight {

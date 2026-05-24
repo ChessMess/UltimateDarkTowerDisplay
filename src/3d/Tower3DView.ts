@@ -59,6 +59,7 @@ type Tower3DViewInternals = {
   sealManager: SealManager;
   updateLightsGate: () => void;
   lightsGateOpen: boolean;
+  interiorLights: THREE.DirectionalLight[];
 };
 const internals = (view: Tower3DView): Tower3DViewInternals =>
   view as unknown as Tower3DViewInternals;
@@ -103,6 +104,9 @@ export const __testables = {
   /** Drive the bulk-lights gate manually for tests (rAF doesn't run in jsdom). */
   tickLightsGate: (view: Tower3DView): void => internals(view).updateLightsGate(),
   isLightsGateOpen: (view: Tower3DView): boolean => internals(view).lightsGateOpen,
+  /** §4.11 interior DirectionalLights (2 entries, opposing X axis). */
+  getInteriorLights: (view: Tower3DView): readonly THREE.DirectionalLight[] =>
+    internals(view).interiorLights,
 };
 
 function isSoundPack(v: Record<number, string> | SoundPack): v is SoundPack {
@@ -284,6 +288,16 @@ export class Tower3DView implements ITowerDisplay {
   private ledRefs: Map<string, LedRef> = new Map();
   private ledAnimator: LedEffectAnimator | null = null;
   private sequenceAnimator: SequenceAnimator | null = null;
+
+  /**
+   * §4.11 interior atmospheric DirectionalLights. Two opposing horizontal
+   * lights inside the drum (+X / −X at modelRadius × 2) deliver the spill
+   * that the (removed) 36 PointLights used to provide. Built in
+   * `buildInteriorLights` after the model loads, kept `visible: true` for
+   * the scene's lifetime so the lights-count shader hash stays stable; only
+   * `intensity` is driven each frame from `max(driver.v)`.
+   */
+  private interiorLights: THREE.DirectionalLight[] = [];
 
   /**
    * Tracks whether the bulk LED-lights gate is open. When false (idle), every
@@ -921,37 +935,60 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
-   * Bulk-toggle visibility on all 36 LED-related PointLights together. Owned
-   * by Tower3DView (not LedEffectAnimator / SealManager) because the goal is
-   * a stable lights-count hash for the program cache. Per-frame visibility
+   * Bulk-toggle visibility on every LED-related PointLight together. Owned by
+   * Tower3DView (not LedEffectAnimator / SealManager) because the goal is a
+   * stable lights-count hash for the program cache. Per-frame visibility
    * toggling on individual lights causes shader recompiles (see prewarm).
+   *
+   * §4.11: all 36 PointLights are removed at build time — both `ref.redLight`
+   * and `ref.light` are null — so this collapses to a no-op gate state update.
+   * The machinery is preserved (null-guarded) so any future alternative that
+   * re-introduces per-LED PointLights can drop them in without rewiring.
    */
   private setBulkLightsVisible(visible: boolean): void {
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.visible = visible;
+      if (ref.redLight) ref.redLight.visible = visible;
     }
     // Accent lights respect `accentLight: false` — they stay invisible even
     // when the gate opens, because the user opted out of atmospheric spill.
     const accentEnabled = this.lighting.leds.sealBacklights.accentLight;
     for (const ref of this.sealManager.sealBacklights.values()) {
-      ref.light.visible = visible && accentEnabled;
+      if (ref.light) ref.light.visible = visible && accentEnabled;
     }
     this.lightsGateOpen = visible;
   }
 
   /**
    * Per-tick check called from the render loop. If any LED is currently lit
-   * (driver.v > 0.001), open the gate; otherwise close it. State transitions
-   * use the pre-warmed program cache → no recompile.
+   * (driver.v > 0.001), open the gate AND drive the §4.11 interior
+   * DirectionalLights to `max(driver.v) × cfg.intensity`. Otherwise close
+   * the gate and zero the directionals. State transitions use the pre-warmed
+   * program cache → no recompile.
    */
   private updateLightsGate(): void {
     let anyActive = false;
+    let maxV = 0;
     for (const ref of this.ledRefs.values()) {
-      if (ref.driver.v > 0.001) { anyActive = true; break; }
+      const v = ref.driver.v;
+      if (v > maxV) maxV = v;
+      if (v > 0.001) anyActive = true;
     }
+    for (const ref of this.sealManager.sealBacklights.values()) {
+      const v = ref.driver.v;
+      if (v > maxV) maxV = v;
+      if (v > 0.001) anyActive = true;
+    }
+
     if (anyActive !== this.lightsGateOpen) {
       this.setBulkLightsVisible(anyActive);
     }
+
+    // §4.11 continuous-drive: write per-frame so the directionals breathe
+    // with the LEDs. Gated by sealBacklights.accentLight so users who opt
+    // out of atmospheric spill still get the v-sync-ceiling fragment cost.
+    const cfg = this.lighting.leds.sealBacklights;
+    const intensity = cfg.accentLight ? maxV * cfg.intensity : 0;
+    for (const light of this.interiorLights) light.intensity = intensity;
   }
 
   /** Toggle the shadow-catching ground disc. Builds lazily on first enable. */
@@ -999,9 +1036,11 @@ export class Tower3DView implements ITowerDisplay {
     this.ledAnimator?.dispose();
     this.ledAnimator = null;
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.removeFromParent();
+      ref.redLight?.removeFromParent();
     }
     this.ledRefs.clear();
+    for (const light of this.interiorLights) light.removeFromParent();
+    this.interiorLights = [];
     this.sealManager.dispose();
     this.drumManager.dispose();
     this.physicsFrameListeners.clear();
@@ -1172,6 +1211,7 @@ export class Tower3DView implements ITowerDisplay {
         this.sceneLighting?.applyLights(this.lighting, modelRadius);
         if (this.showGroundDisc) this.groundDiscManager?.build(modelRadius, modelBottomY, this.lighting);
         this.buildLeds();
+        this.buildInteriorLights();
         this.sealManager.buildSealBacklights(root, modelRadius, this.lighting);
         this.sealManager.setDebug(this.debug3D, root);
         this.sealManager.warnOnMissing();
@@ -1230,10 +1270,12 @@ export class Tower3DView implements ITowerDisplay {
     const baseColor = new THREE.Color(lighting.leds.baseLeds.color);
     for (const [key, ref] of this.ledRefs.entries()) {
       const layer = parseInt(key.split(':')[0], 10);
-      ref.redLight.color.setHex(lighting.leds.red.color);
-      ref.redLight.distance = redHaloDistance;
-      ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
-      // `visible` intentionally not touched here — see buildLeds for rationale.
+      if (ref.redLight) {
+        ref.redLight.color.setHex(lighting.leds.red.color);
+        ref.redLight.distance = redHaloDistance;
+        ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
+        // `visible` intentionally not touched here — see buildLeds for rationale.
+      }
 
       if (ref.proxyMesh) {
         const col = layer >= 4 ? baseColor : ledgeColor;
@@ -1247,6 +1289,11 @@ export class Tower3DView implements ITowerDisplay {
 
     this.sealManager.updateLighting(lighting, this.modelRadius);
 
+    // §4.11: hot-reload interior DirectionalLight color from sealBacklights.
+    // intensity is driven each frame by updateLightsGate, no write here.
+    const interiorColor = new THREE.Color(lighting.leds.sealBacklights.color);
+    for (const light of this.interiorLights) light.color.copy(interiorColor);
+
     // Re-sync the bulk lights gate after potential config changes
     // (e.g. accentLight flipped at runtime). Uses the current gate state.
     this.setBulkLightsVisible(this.lightsGateOpen);
@@ -1255,14 +1302,17 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
-   * Populate `ledRefs` with 24 red PointLights (6 layers × 4 lights) positioned
-   * relative to the model's bounding radius.
+   * Populate `ledRefs` with ledge/base proxy + halo visuals for the 24 LEDs.
+   *
+   * §4.11: no per-LED PointLights are constructed. The atmospheric spill that
+   * the 24 ring + ledge/base PointLights used to provide is delivered by the
+   * 2 interior DirectionalLights (see `buildInteriorLights`). `ref.redLight`
+   * stays null on every LedRef; all consumers null-guard it.
    */
   private buildLeds(): void {
     if (!this.model) return;
 
-    const { red, ledgeLeds, baseLeds } = this.lighting.leds;
-    const redHaloDistance = this.modelRadius * red.haloDistanceFraction;
+    const { ledgeLeds, baseLeds } = this.lighting.leds;
 
     // Radial gradient texture shared by ledge and base halo sprites.
     const gradTex = this.createLedgeGradientTexture();
@@ -1270,17 +1320,7 @@ export class Tower3DView implements ITowerDisplay {
     for (let layer = 0; layer < TOWER_LAYER_COUNT; layer++) {
       for (let light = 0; light < LIGHTS_PER_LAYER; light++) {
         const redPos = computeRedLightPosition(layer, light, this.modelRadius);
-        const redLight = new THREE.PointLight(red.color, 0, redHaloDistance, 2);
-        // visible defaults to false. The bulk lights gate (see updateLightsGate)
-        // flips ALL 36 LED-related lights together when ANY LED becomes lit,
-        // and back to false when all LEDs go dark. Both program variants are
-        // pre-compiled at scene init (see prewarmLightPrograms) so gate
-        // transitions don't trigger shader recompiles — see docs/framerate-issue.md.
-        redLight.visible = false;
-        redLight.position.set(redPos.x, redPos.y, redPos.z);
-        this.model.add(redLight);
-
-        const ref: LedRef = { redLight, driver: { v: 0 }, tween: null };
+        const ref: LedRef = { redLight: null, driver: { v: 0 }, tween: null };
 
         // Layer 3 = LEDGE — add ball-type LED visuals (proxy sphere + halo sprite).
         if (layer === 3) {
@@ -1376,6 +1416,30 @@ export class Tower3DView implements ITowerDisplay {
 
     this.ledAnimator = new LedEffectAnimator(this.ledRefs, () => this.lighting, this.sealManager);
     this.sequenceAnimator = new SequenceAnimator({ ledAnimator: this.ledAnimator });
+  }
+
+  /**
+   * §4.11 — build the two interior atmospheric DirectionalLights that replace
+   * the (removed) 36 PointLights. Positioned at ±modelRadius × 2 on the X
+   * axis, target origin (default). Always `visible: true` so the lights-count
+   * shader hash stays stable; only `intensity` is driven each frame from
+   * `max(driver.v)` in `updateLightsGate`.
+   */
+  private buildInteriorLights(): void {
+    if (!this.scene) return;
+    const cfg = this.lighting.leds.sealBacklights;
+    const positions: Array<[number, number, number]> = [
+      [this.modelRadius * 2, 0, 0],
+      [-this.modelRadius * 2, 0, 0],
+    ];
+    for (const [x, y, z] of positions) {
+      const light = new THREE.DirectionalLight(cfg.color, 0);
+      light.position.set(x, y, z);
+      light.castShadow = false;
+      light.visible = true;
+      this.scene.add(light);
+      this.interiorLights.push(light);
+    }
   }
 
   /** Create a radial-gradient canvas texture for ledge LED halo sprites. */

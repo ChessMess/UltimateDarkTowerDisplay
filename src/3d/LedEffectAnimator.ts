@@ -23,7 +23,13 @@ const FLICKER_LERP_ALPHA = 0.15;
 const TICK_S = 1 / FIRMWARE_TICK_HZ;
 
 export interface LedRef {
-  redLight: THREE.PointLight;
+  /**
+   * Per-LED red PointLight, or null when the active lighting alternative does
+   * not allocate a PointLight per LED. §4.5 / §4.1 / §4.4 / §4.11 leave this
+   * null and recover atmospheric spill through other mechanisms (LightProbe,
+   * HDR proxies + bloom, DirectionalLights, or some combination).
+   */
+  redLight: THREE.PointLight | null;
   driver: { v: number };
   /** The active GSAP animation driving this LED's effect. Holds a Tween for
    *  Breathe/BreatheFast/Breathe50, a Timeline for Flicker, and null for
@@ -57,7 +63,7 @@ export class LedEffectAnimator {
     // keep Three.js's lights-count hash stable. Toggling visible per-frame
     // forces shader recompiles on every LED on/off transition — measured
     // ~880 ms main-thread stalls. See docs/framerate-issue.md.
-    redLight.intensity = driver.v * red.maxHalo;
+    if (redLight) redLight.intensity = driver.v * red.maxHalo;
 
     if (sealKey && this.sealManager) {
       this.sealManager.setSealLed(sealKey, driver.v, cfg);

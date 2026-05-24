@@ -26,7 +26,10 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
     },
     exposure: 0.7,
     bloom: {
-      enabled: true,
+      // §4.11 (min-cost-combo): bloom pipeline disabled by default.
+      // Halos use additive blending — they read as glow without amplification.
+      // Flip to true (e.g. via applyLightingConfig) to re-enable post-processing.
+      enabled: false,
       strength: 1.5,
       radius: 0.5,
       threshold: 0.0,

@@ -13,8 +13,14 @@ function sealKey(side: string, level: string): string {
 }
 
 export interface SealBacklightRef {
-  /** Optional atmospheric accent PointLight (disabled by default). */
-  light: THREE.PointLight;
+  /**
+   * Optional atmospheric accent PointLight. §4.11 (min-cost-combo) does not
+   * allocate one per seal — atmospheric spill comes from the 2 interior
+   * DirectionalLights owned by Tower3DView; this field stays null on this
+   * branch. Future alternatives that need per-seal PointLights can drop one
+   * back in here without rewiring callers (all consumers null-guard).
+   */
+  light: THREE.PointLight | null;
   /** Bright proxy mesh — the directly-visible "LED bulb" seen through cutouts. */
   proxyMesh: THREE.Mesh;
   /** Soft additive halo sprite around the proxy. */
@@ -135,25 +141,13 @@ export class SealManager {
         haloSprite.visible = false;
         model.add(haloSprite);
 
-        // Accent PointLight — atmospheric spill onto drum interior surfaces.
-        // `visible` defaults to false. Tower3DView owns the visibility state for
-        // ALL 36 LED-related lights (24 LED reds + 12 accent) via a bulk gate
-        // that flips them together on any-LED-active / all-dark transitions,
-        // with both program variants pre-compiled at scene init to avoid the
-        // ~880 ms shader recompile stalls that per-frame visibility toggling
-        // produces. setSealLed drives only intensity. See docs/framerate-issue.md.
-        const light = new THREE.PointLight(
-          cfg.color,
-          0,
-          modelRadius * cfg.distanceFactor,
-          cfg.decay,
-        );
-        light.position.set(x, y, z);
-        light.visible = false;
-        model.add(light);
+        // §4.11: no per-seal accent PointLight. Atmospheric spill on the drum
+        // interior is delivered by the 2 DirectionalLights Tower3DView builds
+        // (see Tower3DView.buildInteriorLights). The `light` field stays null
+        // so consumers null-guard uniformly.
 
         this.sealBacklights.set(key, {
-          light,
+          light: null,
           proxyMesh,
           haloSprite,
           sealNode,
@@ -176,7 +170,7 @@ export class SealManager {
     if (!cfg.enabled) {
       ref.proxyMesh.visible = false;
       ref.haloSprite.visible = false;
-      ref.light.intensity = 0;
+      if (ref.light) ref.light.intensity = 0;
       // `light.visible` deliberately not touched — see buildSealBacklights.
       return;
     }
@@ -201,10 +195,12 @@ export class SealManager {
     // Drive only intensity. `light.visible` is set once in
     // buildSealBacklights / updateLighting based on cfg.accentLight, never
     // per-frame here. See buildSealBacklights for the rationale.
-    if (cfg.accentLight) {
-      ref.light.intensity = driverV * cfg.intensity;
-    } else {
-      ref.light.intensity = 0;
+    if (ref.light) {
+      if (cfg.accentLight) {
+        ref.light.intensity = driverV * cfg.intensity;
+      } else {
+        ref.light.intensity = 0;
+      }
     }
   }
 
@@ -268,12 +264,14 @@ export class SealManager {
       const haloScale = modelRadius * cfg.halo.sizeFactor;
       ref.haloSprite.scale.setScalar(haloScale);
 
-      ref.light.position.set(x, y, z);
-      ref.light.color.copy(color);
-      ref.light.distance = backlightDistance;
-      ref.light.decay = cfg.decay;
-      // light.visible is owned by Tower3DView's bulk gate; we only manage
-      // intensity here. See buildSealBacklights for the rationale.
+      if (ref.light) {
+        ref.light.position.set(x, y, z);
+        ref.light.color.copy(color);
+        ref.light.distance = backlightDistance;
+        ref.light.decay = cfg.decay;
+        // light.visible is owned by Tower3DView's bulk gate; we only manage
+        // intensity here. See buildSealBacklights for the rationale.
+      }
 
       this.setSealLed(key, ref.driver.v, lighting);
     }
@@ -329,7 +327,7 @@ export class SealManager {
   /** Remove all LED visuals from their parents and clear both maps. */
   dispose(): void {
     for (const ref of this.sealBacklights.values()) {
-      ref.light.removeFromParent();
+      ref.light?.removeFromParent();
       ref.proxyMesh.geometry.dispose();
       (ref.proxyMesh.material as THREE.Material).dispose();
       ref.proxyMesh.removeFromParent();
