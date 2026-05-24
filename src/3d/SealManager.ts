@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { SealIdentifier } from 'ultimatedarktower';
 import type { ResolvedLightingConfig } from './types';
 import { LIGHTS_PER_LAYER, RING_LEVEL_BY_LAYER_INDEX, SIDES, BLOOM_LAYER } from './constants';
-import { computeSealLedPose } from './utils';
+import { computeSealLedPose, applyHdrColor } from './utils';
 
 const SEAL_NAME_PREFIX = 'seal_';
 const SEAL_SIDES = ['north', 'south', 'east', 'west'] as const;
@@ -13,8 +13,14 @@ function sealKey(side: string, level: string): string {
 }
 
 export interface SealBacklightRef {
-  /** Optional atmospheric accent PointLight (disabled by default). */
-  light: THREE.PointLight;
+  /**
+   * Optional atmospheric accent PointLight. §4.1 hdr-proxies removes the 12
+   * seal accent PointLights — `light` is always `null` on this branch. The
+   * field is retained so the bulk-lights gate machinery in Tower3DView still
+   * has the same shape (null-guarded) and future alternatives can re-attach
+   * a real PointLight here without re-wiring this struct.
+   */
+  light: THREE.PointLight | null;
   /** Bright proxy mesh — the directly-visible "LED bulb" seen through cutouts. */
   proxyMesh: THREE.Mesh;
   /** Soft additive halo sprite around the proxy. */
@@ -97,15 +103,20 @@ export class SealManager {
         const { x, y, z } = pose.position;
 
         // Proxy mesh — bright "LED bulb" visible through aligned cutout holes.
+        // §4.1: color is pushed into HDR (× HDR_PROXY_SCALE) so that
+        // `material.color × driver.v opacity` crosses the bloom threshold
+        // (1.0) at peak driver values. `toneMapped: false` keeps the HDR
+        // value intact through the render pipeline so the bloom selector
+        // sees it.
         const proxyRadius = modelRadius * cfg.proxy.sizeFactor;
         const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
         const proxyMat = new THREE.MeshBasicMaterial({
-          color: cfg.color,
           transparent: true,
           opacity: 0,
           depthWrite: false,
           toneMapped: false,
         });
+        applyHdrColor(proxyMat.color, cfg.color);
         const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
         proxyMesh.position.set(x, y, z);
         proxyMesh.layers.enable(BLOOM_LAYER);
@@ -116,9 +127,9 @@ export class SealManager {
         model.add(proxyMesh);
 
         // Halo sprite — soft additive glow, also depth-tested so it's occluded
-        // by solid drum surfaces like the proxy.
+        // by solid drum surfaces like the proxy. HDR-scaled for the same
+        // reason as the proxy.
         const haloMat = new THREE.SpriteMaterial({
-          color: cfg.color,
           map: gradTex,
           transparent: true,
           opacity: 0,
@@ -126,6 +137,7 @@ export class SealManager {
           depthWrite: false,
           toneMapped: false,
         });
+        applyHdrColor(haloMat.color, cfg.color);
         const haloSprite = new THREE.Sprite(haloMat);
         const haloScale = modelRadius * cfg.halo.sizeFactor;
         haloSprite.scale.setScalar(haloScale);
@@ -135,25 +147,14 @@ export class SealManager {
         haloSprite.visible = false;
         model.add(haloSprite);
 
-        // Accent PointLight — atmospheric spill onto drum interior surfaces.
-        // `visible` defaults to false. Tower3DView owns the visibility state for
-        // ALL 36 LED-related lights (24 LED reds + 12 accent) via a bulk gate
-        // that flips them together on any-LED-active / all-dark transitions,
-        // with both program variants pre-compiled at scene init to avoid the
-        // ~880 ms shader recompile stalls that per-frame visibility toggling
-        // produces. setSealLed drives only intensity. See docs/framerate-issue.md.
-        const light = new THREE.PointLight(
-          cfg.color,
-          0,
-          modelRadius * cfg.distanceFactor,
-          cfg.decay,
-        );
-        light.position.set(x, y, z);
-        light.visible = false;
-        model.add(light);
+        // §4.1 hdr-proxies — accent PointLights removed entirely. HDR-bright
+        // proxies + halos crossing the raised bloom threshold replace the
+        // atmospheric spill role the accent lights used to play. The field
+        // stays nullable so Tower3DView's bulk-lights gate can null-guard
+        // its writes without a separate code path.
 
         this.sealBacklights.set(key, {
-          light,
+          light: null,
           proxyMesh,
           haloSprite,
           sealNode,
@@ -176,7 +177,7 @@ export class SealManager {
     if (!cfg.enabled) {
       ref.proxyMesh.visible = false;
       ref.haloSprite.visible = false;
-      ref.light.intensity = 0;
+      if (ref.light) ref.light.intensity = 0;
       // `light.visible` deliberately not touched — see buildSealBacklights.
       return;
     }
@@ -198,13 +199,13 @@ export class SealManager {
       ref.haloSprite.visible = false;
     }
 
-    // Drive only intensity. `light.visible` is set once in
-    // buildSealBacklights / updateLighting based on cfg.accentLight, never
-    // per-frame here. See buildSealBacklights for the rationale.
-    if (cfg.accentLight) {
-      ref.light.intensity = driverV * cfg.intensity;
-    } else {
-      ref.light.intensity = 0;
+    // §4.1 hdr-proxies — accent PointLight removed (`ref.light` always null).
+    // The HDR-bright proxy + halo materials above produce the visual the
+    // accent lights used to provide, via the raised UnrealBloomPass threshold.
+    // Branch kept null-guarded so future alternatives can drop a real light
+    // back into the SealBacklightRef without changing this write path.
+    if (ref.light) {
+      ref.light.intensity = cfg.accentLight ? driverV * cfg.intensity : 0;
     }
   }
 
@@ -246,7 +247,6 @@ export class SealManager {
   /** Reapply lighting config to all seal LED visuals. */
   updateLighting(lighting: ResolvedLightingConfig, modelRadius: number): void {
     const cfg = lighting.leds.sealBacklights;
-    const color = new THREE.Color(cfg.color);
     const backlightDistance = modelRadius * cfg.distanceFactor;
 
     for (const [key, ref] of this.sealBacklights) {
@@ -259,21 +259,23 @@ export class SealManager {
       const { x, y, z } = pose.position;
 
       ref.proxyMesh.position.set(x, y, z);
-      (ref.proxyMesh.material as THREE.MeshBasicMaterial).color.copy(color);
+      applyHdrColor((ref.proxyMesh.material as THREE.MeshBasicMaterial).color, cfg.color);
       const proxyRadius = modelRadius * cfg.proxy.sizeFactor;
       ref.proxyMesh.scale.setScalar(proxyRadius / (ref.proxyMesh.geometry as THREE.SphereGeometry).parameters.radius);
 
       ref.haloSprite.position.set(x, y, z);
-      (ref.haloSprite.material as THREE.SpriteMaterial).color.copy(color);
+      applyHdrColor((ref.haloSprite.material as THREE.SpriteMaterial).color, cfg.color);
       const haloScale = modelRadius * cfg.halo.sizeFactor;
       ref.haloSprite.scale.setScalar(haloScale);
 
-      ref.light.position.set(x, y, z);
-      ref.light.color.copy(color);
-      ref.light.distance = backlightDistance;
-      ref.light.decay = cfg.decay;
-      // light.visible is owned by Tower3DView's bulk gate; we only manage
-      // intensity here. See buildSealBacklights for the rationale.
+      if (ref.light) {
+        ref.light.position.set(x, y, z);
+        ref.light.color.setHex(cfg.color);
+        ref.light.distance = backlightDistance;
+        ref.light.decay = cfg.decay;
+        // light.visible is owned by Tower3DView's bulk gate; we only manage
+        // intensity here. See buildSealBacklights for the rationale.
+      }
 
       this.setSealLed(key, ref.driver.v, lighting);
     }
@@ -329,7 +331,7 @@ export class SealManager {
   /** Remove all LED visuals from their parents and clear both maps. */
   dispose(): void {
     for (const ref of this.sealBacklights.values()) {
-      ref.light.removeFromParent();
+      ref.light?.removeFromParent();
       ref.proxyMesh.geometry.dispose();
       (ref.proxyMesh.material as THREE.Material).dispose();
       ref.proxyMesh.removeFromParent();

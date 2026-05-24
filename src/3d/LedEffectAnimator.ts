@@ -23,7 +23,13 @@ const FLICKER_LERP_ALPHA = 0.15;
 const TICK_S = 1 / FIRMWARE_TICK_HZ;
 
 export interface LedRef {
-  redLight: THREE.PointLight;
+  /**
+   * Optional per-LED PointLight. §4.1 hdr-proxies removes all 24 ring +
+   * ledge/base PointLights — `redLight` is always `null` on this branch. The
+   * field is kept so the bulk-lights gate machinery in Tower3DView survives
+   * for any future alternative that re-introduces per-LED PointLights.
+   */
+  redLight: THREE.PointLight | null;
   driver: { v: number };
   /** The active GSAP animation driving this LED's effect. Holds a Tween for
    *  Breathe/BreatheFast/Breathe50, a Timeline for Flicker, and null for
@@ -52,12 +58,15 @@ export class LedEffectAnimator {
   private writeLed(ref: LedRef, layer: number, sealKey: string | null): void {
     const { driver, redLight } = ref;
     const cfg = this.getConfig();
-    const { red } = cfg.leds;
-    // Drive only intensity; `visible` stays true for the light's lifetime to
-    // keep Three.js's lights-count hash stable. Toggling visible per-frame
-    // forces shader recompiles on every LED on/off transition — measured
-    // ~880 ms main-thread stalls. See docs/framerate-issue.md.
-    redLight.intensity = driver.v * red.maxHalo;
+    // §4.1 hdr-proxies removes the per-LED PointLights. The HDR-scaled proxy
+    // and halo materials below (driven by `driver.v` as material opacity)
+    // replace the per-LED intensity write — bloom selects the HDR-bright
+    // pixels and amplifies them. The redLight branch is kept null-guarded so
+    // future alternatives that re-introduce a per-LED PointLight can drop
+    // back in without re-wiring this write path.
+    if (redLight) {
+      redLight.intensity = driver.v * cfg.leds.red.maxHalo;
+    }
 
     if (sealKey && this.sealManager) {
       this.sealManager.setSealLed(sealKey, driver.v, cfg);

@@ -20,7 +20,7 @@ import {
   LED_LAYOUT, RED_LIGHT_LAYOUT, LEDGE_LED_LAYOUT, BASE1_LED_LAYOUT, BASE2_LED_LAYOUT,
   BLOOM_LAYER,
 } from './constants';
-import { computeRedLightPosition, computeSealLedPose, disposeObject } from './utils';
+import { computeRedLightPosition, computeSealLedPose, disposeObject, applyHdrColor } from './utils';
 import { DEFAULT_LIGHTING, resolveLighting } from './LightingResolver';
 import { LedEffectAnimator } from './LedEffectAnimator';
 import type { LedRef } from './LedEffectAnimator';
@@ -921,20 +921,26 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
-   * Bulk-toggle visibility on all 36 LED-related PointLights together. Owned
-   * by Tower3DView (not LedEffectAnimator / SealManager) because the goal is
-   * a stable lights-count hash for the program cache. Per-frame visibility
+   * Bulk-toggle visibility on all LED-related PointLights together. Owned by
+   * Tower3DView (not LedEffectAnimator / SealManager) because the goal is a
+   * stable lights-count hash for the program cache. Per-frame visibility
    * toggling on individual lights causes shader recompiles (see prewarm).
+   *
+   * §4.1 hdr-proxies: every `ref.redLight` and `ref.light` is `null` on this
+   * branch, so the body is effectively a no-op apart from tracking the gate
+   * state. The flag is kept so test machinery (`tickLightsGate` /
+   * `isLightsGateOpen`) and any future alternative that re-introduces
+   * per-LED PointLights can keep the same wire shape.
    */
   private setBulkLightsVisible(visible: boolean): void {
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.visible = visible;
+      if (ref.redLight) ref.redLight.visible = visible;
     }
     // Accent lights respect `accentLight: false` — they stay invisible even
     // when the gate opens, because the user opted out of atmospheric spill.
     const accentEnabled = this.lighting.leds.sealBacklights.accentLight;
     for (const ref of this.sealManager.sealBacklights.values()) {
-      ref.light.visible = visible && accentEnabled;
+      if (ref.light) ref.light.visible = visible && accentEnabled;
     }
     this.lightsGateOpen = visible;
   }
@@ -999,7 +1005,7 @@ export class Tower3DView implements ITowerDisplay {
     this.ledAnimator?.dispose();
     this.ledAnimator = null;
     for (const ref of this.ledRefs.values()) {
-      ref.redLight.removeFromParent();
+      ref.redLight?.removeFromParent();
     }
     this.ledRefs.clear();
     this.sealManager.dispose();
@@ -1226,22 +1232,24 @@ export class Tower3DView implements ITowerDisplay {
     this.groundDiscManager?.updateLighting(lighting, this.modelRadius, this.modelBottomY);
 
     const redHaloDistance = this.modelRadius * lighting.leds.red.haloDistanceFraction;
-    const ledgeColor = new THREE.Color(lighting.leds.ledgeLeds.color);
-    const baseColor = new THREE.Color(lighting.leds.baseLeds.color);
     for (const [key, ref] of this.ledRefs.entries()) {
       const layer = parseInt(key.split(':')[0], 10);
-      ref.redLight.color.setHex(lighting.leds.red.color);
-      ref.redLight.distance = redHaloDistance;
-      ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
-      // `visible` intentionally not touched here — see buildLeds for rationale.
+      // §4.1 hdr-proxies: ref.redLight is always null on this branch (24
+      // ring + ledge/base PointLights removed). The branch stays
+      // null-guarded so re-introducing a PointLight is a one-line revert.
+      if (ref.redLight) {
+        ref.redLight.color.setHex(lighting.leds.red.color);
+        ref.redLight.distance = redHaloDistance;
+        ref.redLight.intensity = ref.driver.v * lighting.leds.red.maxHalo;
+        // `visible` intentionally not touched here — see buildLeds for rationale.
+      }
 
+      const ledHex = layer >= 4 ? lighting.leds.baseLeds.color : lighting.leds.ledgeLeds.color;
       if (ref.proxyMesh) {
-        const col = layer >= 4 ? baseColor : ledgeColor;
-        (ref.proxyMesh.material as THREE.MeshBasicMaterial).color.copy(col);
+        applyHdrColor((ref.proxyMesh.material as THREE.MeshBasicMaterial).color, ledHex);
       }
       if (ref.haloSprite) {
-        const col = layer >= 4 ? baseColor : ledgeColor;
-        (ref.haloSprite.material as THREE.SpriteMaterial).color.copy(col);
+        applyHdrColor((ref.haloSprite.material as THREE.SpriteMaterial).color, ledHex);
       }
     }
 
@@ -1255,14 +1263,17 @@ export class Tower3DView implements ITowerDisplay {
   }
 
   /**
-   * Populate `ledRefs` with 24 red PointLights (6 layers × 4 lights) positioned
-   * relative to the model's bounding radius.
+   * Populate `ledRefs` with proxy + halo visuals for 24 LEDs
+   * (6 layers × 4 lights). §4.1 hdr-proxies drops the 24 per-LED PointLights
+   * that previously paired with each proxy — `LedRef.redLight` is null on
+   * this branch. Ring layers (0–2) get refs without proxies/halos (those
+   * come from SealManager); ledge (layer 3) and base (layers 4–5) get the
+   * HDR-bright proxy sphere + additive halo sprite.
    */
   private buildLeds(): void {
     if (!this.model) return;
 
-    const { red, ledgeLeds, baseLeds } = this.lighting.leds;
-    const redHaloDistance = this.modelRadius * red.haloDistanceFraction;
+    const { ledgeLeds, baseLeds } = this.lighting.leds;
 
     // Radial gradient texture shared by ledge and base halo sprites.
     const gradTex = this.createLedgeGradientTexture();
@@ -1270,17 +1281,12 @@ export class Tower3DView implements ITowerDisplay {
     for (let layer = 0; layer < TOWER_LAYER_COUNT; layer++) {
       for (let light = 0; light < LIGHTS_PER_LAYER; light++) {
         const redPos = computeRedLightPosition(layer, light, this.modelRadius);
-        const redLight = new THREE.PointLight(red.color, 0, redHaloDistance, 2);
-        // visible defaults to false. The bulk lights gate (see updateLightsGate)
-        // flips ALL 36 LED-related lights together when ANY LED becomes lit,
-        // and back to false when all LEDs go dark. Both program variants are
-        // pre-compiled at scene init (see prewarmLightPrograms) so gate
-        // transitions don't trigger shader recompiles — see docs/framerate-issue.md.
-        redLight.visible = false;
-        redLight.position.set(redPos.x, redPos.y, redPos.z);
-        this.model.add(redLight);
 
-        const ref: LedRef = { redLight, driver: { v: 0 }, tween: null };
+        // §4.1 hdr-proxies — no PointLight here. The bulk-lights gate machinery
+        // (setBulkLightsVisible / updateLightsGate / prewarmLightPrograms) is
+        // kept null-guarded so future alternatives can drop a real PointLight
+        // back in without re-wiring this path.
+        const ref: LedRef = { redLight: null, driver: { v: 0 }, tween: null };
 
         // Layer 3 = LEDGE — add ball-type LED visuals (proxy sphere + halo sprite).
         if (layer === 3) {
@@ -1289,12 +1295,12 @@ export class Tower3DView implements ITowerDisplay {
           const proxyRadius = this.modelRadius * ledgeLeds.proxy.sizeFactor;
           const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
           const proxyMat = new THREE.MeshBasicMaterial({
-            color: ledgeLeds.color,
             transparent: true,
             opacity: 0,
             depthWrite: false,
             toneMapped: false,
           });
+          applyHdrColor(proxyMat.color, ledgeLeds.color);
           const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
           proxyMesh.position.set(x, y, z);
           proxyMesh.layers.enable(BLOOM_LAYER);
@@ -1306,7 +1312,6 @@ export class Tower3DView implements ITowerDisplay {
           ref.proxyMesh = proxyMesh;
 
           const haloMat = new THREE.SpriteMaterial({
-            color: ledgeLeds.color,
             map: gradTex,
             transparent: true,
             opacity: 0,
@@ -1314,6 +1319,7 @@ export class Tower3DView implements ITowerDisplay {
             depthWrite: false,
             toneMapped: false,
           });
+          applyHdrColor(haloMat.color, ledgeLeds.color);
           const haloSprite = new THREE.Sprite(haloMat);
           const haloScale = this.modelRadius * ledgeLeds.halo.sizeFactor;
           haloSprite.scale.setScalar(haloScale);
@@ -1332,12 +1338,12 @@ export class Tower3DView implements ITowerDisplay {
           const proxyRadius = this.modelRadius * baseLeds.proxy.sizeFactor;
           const proxyGeo = new THREE.SphereGeometry(proxyRadius, 8, 6);
           const proxyMat = new THREE.MeshBasicMaterial({
-            color: baseLeds.color,
             transparent: true,
             opacity: 0,
             depthWrite: false,
             toneMapped: false,
           });
+          applyHdrColor(proxyMat.color, baseLeds.color);
           const proxyMesh = new THREE.Mesh(proxyGeo, proxyMat);
           proxyMesh.position.set(x, y, z);
           proxyMesh.layers.enable(BLOOM_LAYER);
@@ -1349,7 +1355,6 @@ export class Tower3DView implements ITowerDisplay {
           ref.proxyMesh = proxyMesh;
 
           const haloMat = new THREE.SpriteMaterial({
-            color: baseLeds.color,
             map: gradTex,
             transparent: true,
             opacity: 0,
@@ -1357,6 +1362,7 @@ export class Tower3DView implements ITowerDisplay {
             depthWrite: false,
             toneMapped: false,
           });
+          applyHdrColor(haloMat.color, baseLeds.color);
           const haloSprite = new THREE.Sprite(haloMat);
           const haloScale = this.modelRadius * baseLeds.halo.sizeFactor;
           haloSprite.scale.setScalar(haloScale);

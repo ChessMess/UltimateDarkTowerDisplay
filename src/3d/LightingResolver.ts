@@ -29,7 +29,11 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
       enabled: true,
       strength: 1.5,
       radius: 0.5,
-      threshold: 0.0,
+      // §4.1 hdr-proxies: only HDR-bright pixels (proxy/halo materials scaled
+      // by HDR_PROXY_SCALE × toneMapped: false × `driver.v` opacity) cross the
+      // threshold and bloom. The 36 LED-related PointLights are gone in this
+      // branch; bloom replaces them as the driver of perceived LED brightness.
+      threshold: 1.0,
       resolutionScale: 0.5,
     },
   },
