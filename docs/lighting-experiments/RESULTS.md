@@ -18,7 +18,7 @@ Running summary of the lighting bake-off defined by [docs/lighting-testing-plan.
 | 4.2  | range-cull | pending | — | — | — | — | — | `4.2-range-cull.md` |
 | 4.5  | light-probe | pending | — | — | — | — | — | `4.5-light-probe.md` |
 | 4.1  | hdr-proxies | pending | — | — | — | — | — | `4.1-hdr-proxies.md` |
-| 4.4  | two-directional | pending | — | — | — | — | — | `4.4-two-directional.md` |
+| 4.4  | two-directional | report-complete | +816% | +1403% | no | yes | global red wash on whole drum body (no per-seal locality — one LED lights the whole interior) | [4.4-two-directional.md](4.4-two-directional.md) |
 | 4.19 | interior-sprites | pending | — | — | — | — | — | `4.19-interior-sprites.md` |
 | 4.11 | min-cost-combo | pending | — | — | — | — | — | `4.11-min-cost-combo.md` |
 
