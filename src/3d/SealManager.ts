@@ -13,12 +13,26 @@ function sealKey(side: string, level: string): string {
 }
 
 export interface SealBacklightRef {
-  /** Optional atmospheric accent PointLight (disabled by default). */
-  light: THREE.PointLight;
+  /**
+   * Optional atmospheric accent PointLight. §4.19 interior-sprites removes
+   * the 12 seal accent PointLights — `light` is always `null` on this branch.
+   * The slot is retained so the bulk-lights gate machinery in Tower3DView
+   * keeps the same null-guarded wire shape and any future alternative can
+   * re-attach a real PointLight here without re-wiring this struct.
+   */
+  light: THREE.PointLight | null;
   /** Bright proxy mesh — the directly-visible "LED bulb" seen through cutouts. */
   proxyMesh: THREE.Mesh;
   /** Soft additive halo sprite around the proxy. */
   haloSprite: THREE.Sprite;
+  /**
+   * §4.19 interior atmospheric sprites — 0 or more large additive Sprites
+   * placed inside the drum to fake the spill the removed accent PointLight
+   * previously provided. Length matches `cfg.interior.count` when
+   * `cfg.interior.enabled` is true at construction time; empty otherwise.
+   * Driven from `driverV * cfg.interior.opacity` in `setSealLed`.
+   */
+  interiorSprites: THREE.Sprite[];
   sealNode: THREE.Object3D;
   driver: { v: number };
 }
@@ -135,27 +149,60 @@ export class SealManager {
         haloSprite.visible = false;
         model.add(haloSprite);
 
-        // Accent PointLight — atmospheric spill onto drum interior surfaces.
-        // `visible` defaults to false. Tower3DView owns the visibility state for
-        // ALL 36 LED-related lights (24 LED reds + 12 accent) via a bulk gate
-        // that flips them together on any-LED-active / all-dark transitions,
-        // with both program variants pre-compiled at scene init to avoid the
-        // ~880 ms shader recompile stalls that per-frame visibility toggling
-        // produces. setSealLed drives only intensity. See docs/framerate-issue.md.
-        const light = new THREE.PointLight(
-          cfg.color,
-          0,
-          modelRadius * cfg.distanceFactor,
-          cfg.decay,
-        );
-        light.position.set(x, y, z);
-        light.visible = false;
-        model.add(light);
+        // §4.19 interior-sprites — accent PointLight removed entirely. The
+        // optional interior sprites (below) replace its atmospheric-spill role
+        // via additive billboard accumulation. The `light` slot stays null so
+        // Tower3DView's bulk-lights gate can null-guard its writes without a
+        // separate code path.
+
+        // §4.19 interior atmospheric sprites. Always constructed (count from
+        // cfg.interior.count, min 1) so cfg.interior.enabled can be toggled
+        // at runtime via applyLightingConfig without a dispose + rebuild —
+        // same lifecycle pattern as the existing halo. setSealLed gates
+        // visibility on cfg.interior.enabled && driverV > 0.001. Multiple
+        // sprites per seal are vertically distributed (±0.15 × modelRadius)
+        // so they read as a soft column rather than fully overlapping.
+        // Render order 1 sits between the drum body (default 0) and the
+        // proxy/halo (2/3) so interior sprites are depth-occluded by drum
+        // walls but render in front of the drum interior surface to
+        // additively glow.
+        const interiorSprites: THREE.Sprite[] = [];
+        const interiorCount = Math.max(1, cfg.interior.count);
+        const interiorScale = modelRadius * cfg.interior.sizeFactor;
+        const ySpread = modelRadius * 0.15;
+        for (let i = 0; i < interiorCount; i++) {
+          // Distribute in y: count=1 → centred; count=2 → ±ySpread;
+          // count=3 → -ySpread, 0, +ySpread.
+          const yOffset =
+            interiorCount === 1
+              ? 0
+              : interiorCount === 2
+                ? (i === 0 ? -ySpread : ySpread)
+                : (i - 1) * ySpread;
+          const sprMat = new THREE.SpriteMaterial({
+            color: cfg.color,
+            map: gradTex,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            toneMapped: false,
+          });
+          const spr = new THREE.Sprite(sprMat);
+          spr.scale.setScalar(interiorScale);
+          spr.position.set(x, y + yOffset, z);
+          spr.layers.enable(BLOOM_LAYER);
+          spr.renderOrder = 1;
+          spr.visible = false;
+          model.add(spr);
+          interiorSprites.push(spr);
+        }
 
         this.sealBacklights.set(key, {
-          light,
+          light: null,
           proxyMesh,
           haloSprite,
+          interiorSprites,
           sealNode,
           driver: { v: 0 },
         });
@@ -176,8 +223,8 @@ export class SealManager {
     if (!cfg.enabled) {
       ref.proxyMesh.visible = false;
       ref.haloSprite.visible = false;
-      ref.light.intensity = 0;
-      // `light.visible` deliberately not touched — see buildSealBacklights.
+      for (const spr of ref.interiorSprites) spr.visible = false;
+      if (ref.light) ref.light.intensity = 0;
       return;
     }
 
@@ -198,13 +245,24 @@ export class SealManager {
       ref.haloSprite.visible = false;
     }
 
-    // Drive only intensity. `light.visible` is set once in
-    // buildSealBacklights / updateLighting based on cfg.accentLight, never
-    // per-frame here. See buildSealBacklights for the rationale.
-    if (cfg.accentLight) {
-      ref.light.intensity = driverV * cfg.intensity;
+    // §4.19 interior atmospheric sprites. Driven by driverV; hidden when
+    // cfg.interior.enabled is false (resilient to runtime toggles even though
+    // the sprite array was empty at construction in that case).
+    if (cfg.interior.enabled) {
+      const interiorOpacity = driverV * cfg.interior.opacity;
+      for (const spr of ref.interiorSprites) {
+        (spr.material as THREE.SpriteMaterial).opacity = interiorOpacity;
+        spr.visible = on;
+      }
     } else {
-      ref.light.intensity = 0;
+      for (const spr of ref.interiorSprites) spr.visible = false;
+    }
+
+    // §4.19 interior-sprites — accent PointLight removed (`ref.light` always
+    // null). Branch kept null-guarded so future alternatives can drop a real
+    // light back into the SealBacklightRef without changing this write path.
+    if (ref.light) {
+      ref.light.intensity = cfg.accentLight ? driverV * cfg.intensity : 0;
     }
   }
 
@@ -268,12 +326,32 @@ export class SealManager {
       const haloScale = modelRadius * cfg.halo.sizeFactor;
       ref.haloSprite.scale.setScalar(haloScale);
 
-      ref.light.position.set(x, y, z);
-      ref.light.color.copy(color);
-      ref.light.distance = backlightDistance;
-      ref.light.decay = cfg.decay;
-      // light.visible is owned by Tower3DView's bulk gate; we only manage
-      // intensity here. See buildSealBacklights for the rationale.
+      // §4.19 interior-sprites — hot-reload color + scale + position for every
+      // interior sprite. Opacity is re-derived from driver.v in setSealLed (below).
+      if (ref.interiorSprites.length > 0) {
+        const interiorScale = modelRadius * cfg.interior.sizeFactor;
+        const count = ref.interiorSprites.length;
+        const ySpread = modelRadius * 0.15;
+        for (let i = 0; i < count; i++) {
+          const spr = ref.interiorSprites[i];
+          (spr.material as THREE.SpriteMaterial).color.copy(color);
+          spr.scale.setScalar(interiorScale);
+          const yOffset =
+            count === 1
+              ? 0
+              : count === 2
+                ? (i === 0 ? -ySpread : ySpread)
+                : (i - 1) * ySpread;
+          spr.position.set(x, y + yOffset, z);
+        }
+      }
+
+      if (ref.light) {
+        ref.light.position.set(x, y, z);
+        ref.light.color.copy(color);
+        ref.light.distance = backlightDistance;
+        ref.light.decay = cfg.decay;
+      }
 
       this.setSealLed(key, ref.driver.v, lighting);
     }
@@ -329,12 +407,16 @@ export class SealManager {
   /** Remove all LED visuals from their parents and clear both maps. */
   dispose(): void {
     for (const ref of this.sealBacklights.values()) {
-      ref.light.removeFromParent();
+      ref.light?.removeFromParent();
       ref.proxyMesh.geometry.dispose();
       (ref.proxyMesh.material as THREE.Material).dispose();
       ref.proxyMesh.removeFromParent();
       (ref.haloSprite.material as THREE.Material).dispose();
       ref.haloSprite.removeFromParent();
+      for (const spr of ref.interiorSprites) {
+        (spr.material as THREE.Material).dispose();
+        spr.removeFromParent();
+      }
     }
     this.sealBacklights.clear();
     this.sealNodes.clear();

@@ -123,6 +123,25 @@ export interface LightingConfigCore {
         /** Peak opacity at driver=1. */
         opacity?: number;
       };
+      /**
+       * §4.19 interior atmospheric sprites — large additive Sprite quads placed
+       * inside the drum per seal to fake the "molten core" spill that the
+       * removed accent PointLight previously provided. Off by default; the
+       * exterior halo sprite continues to provide the cutout glow. When
+       * enabled, `count` sprites per seal are constructed at the same radial
+       * position as the (now-removed) accent light, vertically distributed
+       * so multiple sprites read as a soft column rather than overlapping
+       * fully. Opacity is driven from `driver.v * opacity`.
+       */
+      interior?: {
+        enabled?: boolean;
+        /** Sprites per seal (1–3). Higher counts read as more atmospheric column. */
+        count?: number;
+        /** Sprite scale as a factor of modelRadius (larger than halo for ambient blob read). */
+        sizeFactor?: number;
+        /** Peak opacity per sprite at driver=1. With count > 1, opacities accumulate additively. */
+        opacity?: number;
+      };
     };
 
     /**

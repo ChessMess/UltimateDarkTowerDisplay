@@ -62,6 +62,15 @@ export const DEFAULT_LIGHTING: ResolvedLightingConfig = {
         sizeFactor: 0.14,
         opacity: 0.75,
       },
+      // §4.19 interior atmospheric sprites — off by default until visually
+      // validated. When enabled, `count` additive sprites per seal fake the
+      // atmospheric spill that the (removed) accent PointLight provided.
+      interior: {
+        enabled: false,
+        count: 2,
+        sizeFactor: 0.6,
+        opacity: 0.5,
+      },
     },
     ledgeLeds: {
       enabled: true,
@@ -225,6 +234,20 @@ export function resolveLighting(
           opacity:
             user?.leds?.sealBacklights?.halo?.opacity ??
             DEFAULT_LIGHTING.leds.sealBacklights.halo.opacity,
+        },
+        interior: {
+          enabled:
+            user?.leds?.sealBacklights?.interior?.enabled ??
+            DEFAULT_LIGHTING.leds.sealBacklights.interior.enabled,
+          count:
+            user?.leds?.sealBacklights?.interior?.count ??
+            DEFAULT_LIGHTING.leds.sealBacklights.interior.count,
+          sizeFactor:
+            user?.leds?.sealBacklights?.interior?.sizeFactor ??
+            DEFAULT_LIGHTING.leds.sealBacklights.interior.sizeFactor,
+          opacity:
+            user?.leds?.sealBacklights?.interior?.opacity ??
+            DEFAULT_LIGHTING.leds.sealBacklights.interior.opacity,
         },
       },
       ledgeLeds: {
