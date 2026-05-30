@@ -117,6 +117,50 @@ export class DrumManager {
     }
   }
 
+  /**
+   * Calibration homing sweep for a single drum level: spin it to position 0
+   * (north), adding one full extra revolution so the motion reads as a
+   * deliberate "hunt" even when the drum is already near zero. Resolves when the
+   * tween settles. Resolves immediately if the level is not present in the model.
+   */
+  calibrateDrum(level: DrumLevel): Promise<void> {
+    const ref = this.drumRefs.get(level);
+    if (!ref) return Promise.resolve();
+
+    // Shortest arc to the position-0 orientation, plus one full turn
+    // (4 cardinal steps = ±2π) for a visible sweep.
+    const toZero = shortestArcDelta(ref.currentY, 0);
+    const fullTurn = DRUM_RADIANS_PER_SIDE * 4;
+    const finalY = ref.currentY + toZero + fullTurn;
+
+    ref.tween?.kill();
+    ref.tween = null;
+
+    const audio = this.audio;
+    audio?.startRotation();
+
+    return new Promise<void>((resolve) => {
+      let ended = false;
+      const endOnce = (): void => {
+        if (ended) return;
+        ended = true;
+        audio?.endRotation();
+        resolve();
+      };
+      ref.tween = gsap.to(ref, {
+        currentY: finalY,
+        duration: DRUM_ROTATION_DURATION_S,
+        ease: DRUM_ROTATION_EASE,
+        onUpdate: () => { ref.node.rotation.y = ref.currentY; },
+        onComplete: () => {
+          ref.tween = null;
+          endOnce();
+        },
+        onInterrupt: endOnce,
+      });
+    });
+  }
+
   /** Kill in-flight rotations and balance the audio refcount. */
   stopAll(): void {
     for (const ref of this.drumRefs.values()) {

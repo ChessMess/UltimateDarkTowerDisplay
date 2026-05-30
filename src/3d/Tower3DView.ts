@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-import { LIGHT_EFFECTS } from 'ultimatedarktower';
+import { LIGHT_EFFECTS, TOWER_AUDIO_LIBRARY } from 'ultimatedarktower';
 import type { TowerState, SealIdentifier, TowerSide } from 'ultimatedarktower';
 
 import type { ITowerDisplay, TowerPhysicsHooks } from '../types';
@@ -578,6 +578,34 @@ export class Tower3DView implements ITowerDisplay {
       }
     }
     return started;
+  }
+
+  /**
+   * Run the hardware calibration sequence: spin each drum to its home position
+   * one level at a time (top → middle → bottom), then play the Game Start
+   * sound. Resolves when the sequence finishes. Resolves immediately if the
+   * model has not loaded yet.
+   *
+   * Audio only sounds when audio is enabled (after a user gesture). The per-drum
+   * rotation sound plays via the drum-rotation audio during each sweep; a
+   * dedicated calibration recording can be supplied by setting the
+   * drum-rotation URL (see {@link setDrumRotationSoundUrl}).
+   */
+  async runCalibrationSequence(): Promise<void> {
+    if (!this.model) return;
+    // Hold drum-rotation audio active across the whole sweep so the recorded
+    // drum sounds play continuously rather than gapping between levels (each
+    // calibrateDrum also ref-counts it). No-op when audio is disabled. The
+    // recording itself is supplied via the drum-rotation URL (setDrumRotationSoundUrl).
+    this.drumAudio.startRotation();
+    try {
+      await this.drumManager.calibrateDrum('top');
+      await this.drumManager.calibrateDrum('middle');
+      await this.drumManager.calibrateDrum('bottom');
+    } finally {
+      this.drumAudio.endRotation();
+    }
+    this.playSample(TOWER_AUDIO_LIBRARY.GameStart.value);
   }
 
   /**
