@@ -132,9 +132,9 @@ export const BLOOM_LAYER = 1;
 
 /**
  * Multiplier applied to proxy + halo material colors to push them above the
- * UnrealBloomPass.threshold (1.0). Combined with `toneMapped: false` this is
- * how §4.1 "HDR proxies" selects which pixels bloom: only HDR-bright pixels
- * (color × opacity > threshold) get bloom-amplified. Replaces the per-LED
- * PointLight loop as the driver of perceived LED brightness.
+ * UnrealBloomPass.threshold (1.0). Combined with `toneMapped: false`, this is
+ * how the LED proxies select which pixels bloom: only HDR-bright pixels
+ * (color × opacity > threshold) get bloom-amplified. Bloom drives the perceived
+ * LED brightness — there are no per-LED PointLights.
  */
 export const HDR_PROXY_SCALE = 3.0;

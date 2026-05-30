@@ -11,7 +11,7 @@ import {
 } from './constants';
 
 /**
- * Write the §4.1 HDR-scaled version of `hex` into `target`. `hex` is treated
+ * Write the HDR-scaled version of `hex` into `target`. `hex` is treated
  * as sRGB and converted to linear by THREE.Color, then each linear channel is
  * multiplied by {@link HDR_PROXY_SCALE} so the result reads above the
  * UnrealBloomPass threshold (1.0). The proxy/halo materials are
