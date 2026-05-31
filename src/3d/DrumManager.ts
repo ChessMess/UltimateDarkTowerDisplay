@@ -4,8 +4,9 @@ import type { TowerState } from 'ultimatedarktower';
 import {
   DRUM_LEVELS_BY_INDEX,
   DRUM_RADIANS_PER_SIDE,
-  DRUM_ROTATION_DURATION_S,
+  DRUM_ROTATION_EPSILON,
   DRUM_ROTATION_EASE,
+  drumRotationDurationS,
 } from './constants';
 import type { DrumRotationAudio } from '../audio/DrumRotationAudio';
 
@@ -83,12 +84,16 @@ export class DrumManager {
       if (!drum) continue;
 
       const rawTarget = drum.position * DRUM_RADIANS_PER_SIDE;
-      const finalY = ref.currentY + shortestArcDelta(ref.currentY, rawTarget);
+      const delta = shortestArcDelta(ref.currentY, rawTarget);
+      const finalY = ref.currentY + delta;
 
       ref.tween?.kill();
       ref.tween = null;
 
-      if (!animate || finalY === ref.currentY) {
+      // Snap (no tween, no audio) when already there. The epsilon guards against
+      // floating-point residue from prior rotations spawning a phantom tween that
+      // would ring the rotation audio for an imperceptible move.
+      if (!animate || Math.abs(delta) < DRUM_ROTATION_EPSILON) {
         ref.node.rotation.y = finalY;
         ref.currentY = finalY;
         continue;
@@ -105,7 +110,7 @@ export class DrumManager {
 
       ref.tween = gsap.to(ref, {
         currentY: finalY,
-        duration: DRUM_ROTATION_DURATION_S,
+        duration: drumRotationDurationS(delta),
         ease: DRUM_ROTATION_EASE,
         onUpdate: () => { ref.node.rotation.y = ref.currentY; },
         onComplete: () => {
@@ -122,8 +127,12 @@ export class DrumManager {
    * (north), adding one full extra revolution so the motion reads as a
    * deliberate "hunt" even when the drum is already near zero. Resolves when the
    * tween settles. Resolves immediately if the level is not present in the model.
+   *
+   * `audio` selects which rotation-audio handle to ring for this sweep, defaulting
+   * to the shared instance. The calibration command passes a dedicated player so
+   * its recording plays without touching the normal drum-rotation audio.
    */
-  calibrateDrum(level: DrumLevel): Promise<void> {
+  calibrateDrum(level: DrumLevel, audio: DrumRotationAudio | null = this.audio ?? null): Promise<void> {
     const ref = this.drumRefs.get(level);
     if (!ref) return Promise.resolve();
 
@@ -131,12 +140,12 @@ export class DrumManager {
     // (4 cardinal steps = ±2π) for a visible sweep.
     const toZero = shortestArcDelta(ref.currentY, 0);
     const fullTurn = DRUM_RADIANS_PER_SIDE * 4;
-    const finalY = ref.currentY + toZero + fullTurn;
+    const sweep = toZero + fullTurn;
+    const finalY = ref.currentY + sweep;
 
     ref.tween?.kill();
     ref.tween = null;
 
-    const audio = this.audio;
     audio?.startRotation();
 
     return new Promise<void>((resolve) => {
@@ -149,7 +158,7 @@ export class DrumManager {
       };
       ref.tween = gsap.to(ref, {
         currentY: finalY,
-        duration: DRUM_ROTATION_DURATION_S,
+        duration: drumRotationDurationS(sweep),
         ease: DRUM_ROTATION_EASE,
         onUpdate: () => { ref.node.rotation.y = ref.currentY; },
         onComplete: () => {

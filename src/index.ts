@@ -35,3 +35,4 @@ export {
 } from './audio/sequenceAudio';
 export { DrumRotationAudio } from './audio/DrumRotationAudio';
 export { TowerSampleAudio } from './audio/TowerSampleAudio';
+export { CALIBRATION_SOUND_URL } from './audio/calibrationAudio';
