@@ -85,7 +85,7 @@ If you are a **hobbyist** with a Dark Tower and want it on screen with minimal c
 | [LIGHTING](LIGHTING.md) | 3D tuner | Reference | ~842 | Three-point rig, bloom, skybox, LEDs, animations, full default config, tuning recipes. |
 | [AUDIO](AUDIO.md) | Integrator + audio author | Guide | ~120 | `SoundPack` model, bundled official pack, custom packs, sequence binding, bundler compatibility. |
 | [PHYSICS](PHYSICS.md) | Physics user | Guide | ~236 | Skull physics MVP, opt-in subpath, config, tuning, verification checklist. |
-| [SCENE_PLUGINS](SCENE_PLUGINS.md) | Plugin author | Guide | ~210 | The scene-plugin seam: lifecycle, context, disc positioning, board hand-off, pointer targets, UI docking. |
+| [SCENE_PLUGINS](SCENE_PLUGINS.md) | Plugin author | Guide | ~170 | The scene-plugin seam: lifecycle, context, disc positioning, board hand-off, pointer targets, UI docking. |
 | [SEQUENCE_AUTHORING](SEQUENCE_AUTHORING.md) | Sequence author | Reference | ~653 | JSON schema, nine track kinds, examples, snapshot test integration. |
 | [ELECTRON](ELECTRON.md) | Electron integrator | Guide | ~182 | BrowserWindow setup, CSP, modelUrl, Web Bluetooth picker. |
 | [TROUBLESHOOTING](TROUBLESHOOTING.md) | All readers | FAQ | ~260 | Predictable failure modes: GLB load, Rapier WASM, BLE gestures, CSP, subpath resolution. |
