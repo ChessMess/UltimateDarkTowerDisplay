@@ -1,3 +1,11 @@
+> [!IMPORTANT]
+> **This project has moved.** `UltimateDarkTowerDisplay` is now part of the
+> [UltimateDarkTower monorepo](https://github.com/ChessMess/UltimateDarkTower) at `packages/display`.
+> Development continues there; this repository is **archived / read-only**.
+> Full git history was preserved (tags prefixed `display-*`).
+>
+> Live demo: https://chessmess.github.io/UltimateDarkTower/display/
+
 <p align="center">
   <img src="docs/tower-display-hero.png" alt="ultimatedarktowerdisplay — 3D tower render" width="420" />
 </p>
